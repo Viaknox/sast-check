@@ -308,6 +308,16 @@ if command -v trivy >/dev/null; then
   gate --mode diff --base HEAD~1 --only trivy
   check "trivy: a changed tfvars value is scanned as new"  "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='vsg.tf']")" "[True]"
   git checkout -q main
+  # ...also when the vars move the same violation from one resource to another in the same file
+  git checkout -q -b tvm main
+  rule() { printf 'resource "aws_security_group_rule" "%s" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = [var.%s]\n  security_group_id = "sg-1"\n}\n' "$1" "$1"; }
+  { printf 'variable "a" {\n  type = string\n}\nvariable "b" {\n  type = string\n}\n'; rule a; rule b; } > two.tf
+  printf 'a = "0.0.0.0/0"\nb = "10.0.0.0/8"\n' > prod.tfvars && printf 'misconfiguration:\n  terraform:\n    vars: [prod.tfvars]\n' > trivy.yaml
+  git add two.tf prod.tfvars trivy.yaml && git commit -qm tvmbase
+  printf 'a = "10.0.0.0/8"\nb = "0.0.0.0/0"\n' > prod.tfvars && git commit -qam tvm
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: a vars change moving a finding is new"     "$(q "[(f['line'] > 14, f['in_diff']) for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='two.tf']")" "[(True, True)]"
+  git checkout -q main
 fi
 git checkout -q main
 
@@ -668,6 +678,27 @@ if command -v osv-scanner >/dev/null; then
   git add osv-scanner-custom.json && git commit -qm custom
   gate --mode diff --base HEAD~1 --only osv
   check "osv-scanner-custom.json in a PR is scanned"      "$(q "int(any(f['path']=='osv-scanner-custom.json' and f['in_diff'] for f in d['findings']))")" "1"
+  git checkout -q main
+fi
+
+# r15b: settings errors fail even when the base allows scanner errors; settings must be UTF-8
+git checkout -q -b r15e main
+printf '[policy]\nfail_on_tool_error = false\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm lax
+printf '[policy]\nfail_on_tool_error = false\n[tools]\nopengrepp = true\n' > .sast-check.toml && git commit -qam badkey2
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "settings error fails despite fail_on_tool_error=false" "$code" "2"
+printf '# \xff\n[policy]\nfail_on_tool_error = false\n' > .sast-check.toml && git commit -qam nonutf8
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~2 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "non-UTF-8 proposed .sast-check.toml fails"        "$code" "2"
+git checkout -q main
+if command -v osv-scanner >/dev/null; then
+  # a changed lockfile reached only through a directory link keeps its explicit-scan findings
+  git checkout -q -b r15l main
+  mkdir -p vendor/pkg15l src && printf '{"name":"x","lockfileVersion":3,"requires":true,"packages":{"":{"name":"x","dependencies":{"lodash":"4.17.21"}},"node_modules/lodash":{"version":"4.17.21","resolved":"https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"}}}\n' > vendor/pkg15l/package-lock.json
+  ln -s ../vendor/pkg15l src/pkg15l && git add vendor/pkg15l src/pkg15l && git commit -qm lbase
+  sed -i 's/4.17.21/4.17.15/' vendor/pkg15l/package-lock.json && git commit -qam lvuln
+  gate --mode diff --base HEAD~1 --only osv
+  check "lockfile behind a directory link is reported"     "$(q "int(any(f['path']=='src/pkg15l/package-lock.json' and f['in_diff'] for f in d['findings']))")" "1"
   git checkout -q main
 fi
 

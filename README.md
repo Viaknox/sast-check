@@ -25,7 +25,7 @@ Each PR gets one sticky comment and a job summary. Fork PRs get the summary only
 
 ## Tune it — `.sast-check.toml` in your repo root
 
-Changes to this file take effect **after they are merged**. PRs are always checked with the base branch's settings. A PR that changes this file must still leave it valid, or the check fails (an invalid file would otherwise break every later PR): unknown sections or keys (`[tools] opengrepp`), wrong value types and an unknown `scope` are errors. The other settings files a PR edits are checked by the scanner that reads them (zizmor, gitleaks, osv-scanner, Trivy), when it is installed.
+Changes to this file take effect **after they are merged**. PRs are always checked with the base branch's settings. A PR that changes this file must still leave it valid, or the check fails (an invalid file would otherwise break every later PR): unknown sections or keys (`[tools] opengrepp`), wrong value types and an unknown `scope` are errors. The other settings files a PR edits are checked by the scanner that reads them (zizmor, gitleaks, osv-scanner, Trivy), when it is installed. Settings files must be UTF-8. A settings error always fails the check, even with `fail_on_tool_error = false`.
 
 ```toml
 [policy]

@@ -126,7 +126,7 @@ class Ctx:
     changed_files: list[str] = field(default_factory=list)
     runs: list[ToolRun] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
-    new_keys: set[tuple[str, str, str]] = field(default_factory=set)   # (tool, rule, path) found new by a scanner
+    new_keys: set[tuple[str, str, str, int]] = field(default_factory=set)   # (tool, rule, path, line) found new by a scanner
 
 
 # ---------------------------------------------------------------- helpers
@@ -160,19 +160,28 @@ DEPENDABOT = (".github/dependabot.yml", ".github/dependabot.yaml")
 
 
 def settings_file(repo: Path, base: str | None, name: str) -> str | None:
-    """Text of a settings file: from the base branch when scanning a PR, else from the working tree."""
+    """Text of a settings file: from the base branch when scanning a PR, else from the working tree.
+    Decoded as strict UTF-8 on both sides, so a file a PR could add is exactly a file a later scan can read."""
     if not base:
         f = repo / name
-        return f.read_text(errors="replace") if f.is_file() else None
+        return utf8(f.read_bytes(), name) if f.is_file() else None
     v = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}"], cwd=repo, capture_output=True)
     if v.returncode != 0:   # an unknown base must fail closed, not read as "no settings file"
         raise RuntimeError(f"base {base} is not a commit in this checkout")
-    p = subprocess.run(["git", "show", f"{base}:{name}"], cwd=repo, capture_output=True, text=True)
+    p = subprocess.run(["git", "show", f"{base}:{name}"], cwd=repo, capture_output=True)
     if p.returncode == 0:
-        return p.stdout
-    if "does not exist" in p.stderr or "exists on disk, but not in" in p.stderr:
+        return utf8(p.stdout, name)
+    err = p.stderr.decode(errors="replace")
+    if "does not exist" in err or "exists on disk, but not in" in err:
         return None
-    raise RuntimeError(f"cannot read {name} from base {base}: {p.stderr.strip()[:200]}")
+    raise RuntimeError(f"cannot read {name} from base {base}: {err.strip()[:200]}")
+
+
+def utf8(data: bytes, name: str) -> str:
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise RuntimeError(f"{name} is not valid UTF-8 (byte {e.start})") from e
 
 
 def load_config(text: str | None) -> dict:
@@ -752,6 +761,7 @@ def run_osv(ctx: Ctx) -> list[Finding]:
     if ctx.mode == "diff" and not inputs:
         return []
     # 0 = clean, 1 = vulns found, 128 = no packages found
+    extra: list[dict] = []
     with tempfile.TemporaryDirectory() as td:
         # --no-ignore: a PR's .gitignore must not hide a committed lockfile
         cmd = ["osv-scanner", "scan", "source", "-r", "--no-ignore", "--format", "json"]
@@ -773,12 +783,17 @@ def run_osv(ctx: Ctx) -> list[Finding]:
                 if q.returncode not in (0, 1):
                     raise RuntimeError(f"osv-scanner could not read changed dependency input {f}: "
                                        f"{(q.stderr or '').strip()[-200:]}")
+                # the recursive scan does not follow directory links (src/pkg -> ../vendor/pkg): keep this
+                # input's own results, named by the changed path (duplicates are merged later)
+                for res in json.loads(q.stdout or "{}").get("results", []):
+                    res["source"]["path"] = f
+                    extra.append(res)
     if p.returncode == 128 and ctx.mode == "diff":
         # a dependency manifest changed but OSV found no packages: unparseable or unsupported -> not a pass
         raise RuntimeError("osv-scanner found no packages although a dependency manifest changed")
     data = json.loads(p.stdout or "{}")
     out = []
-    for res in data.get("results", []):
+    for res in data.get("results", []) + extra:
         src = rel(ctx.repo, res["source"]["path"])
         if ctx.mode == "diff" and src not in ctx.changed_files:
             continue
@@ -858,13 +873,16 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
                     (cwd / f).parent.mkdir(parents=True, exist_ok=True)
                     (cwd / f).write_bytes(fp.read_bytes())
         p = sh(cmd + [str(work)], cwd)
-    out = trivy_findings(ctx, p.stdout)
-    if base_p is not None:
-        # a changed vars value changes resources whose lines did not change: a (rule, file) the PR has more
-        # of than the base tree with the base vars counts as new
-        had = Counter((f.rule, f.path) for f in trivy_findings(ctx, base_p.stdout))
-        now = Counter((f.rule, f.path) for f in out)
-        ctx.new_keys |= {("trivy", *k) for k, n in now.items() if n > had[k]}
+        out = trivy_findings(ctx, p.stdout)
+        if base_p is not None:
+            # a changed vars value changes resources whose lines did not change: a finding counts as new
+            # unless the base tree (with the base vars) has the same rule on the line this line came from
+            old = set()
+            for b in trivy_findings(ctx, base_p.stdout):
+                line_map = aligned_lines(cwd / b.path, work / b.path)
+                if b.line in line_map:
+                    old.add((b.rule, b.path, line_map[b.line]))
+            ctx.new_keys |= {("trivy", f.rule, f.path, f.line) for f in out if (f.rule, f.path, f.line) not in old}
     return out
 
 
@@ -1041,7 +1059,7 @@ def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] = froz
         if ctx.mode == "diff" and f.kind in ("code", "config"):
             changed = ctx.changed_lines.get(f.path, set())
             f.in_diff = (any(n in changed for n in range(f.line, max(f.end_line, f.line) + 1))
-                         or id(f) in new_by_base or (f.tool, f.rule, f.path) in ctx.new_keys)
+                         or id(f) in new_by_base or (f.tool, f.rule, f.path, f.line) in ctx.new_keys)
         elif ctx.mode == "diff" and f.kind == "dependency":
             f.in_diff = f.path in ctx.changed_files
         f.suppressed = inline_suppression(ctx.repo, f) or config_suppression(ctx.cfg, f, today)
@@ -1252,7 +1270,10 @@ def main(argv=None) -> int:
         except Exception as e:  # noqa: BLE001 - without the base comparison a new finding could pass: fail closed
             ctx.runs.append(ToolRun("baseline", "error", f"base comparison failed: {str(e)[:300]}"))
     apply_policy(ctx, findings, new_by_base)
-    errored = any(r.status == "error" for r in ctx.runs) and cfg["policy"].get("fail_on_tool_error", True)
+    # settings, diff and base-comparison errors always fail; fail_on_tool_error covers scanner crashes only
+    integrity = ("settings", "git-diff", "baseline")
+    errored = any(r.status == "error" and (r.name in integrity or cfg["policy"].get("fail_on_tool_error", True))
+                  for r in ctx.runs)
     verdict = "error" if errored else "fail" if any(f.blocking for f in findings) else "pass"
 
     out = Path(a.out)

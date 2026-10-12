@@ -10,7 +10,8 @@ block_on = ["critical"]
 scope = "diff"
 # Findings with confidence "low" never block, even at a blocking severity.
 low_confidence_blocks = false
-# If an enabled, installed scanner crashes, fail the check (fail closed).
+# If an enabled, installed scanner crashes, fail the check (fail closed). Settings, diff and base-comparison
+# errors always fail, whatever this says.
 # A missing scanner is reported as "skipped", never silently ignored.
 fail_on_tool_error = true
 
