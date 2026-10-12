@@ -52,5 +52,7 @@ app.get('/safe', async (req: Request, res: Response) => {
   const c = await fsp.readFile(path.join(BASE, `${Number(req.params.id)}.json`));
   // ok: sast.js.path-traversal
   const d = new Map<string, string>().get(req.params.key);
+  // ruleid: sast.js.path-traversal
+  const e = fs.readFileSync(sanitize(req.query.file as string));
   res.send([a, b, c, d]);
 });

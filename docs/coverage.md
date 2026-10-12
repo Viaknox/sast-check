@@ -1,9 +1,9 @@
 # Coverage
 
-What the gate checks in v1, and which open-source scanner does it.
+What the gate checks in v1, and which open-source scanners it uses.
 
 Severity is ours. Baseline: a commercial SAST checklist with 99 checks in these languages — **97 fully covered, 1 partly** (npm "staged publishing" is approximated by zizmor `use-trusted-publishing`), **1 deferred to v2** (Azure Pipelines template injection).
-`block` = fails the PR under the default policy (critical, confidence not low, on changed lines).
+`block` = fails the PR under the default policy: critical, confidence not low, and new in this change (on a changed line, or absent from the base version). Exceptions: gitleaks secrets in the PR's commits always block; osv-scanner dependency findings warn unless `[deps] block = true`.
 
 ## Custom rules (Opengrep, MIT, this repo)
 
@@ -89,7 +89,7 @@ Runs when a lockfile changes. Severity from CVSS (≥9 critical, ≥7 high, ≥4
 ## Optional — Trivy (Apache-2.0)
 
 `[tools] trivy = true` adds deep Docker/Terraform/K8s misconfiguration checks (install trivy yourself).
-On PRs it uses the base branch's `trivy.yaml` and `.trivyignore`; inline `trivy:ignore` / `tfsec:ignore` comments are not honored (use `sast-ignore` or `[[ignore]]`). Findings carry Trivy's full line range, so a change inside a resource counts. On PRs Trivy runs from a snapshot of the base tree, so files the base `trivy.yaml` points to (custom checks, data) are the base's, not the PR's. Terraform variable files (`*.tfvars`, `*.tfvars.json`) are scan inputs and come from the PR; a vars file the PR deletes is scanned as empty (defaults apply). When a PR changes or deletes one, a finding counts as new unless the base tree (with its own vars) has the same rule on the matching line, even though no `.tf` line changed. Helm values files named in `trivy.yaml` are still read from the base.
+On PRs it uses the base branch's `trivy.yaml` and `.trivyignore`; inline `trivy:ignore` / `tfsec:ignore` comments are not honored (use `sast-ignore` or `[[ignore]]`). Findings carry Trivy's full-line range, so a change inside a resource counts. On PRs Trivy runs from a snapshot of the base tree, so files the base `trivy.yaml` points to (custom checks, data) are the base's, not the PR's. Terraform variable files (`*.tfvars`, `*.tfvars.json`) are scan inputs and come from the PR; a vars file the PR deletes is scanned as empty (defaults apply). When a PR changes or deletes one, a finding counts as new unless the base tree (with its own vars) has the same rule on the matching line, even though no `.tf` line changed. Helm values files named in `trivy.yaml` are still read from the base.
 
 ## Not in v1
 

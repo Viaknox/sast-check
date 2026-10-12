@@ -18,5 +18,6 @@ rules:
     paths:
       include:
         - "*.ejs"
+    # sanitizer only counts as a call at the start of the expression, never as part of an identifier
     pattern-regex: >-
-      (?i)<%-(?!\s*include\s*\()(?!\s*body\s*-?%>)(?!\s*(?:'[^']*'|"[^"]*")\s*-?%>)(?![^%]*(?:sanitize|purify|dompurify|escapeHtml))\s*[^\s%][^%]*%>
+      (?i)<%-(?!\s*include\s*\()(?!\s*body\s*-?%>)(?!\s*(?:'[^']*'|"[^"]*")\s*-?%>)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()\s*[^\s%][^%]*%>

@@ -1,6 +1,6 @@
 ---
 name: sast-check
-description: Security gate for code changes. Run before opening or updating a pull request (or when asked for a security check, SAST scan, or "is this PR safe"). Scans only the changed lines with Opengrep custom rules, Ruff security rules, zizmor, gitleaks and osv-scanner, then fixes blocking findings in a loop until the gate passes.
+description: Security gate for code changes. Run before opening or updating a pull request (or when asked for a security check, SAST scan, or "is this PR safe"). Scans the change (blocking only what it introduces) with Opengrep custom rules, Ruff security rules, zizmor, gitleaks and osv-scanner, then fixes blocking findings in a loop until the gate passes.
 ---
 
 # sast-check
@@ -15,7 +15,7 @@ python3 "<this skill's folder>/scripts/sast.py" --mode diff --base origin/main
 - Use the PR's real base branch for `--base` (`git merge-base` is computed for you).
 - Output: `sast-results/report.md` (human summary) and `sast-results/findings.json` (machine-readable).
 - Exit code: `0` pass, `1` blocking findings, `2` a scanner crashed (result incomplete — treat as not passed).
-- Report lines marked `⏭ skipped` mean that scanner is not installed. Tell the user which one and the install line from README → "Install locally". Do not claim a pass while a scanner is skipped without saying so.
+- Report lines marked `⏭ skipped` mean that scanner is not installed. A `✗` line (for example `zizmor-online error`) means a scanner ran only partly; the check fails and the user must fix the cause, not install anything. Tell the user which one and the install line from README → "Install locally". Do not claim a pass while a scanner is skipped without saying so.
 
 ## 2. Fix loop (only blocking findings are mandatory)
 

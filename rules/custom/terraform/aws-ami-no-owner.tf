@@ -66,6 +66,22 @@ data "aws_ami" "owner_alias_filter" {
   }
 }
 
+# ruleid: sast.terraform.aws-ami-no-owner
+data "aws_ami" "empty_owners" {
+  most_recent = true
+  owners      = []
+}
+
+# ruleid: sast.terraform.aws-ami-no-owner
+data "aws_ami" "empty_owner_filter" {
+  most_recent = true
+
+  filter {
+    name   = "owner-id"
+    values = []
+  }
+}
+
 # ok: sast.terraform.aws-ami-no-owner
 data "aws_ami" "not_most_recent" {
   filter {

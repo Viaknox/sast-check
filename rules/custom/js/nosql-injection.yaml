@@ -14,38 +14,61 @@ rules:
         - https://cwe.mitre.org/data/definitions/943.html
         - https://owasp.org/Top10/A03_2021-Injection/
     mode: taint
+    # labels: INPUT is request data; CAST marks INPUT run through a string cast / Mongo operator stripper. CAST stops
+    # operator objects ({"$ne": 1}) but NOT JavaScript injected into a $where expression.
     pattern-sources:
-      - pattern: req.query
-      - pattern: req.body
-      - pattern: request.query
-      - pattern: request.body
-      - pattern: ctx.query
-      - pattern: ctx.request.body
+      - label: INPUT
+        pattern-either:
+          - pattern: req.query
+          - pattern: req.body
+          - pattern: req.param(...)
+          - pattern: request.query
+          - pattern: request.body
+          - pattern: ctx.query
+          - pattern: ctx.request.query
+          - pattern: ctx.request.body
+      # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
+      - label: INPUT
+        patterns:
+          - pattern-either:
+              - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+              - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+      - label: CAST
+        requires: INPUT
+        pattern-either:
+          - pattern: String(...)
+          - pattern: |
+              `${$X}`
+          - pattern: mongoSanitize(...)
+          - pattern: $S.toString()
+          - pattern: $S.trim()
+          - pattern: $S.toLowerCase()
+          - pattern: $S.toUpperCase()
+          - patterns:
+              - pattern: $SCH.$P(...)
+              - metavariable-regex:
+                  metavariable: $SCH
+                  regex: '(?i)(.*schema.*|z|.*validator.*)'
+              - metavariable-regex:
+                  metavariable: $P
+                  regex: '^(parse|validate|validateSync|safeParse|escape)$'
+    # numeric / boolean results cannot carry operators or code, so they sanitize everywhere
     pattern-sanitizers:
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
-      - pattern: String(...)
       - pattern: Boolean(...)
-      - pattern: |
-          `${$X}`
-      - pattern: sanitize(...)
-      - pattern: mongoSanitize(...)
-      - pattern: $S.sanitize(...)
-      - pattern: $S.toString()
-      - pattern: $S.trim()
-      - pattern: $S.toLowerCase()
-      - pattern: $S.toUpperCase()
-      - patterns:
-          - pattern: $SCH.$P(...)
-          - metavariable-regex:
-              metavariable: $SCH
-              regex: '(?i)(.*schema.*|z|.*validator.*)'
-          - metavariable-regex:
-              metavariable: $P
-              regex: '^(parse|validate|validateSync|safeParse|escape)$'
     pattern-sinks:
-      - patterns:
+      - requires: INPUT and not CAST
+        patterns:
           - pattern: |
               $M.$FN({..., $K: $X, ...}, ...)
           - metavariable-regex:
@@ -55,7 +78,8 @@ rules:
               metavariable: $X
               regex: '^[^{]'
           - focus-metavariable: $X
-      - patterns:
+      - requires: INPUT and not CAST
+        patterns:
           - pattern: $M.$FN($Q, ...)
           - metavariable-regex:
               metavariable: $FN
@@ -65,7 +89,9 @@ rules:
           - pattern-not: $M.$FN((...) => $B, ...)
           - pattern-not: $M.$FN(function (...) {...}, ...)
           - focus-metavariable: $Q
-      - patterns:
+      # $where runs as JavaScript: a cast does not make request data safe there
+      - requires: INPUT
+        patterns:
           - pattern: |
               {..., $K: $X, ...}
           - metavariable-regex:

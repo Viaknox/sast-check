@@ -34,3 +34,12 @@ app.get('/safe', (req, res) => {
   const view = 'detail';
   res.render(view, { id: req.params.id });
 });
+
+app.get('/chained', (req, res) => {
+  // ruleid: sast.js.express-render-ssti
+  res.status(200).render(req.query.page);
+});
+app.get('/chained2', (req, res) => {
+  // ruleid: sast.js.express-render-ssti
+  res.type('html').render(req.query.page, { a: 1 });
+});

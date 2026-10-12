@@ -26,6 +26,23 @@ jobs:
         run: |
           wget https://example.com/tool.zip
           unzip tool.zip
+      - name: verify one file then run another
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo safe.tgz https://example.com/safe.tgz
+          echo "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  safe.tgz" | sha256sum -c -
+          curl -fsSLo tool https://other.example/tool && chmod +x tool && ./tool
+      # ruleid: sast.gha.remote-fetch-no-checksum
+      - run: curl -fsSL https://x/install.py | python3
+      # ruleid: sast.gha.remote-fetch-no-checksum
+      - run: bash -c "$(curl -fsSL https://x/i.sh)"
+      # ruleid: sast.gha.remote-fetch-no-checksum
+      - run: sh <(wget -qO- https://x/i.sh)
+      # ruleid: sast.gha.remote-fetch-no-checksum
+      - run: curl -fsSL https://x/setup.js | sudo node
+      - name: json pretty-print is not code execution
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: curl -s https://api.example.com/status | python3 -m json.tool
       - name: verified archive
         # ok: sast.gha.remote-fetch-no-checksum
         run: |

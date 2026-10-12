@@ -3,7 +3,7 @@
 A security gate for every pull request. One step in CI, one skill for your AI coding agent.
 
 It runs five open-source scanners, merges the results, and applies **one** policy:
-**critical issues on lines you changed block the PR — everything else is a warning.**
+**critical issues your change introduces block the PR — everything else is a warning.** Code and config findings block when they are on a changed line or absent from the base version; secrets in the PR's commits always block; dependency CVEs warn unless `[deps] block = true`.
 
 | Scanner | Checks | License |
 |---|---|---|
@@ -20,7 +20,7 @@ Full list: [docs/coverage.md](docs/coverage.md).
 1. Copy [`templates/sast.yml`](templates/sast.yml) to `.github/workflows/sast.yml`.
 2. Replace `OWNER/sast-check@REPLACE_WITH_COMMIT_SHA` with this repo and a **full commit SHA** — never `@main` or a tag: either can change under you, and this action runs with your PR's token.
 3. In branch protection, make **`sast-check / scan`** a required check.
-4. Protect the workflow itself: a PR runs its own copy of `.github/workflows/sast.yml`, so it could replace the scan step and still report `sast-check / scan` as passed. Add a `CODEOWNERS` entry for `.github/workflows/` and the settings files (`.sast-check.toml`, `.gitleaks*`, zizmor, OSV and Trivy configs), and turn on **Require review from Code Owners**. A check that runs from a trusted GitHub App is planned as the stronger fix.
+4. Protect the workflow itself: a PR runs its own copy of `.github/workflows/sast.yml`, so it could replace the scan step and still report `sast-check / scan` as passed. Add a `CODEOWNERS` entry for `.github/workflows/`, the settings files (`.sast-check.toml`, `.gitleaks*`, zizmor, OSV and Trivy configs) and `.github/CODEOWNERS` itself (otherwise a PR can first remove the protection), and turn on **Require review from Code Owners**. A check that runs from a trusted GitHub App is planned as the stronger fix.
 
 Each PR gets one sticky comment and a job summary. Fork PRs get the summary only (no write token).
 

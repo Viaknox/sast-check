@@ -9,6 +9,13 @@
     <!-- ruleid: sast.js.vue-v-html -->
     <section v-html='renderMarkdown(text)'></section>
 
+    <!-- ruleid: sast.js.vue-v-html -->
+    <div v-html="unsanitized"></div>
+    <!-- ruleid: sast.js.vue-v-html -->
+    <div v-html="purifyUser"></div>
+    <!-- ruleid: sast.js.vue-v-html -->
+    <div v-html="escapeHtmlUser"></div>
+
     <!-- ok: sast.js.vue-v-html -->
     <div v-html="'<b>fixed</b>'"></div>
     <!-- ok: sast.js.vue-v-html -->

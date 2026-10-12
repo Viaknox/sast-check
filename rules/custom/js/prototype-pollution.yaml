@@ -18,10 +18,26 @@ rules:
       - pattern: req.query
       - pattern: req.body
       - pattern: req.params
+      - pattern: req.param(...)
       - pattern: request.query
       - pattern: request.body
       - pattern: request.params
+      # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+              - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
       - pattern: ctx.query
+      - pattern: ctx.request.query
       - pattern: ctx.request.body
       - pattern: ctx.params
       - pattern: $U.searchParams.get(...)
@@ -48,8 +64,9 @@ rules:
       - patterns:
           - pattern: $A.forEach(function ($K) { ... $O[$K] = $V; ... })
           - focus-metavariable: $A
+      # the polluting source may be any argument after the target, not only the first
       - patterns:
-          - pattern: $L.$F($T, $SRC, ...)
+          - pattern: $L.$F($T, ..., $SRC, ...)
           - metavariable-regex:
               metavariable: $L
               regex: '^(_|lodash|lo)$'
@@ -58,16 +75,26 @@ rules:
               regex: '^(merge|mergeWith|defaultsDeep)$'
           - focus-metavariable: $SRC
       - patterns:
-          - pattern: $F($T, $SRC, ...)
+          - pattern: $F($T, ..., $SRC, ...)
           - metavariable-regex:
               metavariable: $F
-              regex: '^(merge|deepMerge|mergeDeep|defaultsDeep|deepExtend|deepAssign|mergeWith)$'
+              regex: '^(merge|deepMerge|mergeDeep|defaultsDeep|deepExtend|deepAssign|mergeWith|deepmerge|mergeDeepRight)$'
           - focus-metavariable: $SRC
       - patterns:
-          - pattern: $JQ.extend(true, $T, $SRC, ...)
+          - pattern: $JQ.extend(true, $T, ..., $SRC, ...)
           - metavariable-regex:
               metavariable: $JQ
               regex: '^(\$|jQuery)$'
+          - focus-metavariable: $SRC
+      # npm "extend" package: deep only when the first argument is true
+      - patterns:
+          - pattern: extend(true, $T, ..., $SRC, ...)
+          - focus-metavariable: $SRC
+      - patterns:
+          - pattern: merge.recursive($T, ..., $SRC, ...)
+          - focus-metavariable: $SRC
+      - patterns:
+          - pattern: merge.recursive(true, $T, ..., $SRC, ...)
           - focus-metavariable: $SRC
       - patterns:
           - pattern: $L.$F($O, $P, ...)

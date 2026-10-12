@@ -33,7 +33,6 @@ rules:
       - pattern: django.utils.html.conditional_escape(...)
       - pattern: format_html(...)
       - pattern: django.utils.html.format_html(...)
-      - pattern: strip_tags(...)
       - pattern: int(...)
       - pattern: float(...)
       - pattern: bool(...)
@@ -45,4 +44,21 @@ rules:
               - pattern: django.http.HttpResponse($X, ...)
           - pattern-not: HttpResponse(..., content_type="application/json", ...)
           - pattern-not: HttpResponse(..., content_type="text/plain", ...)
+          - focus-metavariable: $X
+      # body-carrying HttpResponse subclasses (same text/html default)
+      - patterns:
+          - pattern: $C($X, ...)
+          - metavariable-regex:
+              metavariable: $C
+              regex: '^(django\.http\.)?HttpResponse(BadRequest|NotFound|Forbidden|ServerError|Gone|NotAllowed)$'
+          - pattern-not: $C(..., content_type="application/json", ...)
+          - pattern-not: $C(..., content_type="text/plain", ...)
+          - focus-metavariable: $X
+      # marking request data as safe HTML disables escaping wherever it is later rendered
+      - patterns:
+          - pattern-either:
+              - pattern: mark_safe($X)
+              - pattern: SafeString($X)
+              - pattern: django.utils.safestring.mark_safe($X)
+              - pattern: django.utils.safestring.SafeString($X)
           - focus-metavariable: $X

@@ -6,6 +6,13 @@
   <!-- ruleid: sast.js.handlebars-unescaped -->
   <script>var cfg = {{{ configJson }}};</script>
 
+  <!-- ruleid: sast.js.handlebars-unescaped -->
+  <p>{{{ unsanitized }}}</p>
+  <!-- ruleid: sast.js.handlebars-unescaped -->
+  <p>{{{ purifyUser }}}</p>
+  <!-- ruleid: sast.js.handlebars-unescaped -->
+  <p>{{{ escapeHtmlUser }}}</p>
+
   <!-- ok: sast.js.handlebars-unescaped -->
   <p>{{ user.bio }}</p>
   <!-- ok: sast.js.handlebars-unescaped -->

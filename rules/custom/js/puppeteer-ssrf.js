@@ -53,5 +53,12 @@ app.get('/safe', async (req, res) => {
   await page.evaluate(encodeURIComponent(req.query.code));
   // ok: sast.js.puppeteer-ssrf
   await page.goto(encodeURIComponent(req.query.slug));
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.setContent('https://trusted.example/' + req.body.html);
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.evaluate('https://trusted.example/' + req.body.code);
+  const u = 'https://example.com/r/' + req.query.id;
+  // ok: sast.js.puppeteer-ssrf
+  await page.goto(u);
   res.end(t);
 });

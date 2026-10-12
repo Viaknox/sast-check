@@ -20,5 +20,6 @@ rules:
         - "*.hbs"
         - "*.handlebars"
         - "*.mustache"
+    # sanitizer only counts as a helper call ("sanitize x" or "sanitize(x)") at the start, never as part of an identifier
     pattern-regex: >-
-      (?i)\{\{\{(?!\s*body\s*\}\}\})(?!\s*>)(?![^}]*(?:sanitize|purify|dompurify|escapeHtml))\s*[^\s}][^}]*\}\}\}
+      (?i)\{\{\{(?!\s*body\s*\}\}\})(?!\s*>)(?!\s*\(?\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)(?:\s*\(|\s+[^\s}]))\s*[^\s}][^}]*\}\}\}

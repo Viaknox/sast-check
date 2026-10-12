@@ -25,7 +25,20 @@
   el.innerHTML = '<a href="' + encodeURIComponent(x) + '">' + location.hash;
 </script>
 
+<script>
+  // ruleid: sast.web.inline-script-dom-xss
+  el.innerHTML = location.hash + escapeHtml("x");
+</script>
+<script>
+  // ruleid: sast.web.inline-script-dom-xss
+  el.innerHTML = DOMPurify.sanitize("x") + location.hash;
+</script>
+
 <!-- safe look-alikes -->
+<script>
+  // ok: sast.web.inline-script-dom-xss
+  el.innerHTML = escapeHtml(location.hash);
+</script>
 <script>
   // ok: sast.web.inline-script-dom-xss
   document.write("<p>static content</p>");

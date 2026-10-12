@@ -24,12 +24,12 @@ rules:
     - pattern-regex: (?mi)^[ \t]*RUN[ \t]+(?P<CMD>(?:[^\n\\]|\\\r?\n|\\.)*)
     - metavariable-regex:
         metavariable: $CMD
-        regex: (?s).*\b(?:curl|wget)\b[^\n|]*\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:ba|z|da)?sh\b.*
+        regex: (?s).*(?:\b(?:curl|wget)\b[^\n|]*\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:(?:ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)\b(?![ \t]+-m[ \t]+json\.tool)|(?:\b(?:(?:ba|z|da|k)?sh|source|eval)\b[ \t]+(?:-[A-Za-z]+[ \t]+)*[\"']?(?:<\((?:curl|wget)\b|\$\((?:curl|wget)\b[^)]*\))|(?:^|[\s;&|])\.[ \t]+[\"']?(?:<\(|\$\()(?:curl|wget)\b)).*
   - patterns:
     - pattern-regex: (?mi)^[ \t]*RUN[ \t]+(?P<CMD>(?:[^\n\\]|\\\r?\n|\\.)*)
     - metavariable-regex:
         metavariable: $CMD
-        regex: (?s)^(?!.*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst)).*
+        regex: (?s)^(?:(?!.*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|'\"\\]+)(?!.*(?:(?P=F)[^\n]*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst)|(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst)[^\n]*(?P=F))).*)$
     - metavariable-regex:
         metavariable: $CMD
         regex: (?s).*(?:\bcurl\b[^\n|]*[ \t](?:-[A-Za-z]*[oO]\b|--output\b|--remote-name\b)|\bwget\b[ \t]+(?![^\n]*(?:--spider|-[A-Za-z]*O[ \t]*-))).*https?://.*
@@ -38,7 +38,7 @@ rules:
         regex: (?s).*(?:\btar\b|\bunzip\b|\bgunzip\b|\bbunzip2\b|\bchmod\b|\bdpkg[ \t]+-i\b|\brpm[ \t]+-i\b|\bsh[ \t]|\bbash[ \t]|[ \t;&]\./).*
     - metavariable-regex:
         metavariable: $CMD
-        regex: (?s)^(?!.*\|[ \t]*(?:sudo[ \t]+)?(?:ba|z|da)?sh\b).*
+        regex: (?s)^(?!.*\|[ \t]*(?:sudo[ \t]+)?(?:(?:ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)\b(?![ \t]+-m[ \t]+json\.tool)).*
 - id: sast.gha.ai-prompt-injection
   languages:
   - yaml
@@ -75,7 +75,7 @@ rules:
     - https://nvd.nist.gov/vuln/detail/CVE-2025-30066
     - https://nvd.nist.gov/vuln/detail/CVE-2025-30154
     - https://cwe.mitre.org/data/definitions/829.html
-  pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?uses:[ \t]*["']?(?:tj-actions/changed-files|tj-actions/eslint-changed-files|reviewdog/action-[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?@(?![0-9a-fA-F]{40}["']?[ \t]*(?:#.*)?$)[^\s"'#]+
+  pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?uses:[ \t]*(?:&\w+[ \t]+)?(?:!!str[ \t]+)?["']?(?i:tj-actions/changed-files|tj-actions/eslint-changed-files|reviewdog/action-[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?@(?![0-9a-fA-F]{40}["']?[ \t]*(?:#.*)?$)[^\s"'#]+
   paths:
     include:
     - .github/workflows/*.yml
@@ -103,17 +103,20 @@ rules:
         '
     - metavariable-regex:
         metavariable: $SCRIPT
-        regex: (?s).*\b(?:curl|wget)\b[^\n|]*\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:ba|z|da)?sh\b.*
+        regex: (?s).*(?:\b(?:curl|wget)\b[^\n|]*\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:(?:ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)\b(?![ \t]+-m[ \t]+json\.tool)|(?:\b(?:(?:ba|z|da|k)?sh|source|eval)\b[ \t]+(?:-[A-Za-z]+[ \t]+)*[\"']?(?:<\((?:curl|wget)\b|\$\((?:curl|wget)\b[^)]*\))|(?:^|[\s;&|])\.[ \t]+[\"']?(?:<\(|\$\()(?:curl|wget)\b)).*
   - patterns:
     - pattern: 'run: $SCRIPT
 
         '
     - metavariable-regex:
         metavariable: $SCRIPT
-        regex: (?s)^(?!.*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst|minisign[ \t]+-V)).*(?:\bcurl\b[^\n|]*[ \t](?:-[A-Za-z]*[oO]\b|--output\b|--remote-name\b)(?![ \t]+/dev/null)|\bwget\b[ \t]+(?![^\n]*(?:--spider|-[A-Za-z]*O[ \t]*-)))[^\n|]*(?:\n|$).*
+        regex: (?s).*(?:\bcurl\b[^\n|]*[ \t](?:-[A-Za-z]*[oO]\b|--output\b|--remote-name\b)(?![ \t]+/dev/null)|\bwget\b[ \t]+(?![^\n]*(?:--spider|-[A-Za-z]*O[ \t]*-)))[^\n|]*(?:\n|$).*
     - metavariable-regex:
         metavariable: $SCRIPT
-        regex: (?s)^(?!.*\|[ \t]*(?:sudo[ \t]+)?(?:ba|z|da)?sh\b).*
+        regex: (?s)^(?:(?!.*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst|minisign[ \t]+-V)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|'\"\\]+)(?!.*(?:(?P=F)[^\n]*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst|minisign[ \t]+-V)|(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst|minisign[ \t]+-V)[^\n]*(?P=F))).*)$
+    - metavariable-regex:
+        metavariable: $SCRIPT
+        regex: (?s)^(?!.*\|[ \t]*(?:sudo[ \t]+)?(?:(?:ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)\b(?![ \t]+-m[ \t]+json\.tool)).*
 - id: sast.js.angular-bypass-trust
   languages:
   - typescript
@@ -161,12 +164,43 @@ rules:
   - pattern: req.params
   - pattern: req.headers
   - pattern: req.cookies
+  - pattern: req.url
+  - pattern: req.originalUrl
+  - pattern: req.path
+  - pattern: req.get(...)
+  - pattern: req.header(...)
+  - pattern: req.param(...)
+  - pattern: req.signedCookies
+  - pattern: req.files
   - pattern: request.query
   - pattern: request.body
   - pattern: request.params
   - pattern: request.headers
   - pattern: request.cookies
+  - patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: $REQ.cookies
+      - pattern: $REQ.url
+      - pattern: $REQ.originalUrl
+      - pattern: $REQ.path
+      - pattern: $REQ.get(...)
+      - pattern: $REQ.header(...)
   - pattern: ctx.query
+  - pattern: ctx.request.query
+  - pattern: ctx.headers
+  - pattern: ctx.cookies.get(...)
   - pattern: ctx.request.body
   - pattern: ctx.params
   - pattern: $U.searchParams.get(...)
@@ -232,12 +266,43 @@ rules:
   - pattern: req.params
   - pattern: req.headers
   - pattern: req.cookies
+  - pattern: req.url
+  - pattern: req.originalUrl
+  - pattern: req.path
+  - pattern: req.get(...)
+  - pattern: req.header(...)
+  - pattern: req.param(...)
+  - pattern: req.signedCookies
+  - pattern: req.files
   - pattern: request.query
   - pattern: request.body
   - pattern: request.params
   - pattern: request.headers
   - pattern: request.cookies
+  - patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: $REQ.cookies
+      - pattern: $REQ.url
+      - pattern: $REQ.originalUrl
+      - pattern: $REQ.path
+      - pattern: $REQ.get(...)
+      - pattern: $REQ.header(...)
   - pattern: ctx.query
+  - pattern: ctx.request.query
+  - pattern: ctx.headers
+  - pattern: ctx.cookies.get(...)
   - pattern: ctx.request.body
   - pattern: ctx.params
   - pattern: $U.searchParams.get(...)
@@ -346,8 +411,6 @@ rules:
   pattern-sanitizers:
   - pattern: DOMPurify.sanitize(...)
   - pattern: sanitizeHtml(...)
-  - pattern: encodeURIComponent(...)
-  - pattern: encodeURI(...)
   - pattern: escapeHtml(...)
   pattern-sinks:
   - patterns:
@@ -382,7 +445,7 @@ rules:
   paths:
     include:
     - '*.ejs'
-  pattern-regex: (?i)<%-(?!\s*include\s*\()(?!\s*body\s*-?%>)(?!\s*(?:'[^']*'|"[^"]*")\s*-?%>)(?![^%]*(?:sanitize|purify|dompurify|escapeHtml))\s*[^\s%][^%]*%>
+  pattern-regex: (?i)<%-(?!\s*include\s*\()(?!\s*body\s*-?%>)(?!\s*(?:'[^']*'|"[^"]*")\s*-?%>)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()\s*[^\s%][^%]*%>
 - id: sast.js.electron-node-integration
   languages:
   - javascript
@@ -429,6 +492,61 @@ rules:
   - pattern: 'webPreferences = { ..., webSecurity: false, ... }
 
       '
+  - patterns:
+    - pattern: '$V = { ..., nodeIntegration: true, ... }
+
+        '
+    - pattern-inside: '$V = { ... };
+
+        ...
+
+        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+
+        '
+  - patterns:
+    - pattern: '$V = { ..., nodeIntegrationInWorker: true, ... }
+
+        '
+    - pattern-inside: '$V = { ... };
+
+        ...
+
+        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+
+        '
+  - patterns:
+    - pattern: '$V = { ..., contextIsolation: false, ... }
+
+        '
+    - pattern-inside: '$V = { ... };
+
+        ...
+
+        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+
+        '
+  - patterns:
+    - pattern: '$V = { ..., sandbox: false, ... }
+
+        '
+    - pattern-inside: '$V = { ... };
+
+        ...
+
+        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+
+        '
+  - patterns:
+    - pattern: '$V = { ..., webSecurity: false, ... }
+
+        '
+    - pattern-inside: '$V = { ... };
+
+        ...
+
+        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+
+        '
 - id: sast.js.express-error-leak
   languages:
   - javascript
@@ -552,12 +670,43 @@ rules:
   - pattern: req.params
   - pattern: req.headers
   - pattern: req.cookies
+  - pattern: req.url
+  - pattern: req.originalUrl
+  - pattern: req.path
+  - pattern: req.get(...)
+  - pattern: req.header(...)
+  - pattern: req.param(...)
+  - pattern: req.signedCookies
+  - pattern: req.files
   - pattern: request.query
   - pattern: request.body
   - pattern: request.params
   - pattern: request.headers
   - pattern: request.cookies
+  - patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: $REQ.cookies
+      - pattern: $REQ.url
+      - pattern: $REQ.originalUrl
+      - pattern: $REQ.path
+      - pattern: $REQ.get(...)
+      - pattern: $REQ.header(...)
   - pattern: ctx.query
+  - pattern: ctx.request.query
+  - pattern: ctx.headers
+  - pattern: ctx.cookies.get(...)
   - pattern: ctx.request.body
   - pattern: ctx.params
   - pattern: $U.searchParams.get(...)
@@ -573,19 +722,19 @@ rules:
     - pattern: $R.render($X, ...)
     - metavariable-regex:
         metavariable: $R
-        regex: ^(res|response|reply|ctx|resp)$
+        regex: ^(res|response|reply|ctx|resp)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$
     - focus-metavariable: $X
   - patterns:
     - pattern: $R.view($X, ...)
     - metavariable-regex:
         metavariable: $R
-        regex: ^(reply|res|ctx)$
+        regex: ^(reply|res|ctx)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$
     - focus-metavariable: $X
   - patterns:
     - pattern: $R.render($T, $O, ...)
     - metavariable-regex:
         metavariable: $R
-        regex: ^(res|response|reply|ctx|resp)$
+        regex: ^(res|response|reply|ctx|resp)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$
     - metavariable-regex:
         metavariable: $O
         regex: ^(req|request|ctx\.request)\.(query|body|params)$
@@ -655,7 +804,7 @@ rules:
     - '*.hbs'
     - '*.handlebars'
     - '*.mustache'
-  pattern-regex: (?i)\{\{\{(?!\s*body\s*\}\}\})(?!\s*>)(?![^}]*(?:sanitize|purify|dompurify|escapeHtml))\s*[^\s}][^}]*\}\}\}
+  pattern-regex: (?i)\{\{\{(?!\s*body\s*\}\}\})(?!\s*>)(?!\s*\(?\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)(?:\s*\(|\s+[^\s}]))\s*[^\s}][^}]*\}\}\}
 - id: sast.js.jquery-xss
   languages:
   - javascript
@@ -673,7 +822,8 @@ rules:
     - https://api.jquery.com/text/
   mode: taint
   pattern-sources:
-  - pattern-either:
+  - label: INPUT
+    pattern-either:
     - pattern: location.hash
     - pattern: location.search
     - pattern: location.href
@@ -691,7 +841,8 @@ rules:
     - pattern: window.name
     - pattern: new URLSearchParams(...).get(...)
     - pattern: new URLSearchParams(...).getAll(...)
-  - patterns:
+  - label: INPUT
+    patterns:
     - pattern-either:
       - pattern-inside: '$W.addEventListener("message", function($E) { ... })
 
@@ -706,16 +857,23 @@ rules:
 
           '
     - pattern: $E.data
+  - label: HTML_SAFE
+    requires: INPUT
+    pattern-either:
+    - pattern: DOMPurify.sanitize(...)
+    - pattern: sanitizeHtml(...)
+    - pattern: escapeHtml(...)
+    - pattern: $.text(...)
+  - label: URL_SAFE
+    requires: INPUT
+    pattern-either:
+    - pattern: isSafeUrl(...)
+    - pattern: sanitizeUrl(...)
   pattern-sanitizers:
-  - pattern: DOMPurify.sanitize(...)
-  - pattern: sanitizeHtml(...)
   - pattern: encodeURIComponent(...)
-  - pattern: escapeHtml(...)
-  - pattern: $.text(...)
-  - pattern: isSafeUrl(...)
-  - pattern: sanitizeUrl(...)
   pattern-sinks:
-  - patterns:
+  - requires: INPUT and not HTML_SAFE
+    patterns:
     - pattern-either:
       - pattern: $(...)
       - pattern: jQuery(...)
@@ -726,7 +884,8 @@ rules:
     - pattern-not: $(this)
     - pattern-not: $(function() { ... })
     - pattern-not: $(() => { ... })
-  - patterns:
+  - requires: INPUT and not HTML_SAFE
+    patterns:
     - pattern-either:
       - pattern: $O.html($X)
       - pattern: $O.append($X)
@@ -735,6 +894,10 @@ rules:
       - pattern: $O.before($X)
       - pattern: $O.replaceWith($X)
       - pattern: $O.wrap($X)
+    - focus-metavariable: $X
+  - requires: INPUT and not URL_SAFE
+    patterns:
+    - pattern-either:
       - pattern: $O.attr("href", $X)
       - pattern: $O.attr("src", $X)
     - focus-metavariable: $X
@@ -743,7 +906,7 @@ rules:
   - javascript
   - typescript
   severity: ERROR
-  message: jsonwebtoken decode() is used in a function that never calls verify(), or verify() is told to accept the "none" algorithm. decode() does not check the signature, so a forged token passes as genuine. Verify the signature with a pinned algorithm before trusting any claim.
+  message: The decoded token is not verified in a recognized context (verify() of the same token earlier in the block or anywhere in the function), or verify() allows the "none" algorithm. decode() does not check the signature, so a forged token passes as genuine. Verify the signature with a pinned algorithm before trusting any claim.
   metadata:
     sast_severity: high
     confidence: medium
@@ -981,38 +1144,83 @@ rules:
     - https://owasp.org/Top10/A03_2021-Injection/
   mode: taint
   pattern-sources:
-  - pattern: req.query
-  - pattern: req.body
-  - pattern: req.params
-  - pattern: req.headers
-  - pattern: req.cookies
-  - pattern: request.query
-  - pattern: request.body
-  - pattern: request.params
-  - pattern: request.headers
-  - pattern: request.cookies
-  - pattern: ctx.query
-  - pattern: ctx.request.body
-  - pattern: ctx.params
-  - pattern: $U.searchParams.get(...)
-  - pattern: location.search
-  - pattern: location.hash
-  pattern-sanitizers:
-  - pattern: ldapEscape.filter(...)
-  - pattern: ldapEscape.filter`...`
-  - pattern: escapeFilter(...)
-  - pattern: escapeLdapFilter(...)
+  - label: INPUT
+    pattern-either:
+    - pattern: req.query
+    - pattern: req.body
+    - pattern: req.params
+    - pattern: req.headers
+    - pattern: req.cookies
+    - pattern: req.url
+    - pattern: req.originalUrl
+    - pattern: req.path
+    - pattern: req.get(...)
+    - pattern: req.header(...)
+    - pattern: req.param(...)
+    - pattern: req.signedCookies
+    - pattern: req.files
+    - pattern: request.query
+    - pattern: request.body
+    - pattern: request.params
+    - pattern: request.headers
+    - pattern: request.cookies
+    - pattern: ctx.query
+    - pattern: ctx.request.query
+    - pattern: ctx.headers
+    - pattern: ctx.cookies.get(...)
+    - pattern: ctx.request.body
+    - pattern: ctx.params
+    - pattern: $U.searchParams.get(...)
+    - pattern: location.search
+    - pattern: location.hash
+  - label: INPUT
+    patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: $REQ.cookies
+      - pattern: $REQ.url
+      - pattern: $REQ.originalUrl
+      - pattern: $REQ.path
+      - pattern: $REQ.get(...)
+      - pattern: $REQ.header(...)
+  - label: FILTER_SAFE
+    requires: INPUT
+    pattern-either:
+    - pattern: ldapEscape.filter(...)
+    - pattern: ldapEscape.filter`...`
+    - pattern: escapeFilter(...)
+    - pattern: escapeLdapFilter(...)
+  - label: DN_SAFE
+    requires: INPUT
+    pattern-either:
+    - pattern: ldapEscape.dn(...)
+    - pattern: ldapEscape.dn`...`
+    - pattern: escapeDn(...)
   pattern-sinks:
-  - patterns:
+  - requires: INPUT and not FILTER_SAFE
+    patterns:
     - pattern: '$C.search($B, {..., filter: $X, ...}, ...)
 
         '
     - focus-metavariable: $X
-  - patterns:
+  - requires: INPUT and not FILTER_SAFE
+    patterns:
     - pattern: $C.search($B, $OPTS, ...)
     - pattern-not: $C.search($B, {...}, ...)
     - focus-metavariable: $OPTS
-  - patterns:
+  - requires: INPUT and not FILTER_SAFE
+    patterns:
     - pattern: $AD.$M($X, ...)
     - metavariable-regex:
         metavariable: $AD
@@ -1021,6 +1229,23 @@ rules:
         metavariable: $M
         regex: ^(find|findUser|findUsers|findGroup|findGroups|getGroupMembershipForUser|isUserMemberOf)$
     - focus-metavariable: $X
+  - requires: INPUT and not DN_SAFE
+    patterns:
+    - pattern: $C.search($B, $OPTS, ...)
+    - metavariable-regex:
+        metavariable: $C
+        regex: (?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$
+    - focus-metavariable: $B
+  - requires: INPUT and not DN_SAFE
+    patterns:
+    - pattern: $C.$M($DN, ...)
+    - metavariable-regex:
+        metavariable: $C
+        regex: (?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(bind|modify|del|compare|add)$
+    - focus-metavariable: $DN
 - id: sast.js.libxml-noent
   languages:
   - javascript
@@ -1105,7 +1330,7 @@ rules:
     - pattern: $P + $X
     - metavariable-regex:
         metavariable: $P
-        regex: ^["'`](?:/|\./|\?|#|https?://)
+        regex: ^["'`](?:/(?!/)|\./|\?|#|https?://[^/"'`]+/)
   pattern-sinks:
   - patterns:
     - pattern-either:
@@ -1147,38 +1372,57 @@ rules:
     - https://owasp.org/Top10/A03_2021-Injection/
   mode: taint
   pattern-sources:
-  - pattern: req.query
-  - pattern: req.body
-  - pattern: request.query
-  - pattern: request.body
-  - pattern: ctx.query
-  - pattern: ctx.request.body
+  - label: INPUT
+    pattern-either:
+    - pattern: req.query
+    - pattern: req.body
+    - pattern: req.param(...)
+    - pattern: request.query
+    - pattern: request.body
+    - pattern: ctx.query
+    - pattern: ctx.request.query
+    - pattern: ctx.request.body
+  - label: INPUT
+    patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+  - label: CAST
+    requires: INPUT
+    pattern-either:
+    - pattern: String(...)
+    - pattern: '`${$X}`
+
+        '
+    - pattern: mongoSanitize(...)
+    - pattern: $S.toString()
+    - pattern: $S.trim()
+    - pattern: $S.toLowerCase()
+    - pattern: $S.toUpperCase()
+    - patterns:
+      - pattern: $SCH.$P(...)
+      - metavariable-regex:
+          metavariable: $SCH
+          regex: (?i)(.*schema.*|z|.*validator.*)
+      - metavariable-regex:
+          metavariable: $P
+          regex: ^(parse|validate|validateSync|safeParse|escape)$
   pattern-sanitizers:
   - pattern: Number(...)
   - pattern: parseInt(...)
   - pattern: parseFloat(...)
-  - pattern: String(...)
   - pattern: Boolean(...)
-  - pattern: '`${$X}`
-
-      '
-  - pattern: sanitize(...)
-  - pattern: mongoSanitize(...)
-  - pattern: $S.sanitize(...)
-  - pattern: $S.toString()
-  - pattern: $S.trim()
-  - pattern: $S.toLowerCase()
-  - pattern: $S.toUpperCase()
-  - patterns:
-    - pattern: $SCH.$P(...)
-    - metavariable-regex:
-        metavariable: $SCH
-        regex: (?i)(.*schema.*|z|.*validator.*)
-    - metavariable-regex:
-        metavariable: $P
-        regex: ^(parse|validate|validateSync|safeParse|escape)$
   pattern-sinks:
-  - patterns:
+  - requires: INPUT and not CAST
+    patterns:
     - pattern: '$M.$FN({..., $K: $X, ...}, ...)
 
         '
@@ -1189,7 +1433,8 @@ rules:
         metavariable: $X
         regex: ^[^{]
     - focus-metavariable: $X
-  - patterns:
+  - requires: INPUT and not CAST
+    patterns:
     - pattern: $M.$FN($Q, ...)
     - metavariable-regex:
         metavariable: $FN
@@ -1198,7 +1443,8 @@ rules:
     - pattern-not: $M.$FN((...) => $B, ...)
     - pattern-not: $M.$FN(function (...) {...}, ...)
     - focus-metavariable: $Q
-  - patterns:
+  - requires: INPUT
+    patterns:
     - pattern: '{..., $K: $X, ...}
 
         '
@@ -1254,12 +1500,43 @@ rules:
   - pattern: req.params
   - pattern: req.headers
   - pattern: req.cookies
+  - pattern: req.url
+  - pattern: req.originalUrl
+  - pattern: req.path
+  - pattern: req.get(...)
+  - pattern: req.header(...)
+  - pattern: req.param(...)
+  - pattern: req.signedCookies
+  - pattern: req.files
   - pattern: request.query
   - pattern: request.body
   - pattern: request.params
   - pattern: request.headers
   - pattern: request.cookies
+  - patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: $REQ.cookies
+      - pattern: $REQ.url
+      - pattern: $REQ.originalUrl
+      - pattern: $REQ.path
+      - pattern: $REQ.get(...)
+      - pattern: $REQ.header(...)
   - pattern: ctx.query
+  - pattern: ctx.request.query
+  - pattern: ctx.headers
+  - pattern: ctx.cookies.get(...)
   - pattern: ctx.request.body
   - pattern: ctx.params
   - pattern: $U.searchParams.get(...)
@@ -1271,6 +1548,14 @@ rules:
     - metavariable-regex:
         metavariable: $P
         regex: ^["'`]/[^/\\"'`]
+  - patterns:
+    - pattern: new URL($P, $B)
+    - metavariable-regex:
+        metavariable: $P
+        regex: ^["'`]/[^/\\"'`]
+    - metavariable-regex:
+        metavariable: $B
+        regex: ^(req|request)\.(url|originalUrl)$
   - pattern: encodeURIComponent(...)
   - pattern: Number(...)
   - pattern: parseInt(...)
@@ -1280,28 +1565,42 @@ rules:
     - pattern: $R.redirect($X, ...)
     - metavariable-regex:
         metavariable: $R
-        regex: ^(res|response|reply|ctx|resp|h|c|context)$
+        regex: ^(res|response|reply|ctx|resp|h|c|context)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$
     - focus-metavariable: $X
   - patterns:
     - pattern: $R.redirect($S, $X)
     - metavariable-regex:
         metavariable: $R
-        regex: ^(res|response|reply|ctx|resp|h|c|context)$
+        regex: ^(res|response|reply|ctx|resp|h|c|context)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$
     - focus-metavariable: $X
   - patterns:
     - pattern: $R.location($X)
     - metavariable-regex:
         metavariable: $R
-        regex: ^(res|response|reply|ctx|resp|h|c|context)$
+        regex: ^(res|response|reply|ctx|resp|h|c|context)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$
     - focus-metavariable: $X
   - patterns:
-    - pattern: $R.$M("Location", $X)
+    - pattern: $R.$M($H, $X)
+    - metavariable-regex:
+        metavariable: $H
+        regex: (?i)^["'`]location["'`]$
     - metavariable-regex:
         metavariable: $R
-        regex: ^(res|response|reply|ctx|resp|h|c|context)$
+        regex: ^(res|response|reply|ctx|resp|h|c|context)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$
     - metavariable-regex:
         metavariable: $M
         regex: ^(setHeader|header|set|append)$
+    - focus-metavariable: $X
+  - patterns:
+    - pattern: '$R.writeHead($S, ..., {..., $K: $X, ...})
+
+        '
+    - metavariable-regex:
+        metavariable: $K
+        regex: (?i)^["'`]?location["'`]?$
+    - metavariable-regex:
+        metavariable: $R
+        regex: ^(res|response|reply|ctx|resp|h|c|context)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$
     - focus-metavariable: $X
   - patterns:
     - pattern: NextResponse.redirect($X, ...)
@@ -1331,12 +1630,43 @@ rules:
   - pattern: req.params
   - pattern: req.headers
   - pattern: req.cookies
+  - pattern: req.url
+  - pattern: req.originalUrl
+  - pattern: req.path
+  - pattern: req.get(...)
+  - pattern: req.header(...)
+  - pattern: req.param(...)
+  - pattern: req.signedCookies
+  - pattern: req.files
   - pattern: request.query
   - pattern: request.body
   - pattern: request.params
   - pattern: request.headers
   - pattern: request.cookies
+  - patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: $REQ.cookies
+      - pattern: $REQ.url
+      - pattern: $REQ.originalUrl
+      - pattern: $REQ.path
+      - pattern: $REQ.get(...)
+      - pattern: $REQ.header(...)
   - pattern: ctx.query
+  - pattern: ctx.request.query
+  - pattern: ctx.headers
+  - pattern: ctx.cookies.get(...)
   - pattern: ctx.request.body
   - pattern: ctx.params
   - pattern: $U.searchParams.get(...)
@@ -1345,7 +1675,6 @@ rules:
   pattern-sanitizers:
   - pattern: path.basename(...)
   - pattern: basename(...)
-  - pattern: sanitize(...)
   - pattern: sanitizeFilename(...)
   - pattern: Number(...)
   - pattern: parseInt(...)
@@ -1395,10 +1724,25 @@ rules:
   - pattern: req.query
   - pattern: req.body
   - pattern: req.params
+  - pattern: req.param(...)
   - pattern: request.query
   - pattern: request.body
   - pattern: request.params
+  - patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
   - pattern: ctx.query
+  - pattern: ctx.request.query
   - pattern: ctx.request.body
   - pattern: ctx.params
   - pattern: $U.searchParams.get(...)
@@ -1426,7 +1770,7 @@ rules:
     - pattern: $A.forEach(function ($K) { ... $O[$K] = $V; ... })
     - focus-metavariable: $A
   - patterns:
-    - pattern: $L.$F($T, $SRC, ...)
+    - pattern: $L.$F($T, ..., $SRC, ...)
     - metavariable-regex:
         metavariable: $L
         regex: ^(_|lodash|lo)$
@@ -1435,16 +1779,25 @@ rules:
         regex: ^(merge|mergeWith|defaultsDeep)$
     - focus-metavariable: $SRC
   - patterns:
-    - pattern: $F($T, $SRC, ...)
+    - pattern: $F($T, ..., $SRC, ...)
     - metavariable-regex:
         metavariable: $F
-        regex: ^(merge|deepMerge|mergeDeep|defaultsDeep|deepExtend|deepAssign|mergeWith)$
+        regex: ^(merge|deepMerge|mergeDeep|defaultsDeep|deepExtend|deepAssign|mergeWith|deepmerge|mergeDeepRight)$
     - focus-metavariable: $SRC
   - patterns:
-    - pattern: $JQ.extend(true, $T, $SRC, ...)
+    - pattern: $JQ.extend(true, $T, ..., $SRC, ...)
     - metavariable-regex:
         metavariable: $JQ
         regex: ^(\$|jQuery)$
+    - focus-metavariable: $SRC
+  - patterns:
+    - pattern: extend(true, $T, ..., $SRC, ...)
+    - focus-metavariable: $SRC
+  - patterns:
+    - pattern: merge.recursive($T, ..., $SRC, ...)
+    - focus-metavariable: $SRC
+  - patterns:
+    - pattern: merge.recursive(true, $T, ..., $SRC, ...)
     - focus-metavariable: $SRC
   - patterns:
     - pattern: $L.$F($O, $P, ...)
@@ -1478,49 +1831,89 @@ rules:
     - https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/
   mode: taint
   pattern-sources:
-  - pattern: req.query
-  - pattern: req.body
-  - pattern: req.params
-  - pattern: req.headers
-  - pattern: req.cookies
-  - pattern: request.query
-  - pattern: request.body
-  - pattern: request.params
-  - pattern: request.headers
-  - pattern: request.cookies
-  - pattern: ctx.query
-  - pattern: ctx.request.body
-  - pattern: ctx.params
-  - pattern: $U.searchParams.get(...)
-  - pattern: location.search
-  - pattern: location.hash
-  pattern-sanitizers:
-  - patterns:
+  - label: INPUT
+    pattern-either:
+    - pattern: req.query
+    - pattern: req.body
+    - pattern: req.params
+    - pattern: req.headers
+    - pattern: req.cookies
+    - pattern: req.url
+    - pattern: req.originalUrl
+    - pattern: req.path
+    - pattern: req.get(...)
+    - pattern: req.header(...)
+    - pattern: req.param(...)
+    - pattern: req.signedCookies
+    - pattern: req.files
+    - pattern: request.query
+    - pattern: request.body
+    - pattern: request.params
+    - pattern: request.headers
+    - pattern: request.cookies
+    - pattern: ctx.query
+    - pattern: ctx.request.query
+    - pattern: ctx.headers
+    - pattern: ctx.cookies.get(...)
+    - pattern: ctx.request.body
+    - pattern: ctx.params
+    - pattern: $U.searchParams.get(...)
+    - pattern: location.search
+    - pattern: location.hash
+  - label: INPUT
+    patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: $REQ.cookies
+      - pattern: $REQ.url
+      - pattern: $REQ.originalUrl
+      - pattern: $REQ.path
+      - pattern: $REQ.get(...)
+      - pattern: $REQ.header(...)
+  - label: FIXED_ORIGIN
+    requires: INPUT
+    patterns:
     - pattern: $P + $X
     - metavariable-regex:
         metavariable: $P
         regex: ^["'`]https?://[^/]+/
+  pattern-sanitizers:
   - pattern: Number(...)
   - pattern: parseInt(...)
   - pattern: parseFloat(...)
   pattern-sinks:
-  - patterns:
-    - pattern: $PAGE.$M($X, ...)
+  - requires: INPUT and not FIXED_ORIGIN
+    patterns:
+    - pattern-either:
+      - pattern: $PAGE.goto($X, ...)
+      - pattern: (await $B.newPage()).goto($X, ...)
     - pattern-not: $PAGE.goto(encodeURIComponent(...), ...)
     - metavariable-regex:
-        metavariable: $M
-        regex: ^(goto|setContent|evaluate|evaluateOnNewDocument|waitForFunction)$
-    - metavariable-regex:
         metavariable: $PAGE
-        regex: (?i).*(page|tab|frame|context|browser).*
+        regex: (?i).*(page|tab|frame|context|browser|newPage).*
     - focus-metavariable: $X
-  - patterns:
-    - pattern: (await $B.newPage()).$M($X, ...)
+  - requires: INPUT
+    patterns:
+    - pattern-either:
+      - pattern: $PAGE.$M($X, ...)
+      - pattern: (await $B.newPage()).$M($X, ...)
     - metavariable-regex:
         metavariable: $M
-        regex: ^(goto|setContent|evaluate)$
+        regex: ^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$
     - focus-metavariable: $X
-  - patterns:
+  - requires: INPUT
+    patterns:
     - pattern: '$PAGE.addScriptTag({..., $K: $X, ...})
 
         '
@@ -1629,12 +2022,43 @@ rules:
   - pattern: req.params
   - pattern: req.headers
   - pattern: req.cookies
+  - pattern: req.url
+  - pattern: req.originalUrl
+  - pattern: req.path
+  - pattern: req.get(...)
+  - pattern: req.header(...)
+  - pattern: req.param(...)
+  - pattern: req.signedCookies
+  - pattern: req.files
   - pattern: request.query
   - pattern: request.body
   - pattern: request.params
   - pattern: request.headers
   - pattern: request.cookies
+  - patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: $REQ.cookies
+      - pattern: $REQ.url
+      - pattern: $REQ.originalUrl
+      - pattern: $REQ.path
+      - pattern: $REQ.get(...)
+      - pattern: $REQ.header(...)
   - pattern: ctx.query
+  - pattern: ctx.request.query
+  - pattern: ctx.headers
+  - pattern: ctx.cookies.get(...)
   - pattern: ctx.request.body
   - pattern: ctx.params
   - pattern: $U.searchParams.get(...)
@@ -1644,8 +2068,11 @@ rules:
   - pattern: Number(...)
   - pattern: parseInt(...)
   - pattern: parseFloat(...)
-  - pattern: $E.escape(...)
-  - pattern: escape(...)
+  - patterns:
+    - pattern: $E.escape(...)
+    - metavariable-regex:
+        metavariable: $E
+        regex: ^(mysql|mysql2|connection|conn|pool|db|sqlstring|SqlString|knex)$
   - pattern: $E.escapeLiteral(...)
   - pattern: $E.escapeId(...)
   pattern-sinks:
@@ -1695,12 +2122,43 @@ rules:
   - pattern: req.params
   - pattern: req.headers
   - pattern: req.cookies
+  - pattern: req.url
+  - pattern: req.originalUrl
+  - pattern: req.path
+  - pattern: req.get(...)
+  - pattern: req.header(...)
+  - pattern: req.param(...)
+  - pattern: req.signedCookies
+  - pattern: req.files
   - pattern: request.query
   - pattern: request.body
   - pattern: request.params
   - pattern: request.headers
   - pattern: request.cookies
+  - patterns:
+    - pattern-either:
+      - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+      - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+      - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: $REQ.cookies
+      - pattern: $REQ.url
+      - pattern: $REQ.originalUrl
+      - pattern: $REQ.path
+      - pattern: $REQ.get(...)
+      - pattern: $REQ.header(...)
   - pattern: ctx.query
+  - pattern: ctx.request.query
+  - pattern: ctx.headers
+  - pattern: ctx.cookies.get(...)
   - pattern: ctx.request.body
   - pattern: ctx.params
   - pattern: $U.searchParams.get(...)
@@ -1786,7 +2244,7 @@ rules:
     - '*.jinja'
     - '*.jinja2'
     - '*.j2'
-  pattern-regex: (?i)\{\{-?(?!\s*(?:'[^']*'|"[^"]*")\s*\|)(?![^}]*\|\s*(?:escape|e|forceescape|striptags|sanitize|purify)\b)(?![^}\n]*\.Content\b)[^}\n]*\|\s*(?:safe|safeHTML)\b[^}\n]*-?\}\}
+  pattern-regex: (?i)\{\{-?(?!\s*(?:'[^']*'|"[^"]*")\s*\|)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()(?![^}]*\|\s*(?:escape|e|forceescape|striptags|sanitize|purify)\s*(?:[(|]|-?\}))(?![^}\n]*\.Content\b)[^}\n]*\|\s*(?:safe|safeHTML)\b[^}\n]*-?\}\}
 - id: sast.js.timing-unsafe-compare
   languages:
   - javascript
@@ -2050,7 +2508,7 @@ rules:
   paths:
     include:
     - '*.vue'
-  pattern-regex: (?i)(?:\s:|\sv-bind:)(?:href|src)\s*=\s*(?:"(?!\s*'[^'"]*'\s*")(?![^"]*(?:sanitize|purify|dompurify|safeUrl))[^"]+"|'(?!\s*"[^"']*"\s*')(?![^']*(?:sanitize|purify|dompurify|safeUrl))[^']+')
+  pattern-regex: (?i)(?:\s:|\sv-bind:)(?:href|src)\s*=\s*(?:"(?!\s*'[^'"]*'\s*")(?!\s*(?:[\w$]+\.)*(?:sanitize(?:Url)?|purify|safeUrl)\s*\()[^"]+"|'(?!\s*"[^"']*"\s*')(?!\s*(?:[\w$]+\.)*(?:sanitize(?:Url)?|purify|safeUrl)\s*\()[^']+')
 - id: sast.js.vue-v-html
   languages:
   - generic
@@ -2068,7 +2526,7 @@ rules:
   paths:
     include:
     - '*.vue'
-  pattern-regex: (?i)\bv-html\s*=\s*(?:"(?!\s*'[^'"]*'\s*")(?![^"]*(?:sanitize|purify|dompurify|escapeHtml))[^"]+"|'(?!\s*"[^"']*"\s*')(?![^']*(?:sanitize|purify|dompurify|escapeHtml))[^']+')
+  pattern-regex: (?i)\bv-html\s*=\s*(?:"(?!\s*'[^'"]*'\s*")(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()[^"]+"|'(?!\s*"[^"']*"\s*')(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()[^']+')
 - id: sast.js.websocket-cleartext
   languages:
   - javascript
@@ -2107,10 +2565,10 @@ rules:
     - https://cwe.mitre.org/data/definitions/94.html
   pattern-either:
   - pattern-regex: (?:ingress-nginx/controller|kubernetes-ingress-controller/nginx-ingress-controller):v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)(?![0-9])
-  - pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?(?:image|repository):[ \t]*[\"']?(?:[\w.:-]+/)*ingress-nginx/controller[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:[\w.-]+:[^\n]*)?\n){0,5}?[ \t]*tag:[ \t]*[\"']?v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)(?![0-9])
-  - pattern-regex: (?m)^[ \t]*tag:[ \t]*[\"']?v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:[\w.-]+:[^\n]*)?\n){0,5}?[ \t]*(?:image|repository):[ \t]*[\"']?(?:[\w.:-]+/)*ingress-nginx/controller(?![\w/.-])
-  - pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?(?:chart|name):[ \t]*[\"']?ingress-nginx[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:[\w.-]+:[^\n]*)?\n){0,5}?[ \t]*(?:version|targetRevision):[ \t]*[\"']?v?(?:[0-3]\.\d+\.\d+|4\.(?:[0-9]|10)\.\d+|4\.11\.[0-4]|4\.12\.0)(?![0-9])
-  - pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?(?:version|targetRevision):[ \t]*[\"']?v?(?:[0-3]\.\d+\.\d+|4\.(?:[0-9]|10)\.\d+|4\.11\.[0-4]|4\.12\.0)[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:[\w.-]+:[^\n]*)?\n){0,5}?[ \t]*(?:chart|name):[ \t]*[\"']?ingress-nginx[\"']?[ \t]*(?:#[^\n]*)?$
+  - pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?(?:image|repository):[ \t]*[\"']?(?:[\w.:-]+/)*ingress-nginx/controller[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*tag:[ \t]*[\"']?v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)(?![0-9])
+  - pattern-regex: (?m)^[ \t]*tag:[ \t]*[\"']?v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*(?:image|repository):[ \t]*[\"']?(?:[\w.:-]+/)*ingress-nginx/controller(?![\w/.-])
+  - pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?(?:chart|name):[ \t]*[\"']?ingress-nginx[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*(?:version|targetRevision):[ \t]*[\"']?v?(?:[0-3]\.\d+\.\d+|4\.(?:[0-9]|10)\.\d+|4\.11\.[0-4]|4\.12\.0)(?![0-9])
+  - pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?(?:version|targetRevision):[ \t]*[\"']?v?(?:[0-3]\.\d+\.\d+|4\.(?:[0-9]|10)\.\d+|4\.11\.[0-4]|4\.12\.0)[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*(?:chart|name):[ \t]*[\"']?ingress-nginx[\"']?[ \t]*(?:#[^\n]*)?$
 - id: sast.python.django-httpresponse-xss
   languages:
   - python
@@ -2143,7 +2601,6 @@ rules:
   - pattern: django.utils.html.conditional_escape(...)
   - pattern: format_html(...)
   - pattern: django.utils.html.format_html(...)
-  - pattern: strip_tags(...)
   - pattern: int(...)
   - pattern: float(...)
   - pattern: bool(...)
@@ -2155,6 +2612,21 @@ rules:
       - pattern: django.http.HttpResponse($X, ...)
     - pattern-not: HttpResponse(..., content_type="application/json", ...)
     - pattern-not: HttpResponse(..., content_type="text/plain", ...)
+    - focus-metavariable: $X
+  - patterns:
+    - pattern: $C($X, ...)
+    - metavariable-regex:
+        metavariable: $C
+        regex: ^(django\.http\.)?HttpResponse(BadRequest|NotFound|Forbidden|ServerError|Gone|NotAllowed)$
+    - pattern-not: $C(..., content_type="application/json", ...)
+    - pattern-not: $C(..., content_type="text/plain", ...)
+    - focus-metavariable: $X
+  - patterns:
+    - pattern-either:
+      - pattern: mark_safe($X)
+      - pattern: SafeString($X)
+      - pattern: django.utils.safestring.mark_safe($X)
+      - pattern: django.utils.safestring.SafeString($X)
     - focus-metavariable: $X
 - id: sast.python.httpx-verify-false
   languages:
@@ -2321,6 +2793,18 @@ rules:
       - pattern: shutil.copyfile(..., $P)
       - pattern: os.remove($P)
       - pattern: os.unlink($P)
+      - pattern: os.rename($P, ...)
+      - pattern: os.makedirs($P, ...)
+      - pattern: os.listdir($P)
+      - pattern: shutil.rmtree($P, ...)
+    - focus-metavariable: $P
+  - patterns:
+    - pattern-either:
+      - pattern: ($Q / $P).$M(...)
+      - pattern: $Q.joinpath($P).$M(...)
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(read_text|read_bytes|open)$
     - focus-metavariable: $P
 - id: sast.python.requests-cleartext
   languages:
@@ -2438,9 +2922,9 @@ rules:
     - https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami
   patterns:
   - pattern: "data \"aws_ami\" \"$NAME\" {\n  ...\n  most_recent = true\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  owners = $OWNERS\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-id\"\n    ...\n  }\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-alias\"\n    ...\n  }\n  ...\n}\n"
+  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  owners = [$O, ...]\n  ...\n}\n"
+  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-id\"\n    ...\n    values = [$V, ...]\n    ...\n  }\n  ...\n}\n"
+  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-alias\"\n    ...\n    values = [$V, ...]\n    ...\n  }\n  ...\n}\n"
 - id: sast.web.inline-script-dom-xss
   languages:
   - generic
@@ -2463,7 +2947,7 @@ rules:
   - pattern-either:
     - pattern-regex: document\s*\.\s*write(ln)?\s*\([^;\n]*\b(location\s*\.\s*(hash|search|href|pathname)|document\s*\.\s*(URL|documentURI|referrer)|window\s*\.\s*name)\b
     - pattern-regex: \.\s*(innerHTML|outerHTML)\s*(\+)?=(?!=)[^;\n]*\b(location\s*\.\s*(hash|search|href|pathname)|document\s*\.\s*(URL|documentURI|referrer)|window\s*\.\s*name)\b
-  - pattern-not-regex: (DOMPurify\s*\.\s*sanitize|escapeHtml)\s*\(
+  - pattern-not-regex: (?:DOMPurify\s*\.\s*sanitize|escapeHtml)\s*\((?:[^;\n()]|\([^;\n()]*\))*?\b(?:location\s*\.\s*(?:hash|search|href|pathname)|document\s*\.\s*(?:URL|documentURI|referrer)|window\s*\.\s*name)\b
 - id: sast.web.malicious-cdn-domain
   languages:
   - generic

@@ -14,51 +14,95 @@ rules:
         - https://cwe.mitre.org/data/definitions/918.html
         - https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/
     mode: taint
+    # labels: INPUT is request data; FIXED_ORIGIN marks INPUT appended to a literal https://host/ prefix.
+    # A fixed origin makes goto() safe, but not setContent/evaluate (the prefix is inert text there).
     pattern-sources:
-      - pattern: req.query
-      - pattern: req.body
-      - pattern: req.params
-      - pattern: req.headers
-      - pattern: req.cookies
-      - pattern: request.query
-      - pattern: request.body
-      - pattern: request.params
-      - pattern: request.headers
-      - pattern: request.cookies
-      - pattern: ctx.query
-      - pattern: ctx.request.body
-      - pattern: ctx.params
-      - pattern: $U.searchParams.get(...)
-      - pattern: location.search
-      - pattern: location.hash
-    pattern-sanitizers:
-      - patterns:
+      - label: INPUT
+        pattern-either:
+          - pattern: req.query
+          - pattern: req.body
+          - pattern: req.params
+          - pattern: req.headers
+          - pattern: req.cookies
+          - pattern: req.url
+          - pattern: req.originalUrl
+          - pattern: req.path
+          - pattern: req.get(...)
+          - pattern: req.header(...)
+          - pattern: req.param(...)
+          - pattern: req.signedCookies
+          - pattern: req.files
+          - pattern: request.query
+          - pattern: request.body
+          - pattern: request.params
+          - pattern: request.headers
+          - pattern: request.cookies
+          - pattern: ctx.query
+          - pattern: ctx.request.query
+          - pattern: ctx.headers
+          - pattern: ctx.cookies.get(...)
+          - pattern: ctx.request.body
+          - pattern: ctx.params
+          - pattern: $U.searchParams.get(...)
+          - pattern: location.search
+          - pattern: location.hash
+      # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
+      - label: INPUT
+        patterns:
+          - pattern-either:
+              - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+              - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+              - pattern: $REQ.url
+              - pattern: $REQ.originalUrl
+              - pattern: $REQ.path
+              - pattern: $REQ.get(...)
+              - pattern: $REQ.header(...)
+      - label: FIXED_ORIGIN
+        requires: INPUT
+        patterns:
           - pattern: $P + $X
           - metavariable-regex:
               metavariable: $P
               regex: '^["''`]https?://[^/]+/'
+    pattern-sanitizers:
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
     pattern-sinks:
-      - patterns:
-          - pattern: $PAGE.$M($X, ...)
-          # component encoding protects a navigation URL, never code run in the page
+      # navigation: a fixed https://host/ origin or component encoding keeps the host fixed
+      - requires: INPUT and not FIXED_ORIGIN
+        patterns:
+          - pattern-either:
+              - pattern: $PAGE.goto($X, ...)
+              - pattern: (await $B.newPage()).goto($X, ...)
           - pattern-not: $PAGE.goto(encodeURIComponent(...), ...)
           - metavariable-regex:
-              metavariable: $M
-              regex: '^(goto|setContent|evaluate|evaluateOnNewDocument|waitForFunction)$'
-          - metavariable-regex:
               metavariable: $PAGE
-              regex: '(?i).*(page|tab|frame|context|browser).*'
+              regex: '(?i).*(page|tab|frame|context|browser|newPage).*'
           - focus-metavariable: $X
-      - patterns:
-          - pattern: (await $B.newPage()).$M($X, ...)
+      # page content and code: no prefix or URL encoding makes request data safe here
+      - requires: INPUT
+        patterns:
+          - pattern-either:
+              - pattern: $PAGE.$M($X, ...)
+              - pattern: (await $B.newPage()).$M($X, ...)
           - metavariable-regex:
               metavariable: $M
-              regex: '^(goto|setContent|evaluate)$'
+              regex: '^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$'
           - focus-metavariable: $X
-      - patterns:
+      - requires: INPUT
+        patterns:
           - pattern: |
               $PAGE.addScriptTag({..., $K: $X, ...})
           - metavariable-regex:

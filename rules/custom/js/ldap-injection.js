@@ -43,3 +43,19 @@ app.get('/safe', (req, res) => {
   const hits = [1, 2].find((n) => n === Number(req.query.n));
   res.end();
 });
+
+app.post('/dn', (req, res) => {
+  // ruleid: sast.js.ldap-injection
+  client.bind('uid=' + req.body.user + ',ou=people,dc=ex,dc=com', req.body.pw, () => {});
+  // ruleid: sast.js.ldap-injection
+  client.search(req.query.base, { filter: '(objectClass=*)' }, () => {});
+  // ruleid: sast.js.ldap-injection
+  client.del('uid=' + req.body.user + ',ou=people', () => {});
+  // ok: sast.js.ldap-injection
+  client.bind('uid=' + ldapEscape.dn(req.body.user) + ',ou=people', pw, () => {});
+  // ok: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(objectClass=*)' }, () => {});
+  // ok: sast.js.ldap-injection
+  client.search(ldapEscape.dn`ou=${req.query.ou},dc=ex`, { filter: '(objectClass=*)' }, () => {});
+  res.end();
+});

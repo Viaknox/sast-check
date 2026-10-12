@@ -37,3 +37,39 @@ rules:
           { ..., webPreferences: { ..., webSecurity: false, ... }, ... }
       - pattern: |
           webPreferences = { ..., webSecurity: false, ... }
+      # the settings object is built in a variable and passed to a window later in the same scope
+      - patterns:
+          - pattern: |
+              $V = { ..., nodeIntegration: true, ... }
+          - pattern-inside: |
+              $V = { ... };
+              ...
+              <... new $W({ ..., webPreferences: $V, ... }) ...>;
+      - patterns:
+          - pattern: |
+              $V = { ..., nodeIntegrationInWorker: true, ... }
+          - pattern-inside: |
+              $V = { ... };
+              ...
+              <... new $W({ ..., webPreferences: $V, ... }) ...>;
+      - patterns:
+          - pattern: |
+              $V = { ..., contextIsolation: false, ... }
+          - pattern-inside: |
+              $V = { ... };
+              ...
+              <... new $W({ ..., webPreferences: $V, ... }) ...>;
+      - patterns:
+          - pattern: |
+              $V = { ..., sandbox: false, ... }
+          - pattern-inside: |
+              $V = { ... };
+              ...
+              <... new $W({ ..., webPreferences: $V, ... }) ...>;
+      - patterns:
+          - pattern: |
+              $V = { ..., webSecurity: false, ... }
+          - pattern-inside: |
+              $V = { ... };
+              ...
+              <... new $W({ ..., webPreferences: $V, ... }) ...>;

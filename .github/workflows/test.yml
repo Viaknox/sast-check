@@ -68,6 +68,7 @@ jobs:
       - name: End-to-end
         env:
           E2E_REQUIRE: zizmor osv-scanner   # CI must not silently skip these scanners' checks
+          E2E_NETWORK: "1"                  # run the checks that need the GitHub API
         run: |
           export PATH="$RUNNER_TEMP/opengrep:$(go env GOPATH)/bin:$PATH"
           bash tests/e2e.sh

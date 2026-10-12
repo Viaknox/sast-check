@@ -58,6 +58,26 @@ controller:
 controller:
   image:
     # ruleid: sast.k8s.ingress-nginx-vulnerable
+    image: ingress-nginx/controller
+    # pinned until the Q3 upgrade window
+
+    tag: "v1.10.1"
+---
+controller:
+  image:
+    # ruleid: sast.k8s.ingress-nginx-vulnerable
+    image: ingress-nginx/controller
+    pullPolicy: IfNotPresent
+    digest: ""
+    chroot: false
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    tag: "v1.10.1"
+---
+controller:
+  image:
+    # ruleid: sast.k8s.ingress-nginx-vulnerable
     tag: "v1.11.4"
     image: ingress-nginx/controller
 ---

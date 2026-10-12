@@ -18,7 +18,8 @@ rules:
         - https://api.jquery.com/text/
     mode: taint
     pattern-sources:
-      - pattern-either:
+      - label: INPUT
+        pattern-either:
           - pattern: location.hash
           - pattern: location.search
           - pattern: location.href
@@ -36,7 +37,8 @@ rules:
           - pattern: window.name
           - pattern: new URLSearchParams(...).get(...)
           - pattern: new URLSearchParams(...).getAll(...)
-      - patterns:
+      - label: INPUT
+        patterns:
           - pattern-either:
               - pattern-inside: |
                   $W.addEventListener("message", function($E) { ... })
@@ -47,16 +49,26 @@ rules:
               - pattern-inside: |
                   $W.onmessage = ($E) => { ... }
           - pattern: $E.data
+      # HTML_SAFE: escaped/sanitized for HTML content. It does NOT make a URL safe: "javascript:alert(1)"
+      # survives DOMPurify, sanitizeHtml and escapeHtml, so href/src sinks need URL_SAFE instead.
+      - label: HTML_SAFE
+        requires: INPUT
+        pattern-either:
+          - pattern: DOMPurify.sanitize(...)
+          - pattern: sanitizeHtml(...)
+          - pattern: escapeHtml(...)
+          - pattern: $.text(...)
+      - label: URL_SAFE
+        requires: INPUT
+        pattern-either:
+          - pattern: isSafeUrl(...)
+          - pattern: sanitizeUrl(...)
     pattern-sanitizers:
-      - pattern: DOMPurify.sanitize(...)
-      - pattern: sanitizeHtml(...)
+      # component encoding escapes < > " and ":", so it is safe in HTML content and in a URL
       - pattern: encodeURIComponent(...)
-      - pattern: escapeHtml(...)
-      - pattern: $.text(...)
-      - pattern: isSafeUrl(...)
-      - pattern: sanitizeUrl(...)
     pattern-sinks:
-      - patterns:
+      - requires: INPUT and not HTML_SAFE
+        patterns:
           - pattern-either:
               - pattern: $(...)
               - pattern: jQuery(...)
@@ -67,7 +79,8 @@ rules:
           - pattern-not: $(this)
           - pattern-not: $(function() { ... })
           - pattern-not: $(() => { ... })
-      - patterns:
+      - requires: INPUT and not HTML_SAFE
+        patterns:
           - pattern-either:
               - pattern: $O.html($X)
               - pattern: $O.append($X)
@@ -76,6 +89,10 @@ rules:
               - pattern: $O.before($X)
               - pattern: $O.replaceWith($X)
               - pattern: $O.wrap($X)
+          - focus-metavariable: $X
+      - requires: INPUT and not URL_SAFE
+        patterns:
+          - pattern-either:
               - pattern: $O.attr("href", $X)
               - pattern: $O.attr("src", $X)
           - focus-metavariable: $X

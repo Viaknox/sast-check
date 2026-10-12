@@ -9,6 +9,13 @@
   <!-- ruleid: sast.js.ejs-unescaped -->
   <p><%-comment.text-%></p>
 
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- unsanitizedBio %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- purifyUser %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- escapeHtmlUser %></div>
+
   <!-- ok: sast.js.ejs-unescaped -->
   <%- include('partials/header') %>
   <!-- ok: sast.js.ejs-unescaped -->

@@ -52,8 +52,6 @@ rules:
     pattern-sanitizers:
       - pattern: DOMPurify.sanitize(...)
       - pattern: sanitizeHtml(...)
-      - pattern: encodeURIComponent(...)
-      - pattern: encodeURI(...)
       - pattern: escapeHtml(...)
     pattern-sinks:
       - patterns:

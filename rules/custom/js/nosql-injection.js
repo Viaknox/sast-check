@@ -30,6 +30,28 @@ app.get('/where', async (req, res) => {
   res.json(r);
 });
 
+app.get('/where-cast', async (req, res) => {
+  // a string cast does not stop JavaScript injection inside $where
+  // ruleid: sast.js.nosql-injection
+  const a = await User.find({ $where: 'this.name == "' + String(req.query.name) + '"' });
+  // ruleid: sast.js.nosql-injection
+  const b = await User.find({ $where: `this.name == "${req.query.name}"` });
+  // ruleid: sast.js.nosql-injection
+  const c = await User.find({ $where: 'this.name == "' + mongoSanitize(req.query.name) + '"' });
+  // ok: sast.js.nosql-injection
+  const d = await User.find({ $where: 'this.age == ' + Number(req.query.age) });
+  res.json([a, b, c, d]);
+});
+
+app.post('/html-sanitize', async (req, res) => {
+  // sanitize() is an HTML/no-op wrapper here, it does not strip Mongo operators
+  // ruleid: sast.js.nosql-injection
+  const h = await User.findOne({ email: sanitize(req.body.email) });
+  // ruleid: sast.js.nosql-injection
+  const k = await User.findOne({ email: xss.sanitize(req.body.email) });
+  res.json([h, k]);
+});
+
 app.post('/safe', async (req, res) => {
   // ok: sast.js.nosql-injection
   const a = await User.findOne({ email: String(req.body.email) });

@@ -38,3 +38,21 @@ function ok4() {
   const cfg = { nodeIntegration: true };
   return cfg;
 }
+
+function f() {
+  // ruleid: sast.js.electron-node-integration
+  const prefs = { nodeIntegration: true, preload: p };
+  return new BrowserWindow({ width: 800, webPreferences: prefs });
+}
+function g() {
+  // ruleid: sast.js.electron-node-integration
+  const wp = { contextIsolation: false };
+  const win = new BrowserView({ webPreferences: wp });
+  return win;
+}
+function h() {
+  // ruleid: sast.js.electron-node-integration
+  const wp = { sandbox: false };
+  loadSettings();
+  return new BrowserWindow({ show: false, webPreferences: wp });
+}

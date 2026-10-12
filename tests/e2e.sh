@@ -327,6 +327,12 @@ if command -v trivy >/dev/null; then
   gate --mode diff --base HEAD~1 --only trivy
   check "trivy: deleting a masking tfvars file is new"     "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='dsg.tf']")" "[True]"
   git checkout -q main
+  git checkout -q -b tvp main
+  printf 'cidr = "10.0.0.0/8"\n' > p.tfvars && git add p.tfvars && git commit -qm pvars
+  printf 'misconfiguration:\n  terraform:\n    vars: [p.tfvars]\n' > trivy.yaml && git add trivy.yaml && git commit -qm ptrivy
+  set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+  check "proposed trivy.yaml naming an existing file is valid" "$code" "0"
+  git checkout -q main
 fi
 git checkout -q main
 
@@ -753,12 +759,113 @@ git checkout -q main
 
 # r15: changes the scanners cannot see are named in the report
 git checkout -q -b r15b main
-printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 12\n' 0 > src/big.py
+printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 12\n' 0 > src/big.dat
 git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),libsub"
-git add src/big.py && git commit -qm blind
+git add src/big.dat && git commit -qm blind
 gate --mode diff --base HEAD~1 --only ruff
-check "report names a changed LFS pointer"               "$(grep -c 'Git LFS file `src/big.py`' sast-results/report.md)" "1"
+check "report names a changed LFS pointer"               "$(grep -c 'Git LFS file `src/big.dat`' sast-results/report.md)" "1"
 check "report names a changed submodule"                 "$(grep -c 'submodule `libsub`' sast-results/report.md)" "1"
+git checkout -q main
+
+# r18: a '#' or '//' inside a JS regex or template literal is not a comment, so it cannot suppress
+git checkout -q -b r18 main
+cat > src/rx.js <<'JS'
+app.get('/rx', (req, res) => {
+  const re = /# sast-ignore[sast.js.code-eval]: harmless/;
+  res.send(String(eval(req.query.a)));
+  const t = `// sast-ignore[sast.js.code-eval]: template data`;
+  res.send(String(eval(req.query.b)));
+});
+JS
+git add src/rx.js && git commit -qm r18
+gate --mode diff --base HEAD~1 --only opengrep
+check "marker inside a JS regex/template does not suppress" "$(q "sorted(f['line'] for f in d['findings'] if f['path']=='src/rx.js' and f['blocking'])")" "[3, 5]"
+git checkout -q main
+
+# r18: a third identical sink (2 copies -> 3) counts as new
+git checkout -q -b r18d main
+printf 'app.get("/a", (req, res) => { eval(req.query.v); });\napp.get("/b", (req, res) => { eval(req.query.v); });\n' > src/three.js
+git add src/three.js && git commit -qm base3
+printf 'app.get("/c", (req, res) => { eval(req.query.v); });\n' >> src/three.js && git commit -qam add3
+gate --mode diff --base HEAD~1 --only opengrep
+check "2 -> 3 identical sinks: the change blocks"        "$(q "int(any(f['path']=='src/three.js' and f['blocking'] for f in d['findings']))")" "1"
+git checkout -q main
+
+# r18: an unknown --only scanner and a settings error both fail without running any scanner
+set +e; python3 -I "$HERE/scripts/sast.py" --mode full --only opengrp >/dev/null 2>&1; code=$?; set -e
+check "--only with an unknown scanner exits 2"           "$code" "2"
+git checkout -q -b r18s main
+printf '[tools]\nopengrepp = true\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm badbase
+echo 'x = 2' >> src/util.py && git commit -qam next
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 >/dev/null 2>&1; code=$?; set -e
+check "invalid base settings: exit 2"                     "$code" "2"
+check "...and no scanner ran"                             "$(q "[r['name'] for r in d['runs'] if r['status']=='ran']")" "[]"
+git checkout -q main
+if command -v trivy >/dev/null; then
+  git checkout -q -b r18t main
+  printf 'misconfiguration: [\n' > trivy.yaml && git add trivy.yaml && git commit -qm badtrivy
+  set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+  check "malformed proposed trivy.yaml fails"             "$code" "2"
+  git checkout -q main
+fi
+if command -v zizmor >/dev/null && [ -n "${E2E_NETWORK:-}" ]; then
+  # zizmor online audits failing (bad token) must fail the gate, not silently drop known-vulnerable-actions
+  git checkout -q -b r18z main
+  mkdir -p .github/workflows && printf 'on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: {persist-credentials: false}\n' > .github/workflows/z.yml
+  git add .github/workflows/z.yml && git commit -qm z
+  set +e; GH_TOKEN=invalid-token python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only zizmor >/dev/null 2>&1; code=$?; set -e
+  check "zizmor online failure fails the gate"            "$code" "2"
+  check "...and names the lost online audits"             "$(q "any(r['name']=='zizmor-online' and r['status']=='error' for r in d['runs'])")" "True"
+  git checkout -q main
+fi
+
+# r19: settings paths must be regular files even when the content compares equal
+git checkout -q -b r19s main
+printf '[policy]\nblock_on = ["critical"]\n' > .sast-check.toml && cp .sast-check.toml same.toml && git add .sast-check.toml same.toml && git commit -qm sbase
+rm .sast-check.toml && ln -s same.toml .sast-check.toml && git add .sast-check.toml && git commit -qm slink
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "settings symlink to an identical file fails"      "$code" "2"
+git checkout -q main
+git checkout -q -b r19d main
+mkdir -p .gitleaks.toml && echo x > .gitleaks.toml/x && git add .gitleaks.toml/x && git commit -qm sdir
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "settings path committed as a directory fails"     "$code" "2"
+git checkout -q main
+
+# r19: a Python file Ruff cannot parse or read fails closed (it would otherwise not be checked at all)
+git checkout -q -b r19r main
+printf 'def f(:\n    pass\neval(input())\n' > src/broken.py && git add src/broken.py && git commit -qm broken
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "unparsable changed Python file fails closed"      "$code" "2"
+printf '# -*- coding: latin-1 -*-\n# caf\xe9\neval(input())\n' > src/broken.py && git commit -qam latin
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "non-UTF-8 changed Python file fails closed"       "$code" "2"
+git checkout -q main
+
+# r19: .mts/.cts and extensionless node/python scripts are scanned
+git checkout -q -b r19x main
+printf "app.get('/m', (req, res) => { eval(req.query.c); });\n" > src/h.mts
+printf '#!/usr/bin/env node\napp.get("/n", (req, res) => { eval(req.query.c); });\n' > src/nodetool
+printf '#!/usr/bin/env python3\neval(input())\n' > src/pytool
+git add src/h.mts src/nodetool src/pytool && git commit -qm scripts
+gate --mode diff --base HEAD~1 --only opengrep,ruff
+check ".mts and extensionless scripts are scanned"       "$(q "sorted({f['path'] for f in d['findings'] if f['blocking']})")" "['src/h.mts', 'src/nodetool', 'src/pytool']"
+git checkout -q main
+
+# r19: links leaving the repo are never read; excluded paths and such links are named in the report
+git checkout -q -b r19l main
+ln -s /etc/hostname src/host.py && mkdir -p vendor && printf 'eval(input())\n' > vendor/hidden.py
+git add src/host.py vendor/hidden.py && git commit -qm outlink
+gate --mode diff --base HEAD~1 --only ruff
+check "link leaving the repo is named, not read"         "$(grep -c 'symlink `src/host.py` (points outside the repository)' sast-results/report.md)" "1"
+check "changed file in an excluded path is named"         "$(grep -c 'vendor/hidden.py' sast-results/report.md)" "1"
+git checkout -q main
+
+# r19: PR-controlled file names cannot break out of the report's code span into a link
+git checkout -q -b r19m main
+f='src/x`[click](evil.example)`.py'; printf 'eval(input())\n' > "$f" && git add "$f" && git commit -qm mdname
+gate --mode diff --base HEAD~1 --only ruff
+check "file name stays inside one code span"             "$(grep -cF "\`src/x'[click](evil.example)'.py:1\`" sast-results/report.md)" "1"
 git checkout -q main
 
 # clean PR passes

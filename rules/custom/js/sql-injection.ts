@@ -42,6 +42,15 @@ app.get('/prisma', async (req: Request, res: Response) => {
   res.json(a);
 });
 
+app.get('/decoy-escape', async (req: Request, res: Response) => {
+  // bare escape() is not a SQL escaper (could be an HTML escape or homegrown helper)
+  // ruleid: sast.js.sql-injection
+  const a = await pool.query("SELECT * FROM users WHERE name = '" + escape(req.query.name) + "'");
+  // ruleid: sast.js.sql-injection
+  const b = await pool.query("SELECT * FROM users WHERE name = '" + html.escape(req.query.name) + "'");
+  res.json([a, b]);
+});
+
 app.get('/safe', async (req: Request, res: Response) => {
   const prisma: any = {};
   // ok: sast.js.sql-injection
@@ -54,6 +63,8 @@ app.get('/safe', async (req: Request, res: Response) => {
   const b = await prisma.$queryRaw`SELECT * FROM users WHERE id = ${req.query.id}`;
   // ok: sast.js.sql-injection
   const c = await pool.query('SELECT * FROM users WHERE id = ' + Number(req.query.id));
+  // ok: sast.js.sql-injection
+  const f = await pool.query("SELECT * FROM users WHERE name = " + connection.escape(req.query.name));
   // ok: sast.js.sql-injection
   const d = await pool.query({ text: 'SELECT * FROM users WHERE id = $1', values: [req.query.id] });
   // ok: sast.js.sql-injection

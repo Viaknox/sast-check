@@ -67,3 +67,50 @@ def ok_unrelated_value():
     flag = request.args.get("verbose")
     # ok: sast.python.path-traversal
     return open("/var/log/app.log").read() if flag else ""
+
+
+def bad_path_div():
+    # ruleid: sast.python.path-traversal
+    return (Path(BASE) / request.args['f']).read_text()
+
+
+def bad_div_bytes():
+    # ruleid: sast.python.path-traversal
+    return (BASE_DIR / request.args['f']).read_bytes()
+
+
+def bad_joinpath():
+    # ruleid: sast.python.path-traversal
+    return Path(BASE).joinpath(request.args['f']).open()
+
+
+def bad_rmtree():
+    # ruleid: sast.python.path-traversal
+    shutil.rmtree(request.args['d'])
+
+
+def bad_listdir():
+    # ruleid: sast.python.path-traversal
+    return os.listdir(request.args['d'])
+
+
+def bad_makedirs_rename():
+    # ruleid: sast.python.path-traversal
+    os.makedirs(request.form['d'])
+    # ruleid: sast.python.path-traversal
+    os.rename(request.form['a'], "/tmp/b")
+
+
+def ok_path_div_secure():
+    # ok: sast.python.path-traversal
+    return (Path(BASE) / secure_filename(request.args['f'])).read_text()
+
+
+def ok_listdir_const():
+    # ok: sast.python.path-traversal
+    return os.listdir(BASE)
+
+
+def ok_rmtree_const():
+    # ok: sast.python.path-traversal
+    shutil.rmtree("/tmp/cache")

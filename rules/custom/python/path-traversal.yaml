@@ -57,4 +57,17 @@ rules:
               - pattern: shutil.copyfile(..., $P)
               - pattern: os.remove($P)
               - pattern: os.unlink($P)
+              - pattern: os.rename($P, ...)
+              - pattern: os.makedirs($P, ...)
+              - pattern: os.listdir($P)
+              - pattern: shutil.rmtree($P, ...)
+          - focus-metavariable: $P
+      # joined paths: (base / user).read_text(), base.joinpath(user).open() -- the user part is the focus
+      - patterns:
+          - pattern-either:
+              - pattern: ($Q / $P).$M(...)
+              - pattern: $Q.joinpath($P).$M(...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(read_text|read_bytes|open)$'
           - focus-metavariable: $P

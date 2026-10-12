@@ -29,3 +29,9 @@ jobs:
       - uses: tj-actions/changed-files@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-evil
       # ruleid: sast.gha.compromised-action
       - uses: "tj-actions/changed-files@a284dc1814e3fd07f2e34267fc8f81227ed29fb8.x"
+      # ruleid: sast.gha.compromised-action
+      - uses: TJ-Actions/Changed-Files@v45
+      # ruleid: sast.gha.compromised-action
+      - uses: &a tj-actions/changed-files@v45
+      # ruleid: sast.gha.compromised-action
+      - uses: !!str tj-actions/changed-files@v45

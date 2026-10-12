@@ -18,5 +18,6 @@ rules:
     paths:
       include:
         - "*.vue"
+    # sanitizer only counts as a call at the start of the expression, never as part of an identifier
     pattern-regex: >-
-      (?i)(?:\s:|\sv-bind:)(?:href|src)\s*=\s*(?:"(?!\s*'[^'"]*'\s*")(?![^"]*(?:sanitize|purify|dompurify|safeUrl))[^"]+"|'(?!\s*"[^"']*"\s*')(?![^']*(?:sanitize|purify|dompurify|safeUrl))[^']+')
+      (?i)(?:\s:|\sv-bind:)(?:href|src)\s*=\s*(?:"(?!\s*'[^'"]*'\s*")(?!\s*(?:[\w$]+\.)*(?:sanitize(?:Url)?|purify|safeUrl)\s*\()[^"]+"|'(?!\s*"[^"']*"\s*')(?!\s*(?:[\w$]+\.)*(?:sanitize(?:Url)?|purify|safeUrl)\s*\()[^']+')

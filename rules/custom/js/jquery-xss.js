@@ -55,6 +55,16 @@ function ok6() {
   // ok: sast.js.jquery-xss
   $("a.next").attr("href", "/item/" + encodeURIComponent(id));
 }
+function bad9() {
+  const u = location.hash.slice(1);
+  // ruleid: sast.js.jquery-xss
+  $("a").attr("href", DOMPurify.sanitize(u));
+}
+function ok8() {
+  const u = location.hash.slice(1);
+  // ok: sast.js.jquery-xss
+  $("a").attr("href", sanitizeUrl(u));
+}
 function bad8() {
   const u = new URLSearchParams(location.search).get("u");
   // ruleid: sast.js.jquery-xss

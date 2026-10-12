@@ -26,6 +26,23 @@ RUN wget https://example.com/tool && chmod +x tool
 # ok: sast.docker.remote-fetch-no-checksum
 ADD --checksum=sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 https://example.com/tool.tgz /opt/
 
+# ruleid: sast.docker.remote-fetch-no-checksum
+RUN curl -fsSLo /tmp/safe.tgz https://example.com/safe.tgz && \
+    echo "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  /tmp/safe.tgz" | sha256sum -c - && \
+    curl -o tool https://other.example/tool && chmod +x tool
+
+# ruleid: sast.docker.remote-fetch-no-checksum
+RUN sh <(wget -qO- https://x/i.sh)
+
+# ruleid: sast.docker.remote-fetch-no-checksum
+RUN eval "$(curl -s https://x/env.sh)"
+
+# ruleid: sast.docker.remote-fetch-no-checksum
+RUN curl -fsSL https://x/install.py | python3
+
+# ok: sast.docker.remote-fetch-no-checksum
+RUN curl -fsS https://api.example.com/status | python3 -m json.tool
+
 # ok: sast.docker.remote-fetch-no-checksum
 ADD ./local-file.tar.gz /opt/
 

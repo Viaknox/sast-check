@@ -4,7 +4,7 @@ rules:
   - javascript
   - typescript
   severity: ERROR
-  message: jsonwebtoken decode() is used in a function that never calls verify(), or verify() is told to accept the "none" algorithm. decode() does not check the signature, so a forged token passes as genuine. Verify the signature with a pinned algorithm before trusting any claim.
+  message: The decoded token is not verified in a recognized context (verify() of the same token earlier in the block or anywhere in the function), or verify() allows the "none" algorithm. decode() does not check the signature, so a forged token passes as genuine. Verify the signature with a pinned algorithm before trusting any claim.
   metadata:
     sast_severity: high
     confidence: medium

@@ -20,12 +20,44 @@ rules:
       - pattern: req.params
       - pattern: req.headers
       - pattern: req.cookies
+      - pattern: req.url
+      - pattern: req.originalUrl
+      - pattern: req.path
+      - pattern: req.get(...)
+      - pattern: req.header(...)
+      - pattern: req.param(...)
+      - pattern: req.signedCookies
+      - pattern: req.files
       - pattern: request.query
       - pattern: request.body
       - pattern: request.params
       - pattern: request.headers
       - pattern: request.cookies
+      # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+              - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+              - pattern: $REQ.url
+              - pattern: $REQ.originalUrl
+              - pattern: $REQ.path
+              - pattern: $REQ.get(...)
+              - pattern: $REQ.header(...)
       - pattern: ctx.query
+      - pattern: ctx.request.query
+      - pattern: ctx.headers
+      - pattern: ctx.cookies.get(...)
       - pattern: ctx.request.body
       - pattern: ctx.params
       - pattern: $U.searchParams.get(...)

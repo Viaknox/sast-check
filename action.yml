@@ -56,17 +56,19 @@ runs:
         OPENGREP_VERSION: v1.30.2
       run: |
         set -euo pipefail
-        python -I -m pip install --quiet --disable-pip-version-check "ruff==0.16.8" "zizmor==1.30.1"
+        # a transient registry error must not fail every PR: three tries, then fail (closed)
+        retry() { for i in 1 2 3; do "$@" && return 0; echo "retry $i: $*" >&2; sleep $((i * 10)); done; return 1; }
+        retry python -I -m pip install --quiet --disable-pip-version-check --timeout 60 "ruff==0.16.8" "zizmor==1.30.1"
         # go install verifies module content against the public Go checksum database
-        go install github.com/zricethezav/gitleaks/v8@v8.30.1
-        go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0
+        retry go install github.com/zricethezav/gitleaks/v8@v8.30.1
+        retry go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0
 
         # Opengrep: download and verify the Sigstore signature before use
         d="$RUNNER_TEMP/opengrep"; mkdir -p "$d"
         base="https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/opengrep_manylinux_x86"
-        curl -fsSL --retry 3 -o "$d/opengrep" "$base"
-        curl -fsSL --retry 3 -o "$d/opengrep.sig" "$base.sig"
-        curl -fsSL --retry 3 -o "$d/opengrep.cert" "$base.cert"
+        curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 -o "$d/opengrep" "$base"
+        curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 -o "$d/opengrep.sig" "$base.sig"
+        curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 -o "$d/opengrep.cert" "$base.cert"
         cosign verify-blob --cert "$d/opengrep.cert" --signature "$d/opengrep.sig" \
           --certificate-identity-regexp "^https://github.com/opengrep/opengrep/" \
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com" "$d/opengrep"

@@ -50,6 +50,28 @@ app.post('/merge', (req, res) => {
   res.json(defaults);
 });
 
+app.post('/merge2', (req, res) => {
+  const cfg = {};
+  const safeDefaults = { a: 1 };
+  // ruleid: sast.js.prototype-pollution
+  _.merge(cfg, safeDefaults, req.body);
+  // ruleid: sast.js.prototype-pollution
+  deepmerge(defaults, req.body);
+  // ruleid: sast.js.prototype-pollution
+  extend(true, cfg, req.body);
+  // ruleid: sast.js.prototype-pollution
+  mergeDeepRight(defaults, req.body);
+  // ruleid: sast.js.prototype-pollution
+  merge.recursive(true, cfg, req.body);
+  // ruleid: sast.js.prototype-pollution
+  $.extend(true, cfg, safeDefaults, req.body);
+  // ok: sast.js.prototype-pollution
+  extend(false, cfg, req.body);
+  // ok: sast.js.prototype-pollution
+  deepmerge(req.body, safeDefaults);
+  res.json(cfg);
+});
+
 app.post('/safe', (req, res) => {
   const out = {};
   // ok: sast.js.prototype-pollution

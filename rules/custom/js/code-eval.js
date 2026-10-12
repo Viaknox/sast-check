@@ -60,3 +60,21 @@ app.get('/safe', (req, res) => {
   setTimeout('tick()', 1000);
   res.json({ data, total, add: add(1, 2), out });
 });
+
+app.post('/alias', (r, res) => {
+  // ruleid: sast.js.code-eval
+  res.send(String(eval(r.query.code)));
+});
+
+router.get('/alias2', async function (rq, rs) {
+  // ruleid: sast.js.code-eval
+  new Function(rq.body.src)();
+  // ok: sast.js.code-eval
+  rs.send(String(eval('6 * 7')));
+});
+
+app.get('/eval-header', (req, res) => {
+  // ruleid: sast.js.code-eval
+  eval(req.get('x-code'));
+  res.end();
+});

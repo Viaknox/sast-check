@@ -126,7 +126,8 @@ class Ctx:
     changed_files: list[str] = field(default_factory=list)
     runs: list[ToolRun] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
-    new_keys: set[tuple[str, str, str, int]] = field(default_factory=set)   # (tool, rule, path, line) found new by a scanner
+    new_keys: set[tuple[str, str, str, int]] = field(default_factory=set)
+    baseline: bool = False      # scanning the base version for the comparison (lenient on unparsable files)   # (tool, rule, path, line) found new by a scanner
 
 
 # ---------------------------------------------------------------- helpers
@@ -165,10 +166,11 @@ def settings_file(repo: Path, base: str | None, name: str) -> str | None:
     if not base:
         f = repo / name
         return utf8(f.read_bytes(), name) if f.is_file() else None
-    v = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}"], cwd=repo, capture_output=True)
+    v = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}"], cwd=repo, capture_output=True,
+                       timeout=120)
     if v.returncode != 0:   # an unknown base must fail closed, not read as "no settings file"
         raise RuntimeError(f"base {base} is not a commit in this checkout")
-    p = subprocess.run(["git", "show", f"{base}:{name}"], cwd=repo, capture_output=True)
+    p = subprocess.run(["git", "show", f"{base}:{name}"], cwd=repo, capture_output=True, timeout=120)
     if p.returncode == 0:
         return utf8(p.stdout, name)
     err = p.stderr.decode(errors="replace")
@@ -200,7 +202,7 @@ def load_config(text: str | None) -> dict:
     return cfg
 
 
-IGNORE_KEYS = {"rule": str, "path": str, "reason": str, "expires": (str, date)}
+IGNORE_KEYS: dict[str, type | tuple[type, ...]] = {"rule": str, "path": str, "reason": str, "expires": (str, date)}
 
 
 def check_settings(uc: dict, defaults: dict) -> None:
@@ -332,18 +334,21 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
         moved = status[:1] in ("R", "C")
         if path and (moved or path not in files or (repo / path).is_symlink()):
             for f in link_dir_files(repo, path) or [path]:
-                if (repo / f).is_file():
+                if (repo / f).is_file() and in_repo(repo, repo / f):   # never read a link's target outside the repo
                     with open(repo / f, errors="ignore") as fh:
                         files[f] = set(range(1, sum(1 for _ in fh) + 1))
     # an existing link whose target changed brings that change in under the link's path
     # (src/vuln.py -> ../vendor/payload.txt, with only the excluded vendor/payload.txt in the diff)
     for f in changed_aliases(repo, list(files)):
-        if f not in files and (repo / f).is_file():
+        if f not in files and (repo / f).is_file() and in_repo(repo, repo / f):
             with open(repo / f, errors="ignore") as fh:
                 files[f] = set(range(1, sum(1 for _ in fh) + 1))
     # untracked new files (local runs) count as fully changed
     for u in untracked_files(repo):
         for f in link_dir_files(repo, u) or [u]:
+            if not in_repo(repo, repo / f):
+                files[f] = set()
+                continue
             try:
                 n = sum(1 for _ in open(repo / f, errors="ignore"))
             except OSError:
@@ -419,11 +424,30 @@ def targets(ctx: Ctx, exts: tuple[str, ...] | None = None, names: tuple[str, ...
                  for f in (link_dir_files(ctx.repo, link) or [link])]
     keep = []
     for f in files:
-        if glob_any(f, excl) or not (ctx.repo / f).is_file():
+        # a symlink leaving the repo (src/env.js -> /proc/self/environ) is never read: it is named in the report
+        if glob_any(f, excl) or not (ctx.repo / f).is_file() or not in_repo(ctx.repo, ctx.repo / f):
             continue
         if exts is None or f.endswith(exts) or Path(f).name in names:
             keep.append(f)
     return head + keep
+
+
+def script_kind(path: Path) -> str | None:
+    """'python' or 'node' for an extensionless script with that shebang (scripts/deploy), else None."""
+    if "." in path.name or not path.is_file():
+        return None
+    try:
+        with open(path, "rb") as fh:
+            first = fh.readline(200)
+    except OSError:
+        return None
+    if not first.startswith(b"#!"):
+        return None
+    return "python" if b"python" in first else "node" if re.search(rb"\b(node|deno|bun|tsx|ts-node)\b", first) else None
+
+
+# a changed file Opengrep would skip by name is scanned as a copy with a name it knows
+SCAN_AS = {".mts": ".ts", ".cts": ".ts"}
 
 
 def run_opengrep(ctx: Ctx) -> list[Finding]:
@@ -440,8 +464,9 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     # --x-ignore-semgrepignore-files: a PR's .semgrepignore/.opengrepignore must not hide files (full scans pass ".")
     # --max-target-bytes=0: no size cutoff; an oversized file would otherwise be skipped silently (excluded
     # paths such as dist/ and *.min.js are still never scanned)
+    # --timeout 0 --timeout-threshold 0: a rule never gives up on a file (a slow file must not be skipped)
     cmd = [engine, "scan", "--config", str(rules), "--json", "--quiet", "--disable-version-check", "--disable-nosem",
-           "--x-ignore-semgrepignore-files", "--max-target-bytes=0"]
+           "--x-ignore-semgrepignore-files", "--max-target-bytes=0", "--timeout", "0", "--timeout-threshold", "0"]
     if Path(engine).name == "opengrep":
         cmd.append("--taint-intrafile")
     else:
@@ -450,22 +475,30 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
         cmd += ["--exclude", g]
     # Opengrep refuses a symlink as a target ("File not found"), so a file reached through a link is scanned
     # as a copy under its logical path in a temp mirror (paths, and so findings, stay the same)
+    # The same mirror holds .mts/.cts and extensionless node/python scripts under a name Opengrep scans.
     root = ctx.repo.resolve()
-    linked = [f for f in tg if f != "." and (ctx.repo / f).resolve() != root / f]
-    direct = [f for f in tg if f not in linked]
+    renamed = {}
+    for f in tg:
+        if f != ".":
+            suffix = SCAN_AS.get(Path(f).suffix) or {"node": ".js", "python": ".py"}.get(script_kind(ctx.repo / f) or "")
+            if suffix:
+                renamed[f + suffix] = f
+    linked = [f for f in tg if f != "." and f not in renamed.values() and (ctx.repo / f).resolve() != root / f]
+    direct = [f for f in tg if f not in linked and f not in renamed.values()]
     results = []
     with tempfile.TemporaryDirectory() as td:
-        for f in linked:
-            (Path(td) / f).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ctx.repo / f, Path(td) / f)
-        for cwd, files in ((ctx.repo, direct), (Path(td), linked)):
+        for dst, src in [(f, f) for f in linked] + list(renamed.items()):
+            (Path(td) / dst).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ctx.repo / src, Path(td) / dst)
+        for cwd, files in ((ctx.repo, direct), (Path(td), linked + list(renamed))):
             if not files:
                 continue
             # "--": a PR file named "--x" is never an option. Exit 2 is parsed for its error list (its stderr
             # holds only warnings); any exit 2 still fails.
             p = sh(cmd + ["--"] + files, cwd, ok_codes=(0, 1, 2))
             data = json.loads(p.stdout or "{}")
-            errs = [e for e in data.get("errors", []) if e.get("level") == "error"
+            # a timeout at any level means a rule stopped on a file: fail closed
+            errs = [e for e in data.get("errors", []) if (e.get("level") == "error" or "Timeout" in str(e.get("type")))
                     and "Syntax error" not in str(e.get("type"))]
             if errs or p.returncode == 2:
                 raise RuntimeError(f"{len(errs)} engine errors (exit {p.returncode}): {str(errs[:1])[:300]}")
@@ -477,7 +510,7 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
         rid = rid[rid.find("sast."):] if "sast." in rid else rid
         out.append(Finding(
             tool="opengrep", rule=rid, severity=md.get("sast_severity", "medium"),
-            confidence=md.get("confidence", "medium"), path=rel(cwd, r["path"]),
+            confidence=md.get("confidence", "medium"), path=renamed.get(rel(cwd, r["path"]), rel(cwd, r["path"])),
             line=r["start"]["line"], end_line=r["end"]["line"], message=" ".join(r["extra"]["message"].split()),
             fix=md.get("fix", ""), cwe=str(md.get("cwe", "")),
             url=(md.get("references") or [""])[0],
@@ -542,6 +575,8 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
     if not shutil.which("ruff"):
         raise FileNotFoundError("ruff not installed")
     tg = targets(ctx, (".py", ".pyi", ".pyw", ".ipynb"))
+    # an extensionless script with a python shebang is Python too (Ruff lints any file it is given)
+    tg += [f for f in targets(ctx) if f != "." and f not in tg and script_kind(ctx.repo / f) == "python"]
     if not tg:
         return []
     # --ignore-noqa: a PR's noqa comments must not hide a finding (only sast-ignore with a reason)
@@ -551,7 +586,15 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
            "--output-format", "json", "--exit-zero"]
     for g in ctx.cfg["paths"]["exclude"]:
         cmd += ["--extend-exclude", g]
-    data = json.loads(sh(cmd + ["--"] + tg, ctx.repo).stdout or "[]")
+    p = sh(cmd + ["--"] + tg, ctx.repo)
+    data = json.loads(p.stdout or "[]")
+    # a file Ruff could not read or parse was not checked: fail closed, except while scanning the base
+    # version for the comparison (an unparsable old file just has no old findings)
+    unread = [ln.strip() for ln in (p.stderr or "").splitlines() if "Failed to lint" in ln]
+    unparsed = [f"{rel(ctx.repo, r['filename'])}: {r['message']}" for r in data if r.get("code") in (None, "invalid-syntax")]
+    if (unread or unparsed) and not ctx.baseline:
+        raise RuntimeError("ruff could not check " + "; ".join((unread + unparsed)[:3])[:400])
+    data = [r for r in data if r.get("code") not in (None, "invalid-syntax")]
     calls: dict = {}
     out = []
     for r in data:
@@ -632,7 +675,9 @@ def zizmor_scan(ctx: Ctx, cmd: list[str], tg: list[str], online: bool) -> list[F
         p = sh(cmd + ["--offline", "--"] + tg, ctx.repo, ok_codes=ok)   # same settings flags, offline
         why = next((l.strip() for l in str(e).splitlines() if re.search(r"status|unauthorized|timed? ?out|dns", l, re.I)),
                    "GitHub API error")
-        ctx.runs.append(ToolRun("zizmor-online", "skipped", "online audits unavailable (" + why[:160] + ")"))
+        # online-only audits (known-vulnerable-actions is critical) did not run: a fail, not a skip
+        ctx.runs.append(ToolRun("zizmor-online", "error", "online audits failed (" + why[:160] + "); "
+                                "offline results kept, but known-vulnerable-actions and other online audits did not run"))
     out = []
     for r in json.loads(p.stdout or "[]"):   # "ignored" is not honored: suppress only via sast-ignore / [[ignore]]
         det = r["determinations"]
@@ -659,7 +704,7 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
     with tempfile.TemporaryDirectory() as td:
         runs, alias = [], {}
         if ctx.mode == "diff":
-            mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
+            mb = sh(["git", "merge-base", ctx.base or "", "HEAD"], ctx.repo).stdout.strip()
             # --text: a PR's `*.py -diff` in .gitattributes must not turn its patches into "Binary files differ";
             # --no-textconv: a textconv filter (git-crypt) must not make git log fail and leave nothing scanned
             runs.append(["gitleaks", "git", f"--log-opts=--text --no-textconv {mb}..HEAD"])   # the PR's commits
@@ -668,7 +713,7 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
             # by content: new, never-added files (local runs), rename/copy destinations and symlinks, because
             # a pure rename (vendor/key.py -> src/key.py) or a new link to a file has no added secret text
             # for the history scan to see
-            ns = name_status(ctx.repo, ctx.base)
+            ns = name_status(ctx.repo, ctx.base or "")
             moved = [p for st, p in ns if st[:1] in ("R", "C") or (ctx.repo / p).is_symlink()]
             moved += changed_aliases(ctx.repo, [p for _, p in ns])
             scan = untracked_files(ctx.repo) + moved
@@ -688,7 +733,7 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
                 runs.append(["gitleaks", "dir", "--", f])
         if ctx.mode != "diff":
             if ctx.base:   # a secret added then deleted in the PR is gone from the tree but not from history
-                mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
+                mb = sh(["git", "merge-base", ctx.base or "", "HEAD"], ctx.repo).stdout.strip()
                 runs.append(["gitleaks", "git", f"--log-opts=--text --no-textconv {mb}..HEAD"])
         # PR scans use the base branch's .gitleaks.toml / .gitleaksignore, never the PR's (a PR could
         # allow-list its own secret). gitleaks always also reads <repo>/.gitleaksignore, so the PR's copy
@@ -728,7 +773,7 @@ def gitleaks_runs(ctx: Ctx, runs: list[list[str]], settings: list[str], td: str,
         p = sh(cmd[:2] + opts + cmd[2:], ctx.repo)               # options before any "--" / target
         # gitleaks logs a failed `git log` (e.g. a textconv filter) as ERR, then reports "no leaks" and
         # exits 0 having scanned nothing (gitleaks issue #2129): any ERR/FTL line is a scanner error
-        errs = [ln for ln in re.sub(r"\x1b\[[0-9;]*m", "", p.stderr or "").splitlines() if re.search(r" (ERR|FTL) ", ln)]
+        errs = [ln for ln in re.sub(r"\x1b\[[0-9;]*m", "", p.stderr or "").splitlines() if re.search(r"(?:^|\s)(?:ERR|FTL)(?:\s|$)", ln)]
         if errs:
             raise RuntimeError("gitleaks reported errors: " + " | ".join(errs)[:300])
         if rp.exists() and rp.stat().st_size:
@@ -766,7 +811,7 @@ def run_osv(ctx: Ctx) -> list[Finding]:
     inputs = [f for f in cands
               if (Path(f).name in LOCKFILES or f.endswith(SBOM_SUFFIXES)
                   or (f.endswith(".txt") and "requirements" in Path(f).name))
-              and not glob_any(f, ctx.cfg["paths"]["exclude"])]
+              and not glob_any(f, ctx.cfg["paths"]["exclude"]) and in_repo(ctx.repo, ctx.repo / f)]
     if ctx.mode == "diff" and not inputs:
         return []
     # 0 = clean, 1 = vulns found, 128 = no packages found
@@ -870,7 +915,7 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
                 for m in t:   # links are skipped (as in the PR copy): the data filter refuses ones leaving the tree
                     if not (m.issym() or m.islnk()):
                         t.extract(m, cwd, filter="data")
-            if arc.wait() != 0:
+            if arc.wait(timeout=900) != 0:
                 raise RuntimeError(f"git archive {ctx.base} failed")
             # Terraform variable files are scan inputs, not policy: a vars file named in the config
             # (misconfiguration.terraform.vars) must be the PR's version, or a changed value goes unseen.
@@ -926,10 +971,37 @@ SCANNERS = {
 
 
 # ---------------------------------------------------------------- policy
-def comment_text(line: str) -> str | None:
-    """The comment part of a source line: from the first comment opener (#, //, /*, <!--) outside a
-    '...', "..." or `...` string, so a marker inside string data never suppresses. None if no comment.
-    Line-local: a stray quote before the comment hides it (the finding then blocks: fails safe)."""
+C_LIKE = (".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".java", ".go", ".c", ".h", ".cc", ".cpp",
+          ".cs", ".kt", ".swift", ".rs", ".scala", ".php", ".dart")
+MARKUP = (".html", ".htm", ".xhtml", ".xml", ".vue", ".svelte", ".ejs", ".hbs", ".handlebars", ".njk", ".liquid", ".md")
+HASH = (".py", ".pyi", ".rb", ".sh", ".bash", ".zsh", ".yml", ".yaml", ".toml", ".cfg", ".ini", ".r", ".pl", ".ps1")
+REGEX_PRECEDERS = set("(,=:[!&|?{};+-*%<>~^")
+REGEX_KEYWORDS = re.compile(r"\b(?:return|typeof|case|in|of|void|delete|throw|new|else|do|yield|await)$")
+
+
+def comment_openers(path: str) -> tuple[str, ...]:
+    """Comment openers of the file's language: '#' starts a comment in Python or YAML, but in JavaScript it
+    is ordinary text (a regex, a string, a private field), so it must not open a suppression comment there."""
+    p = path.lower()
+    name = p.rsplit("/", 1)[-1]
+    if p.endswith(C_LIKE):
+        return ("//", "/*")
+    if p.endswith(MARKUP):
+        return ("<!--", "//", "/*")       # inline <script> blocks use // and /*
+    if p.endswith(HASH) or name.startswith("dockerfile") or name.endswith(".dockerfile"):
+        return ("#",)
+    if p.endswith((".tf", ".hcl", ".tfvars")):
+        return ("#", "//", "/*")
+    return ("#", "//", "/*", "<!--")      # unknown language: every opener
+
+
+def comment_text(line: str, path: str = "") -> str | None:
+    """The comment part of a source line: from the first comment opener of the file's language outside a
+    '...', "..." or `...` string (or, in C-like and markup files, a /regex/ literal), so a marker inside
+    string or regex data never suppresses. None if no comment. Line-local: a stray quote before the
+    comment hides it (the finding then blocks: fails safe)."""
+    openers = comment_openers(path)
+    regex_aware = "//" in openers and "#" not in openers
     quote, i = None, 0
     while i < len(line):
         c = line[i]
@@ -941,10 +1013,30 @@ def comment_text(line: str) -> str | None:
                 quote = None
         elif c in "'\"`":
             quote = c
-        elif c == "#" or line.startswith(("//", "/*", "<!--"), i):
+        elif line.startswith(openers, i):
             return line[i:]
+        elif regex_aware and c == "/" and regex_can_start(line[:i]):
+            i += 1                        # a regex literal: skip to its closing / (outside a [...] class)
+            in_class = False
+            while i < len(line):
+                if line[i] == "\\":
+                    i += 2
+                    continue
+                if line[i] == "[":
+                    in_class = True
+                elif line[i] == "]":
+                    in_class = False
+                elif line[i] == "/" and not in_class:
+                    break
+                i += 1
         i += 1
     return None
+
+
+def regex_can_start(before: str) -> bool:
+    """True if a / after this text starts a JavaScript regex literal rather than a division."""
+    b = before.rstrip()
+    return not b or b[-1] in REGEX_PRECEDERS or bool(REGEX_KEYWORDS.search(b))
 
 
 def inline_suppression(repo: Path, f: Finding) -> str:
@@ -954,7 +1046,7 @@ def inline_suppression(repo: Path, f: Finding) -> str:
         return ""
     for idx in (f.line - 1, f.line - 2):          # same line or the line above
         if 0 <= idx < len(lines):
-            c = comment_text(lines[idx])
+            c = comment_text(lines[idx], f.path)
             m = IGNORE_RE.search(c) if c else None
             if m and m.group("rule").strip() in (f.rule, "*") and m.group("reason").strip():
                 return "inline: " + m.group("reason").strip()
@@ -1009,21 +1101,21 @@ def baseline_new(ctx: Ctx, findings: list[Finding], enabled: list[str]) -> set[i
     names = [n for n in BASELINE_SCANNERS if n in enabled]
     if not names or not ctx.changed_files:
         return set()
-    mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
-    src_of = {path: src for _, path, src in name_status_src(ctx.repo, ctx.base)}
+    mb = sh(["git", "merge-base", ctx.base or "", "HEAD"], ctx.repo).stdout.strip()
+    src_of = {path: src for _, path, src in name_status_src(ctx.repo, ctx.base or "")}
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         present = []
         for f in ctx.changed_files:
             spec = f"{mb}:{src_of.get(f, f)}"
-            if subprocess.run(["git", "cat-file", "-e", spec], cwd=ctx.repo, capture_output=True).returncode:
+            if subprocess.run(["git", "cat-file", "-e", spec], cwd=ctx.repo, capture_output=True, timeout=120).returncode:
                 continue                              # new in this PR: nothing in the base
             (root / f).parent.mkdir(parents=True, exist_ok=True)
             (root / f).write_bytes(sh(["git", "cat-file", "blob", spec], ctx.repo, raw=True).stdout)
             present.append(f)
         base: list[Finding] = []
         if present:
-            bctx = Ctx(repo=root, cfg=ctx.cfg, mode="diff", base=None, changed_files=sorted(present))
+            bctx = Ctx(repo=root, cfg=ctx.cfg, mode="diff", base=None, changed_files=sorted(present), baseline=True)
             for n in names:
                 base += SCANNERS[n](bctx)             # errors propagate: fail closed
             fingerprint(root, base)
@@ -1064,7 +1156,7 @@ def aligned_lines(base_file: Path, head_file: Path) -> dict[int, int]:
     return out
 
 
-def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] = frozenset()) -> None:
+def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] | frozenset[int] = frozenset()) -> None:
     """Decide in_diff, suppression and blocking per finding. new_by_base: id() of findings the base
     comparison found new (they count as in the diff even when no flagged line changed)."""
     from datetime import date
@@ -1087,6 +1179,22 @@ def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] = froz
 
 
 # ---------------------------------------------------------------- report
+MD_SPECIAL = re.compile(r"([\\`*_{}\[\]()#!|<>~])")
+SAFE_URL = re.compile(r"https://[^\s()<>\[\]`'\"]+")
+
+
+def md_text(s: str) -> str:
+    """Scanner text that may carry PR-authored content (package names, workflow lines, error output) as
+    inert markdown: one line, markdown/HTML characters escaped, no @mention, length-capped."""
+    s = MD_SPECIAL.sub(r"\\\1", " ".join(str(s).split())[:500])
+    return s.replace("@", "@\u200b")
+
+
+def md_code(s: str) -> str:
+    """A PR-controlled value (a file path) as a code span it cannot break out of."""
+    return "`" + " ".join(str(s).replace("`", "'").split())[:300] + "`"
+
+
 def report_md(ctx: Ctx, findings: list[Finding], verdict: str) -> str:
     active = [f for f in findings if not f.suppressed]
     blocking = [f for f in active if f.blocking]
@@ -1102,9 +1210,9 @@ def report_md(ctx: Ctx, findings: list[Finding], verdict: str) -> str:
           f"{len(findings) - len(active)} |", ""]
 
     def row(f: Finding) -> str:
-        fix = f" — **Fix:** {f.fix}" if f.fix else ""
-        link = f" ([ref]({f.url}))" if f.url else ""
-        return f"- **{f.severity.upper()}** `{f.path}:{f.line}` `{f.rule}` — {f.message}{fix}{link}"
+        fix = f" — **Fix:** {md_text(f.fix)}" if f.fix else ""
+        link = f" ([ref]({f.url}))" if SAFE_URL.fullmatch(f.url or "") else ""
+        return f"- **{f.severity.upper()}** {md_code(f'{f.path}:{f.line}')} {md_code(f.rule)} — {md_text(f.message)}{fix}{link}"
 
     if blocking:
         L += ["### Must fix before merge", *[row(f) for f in sorted(blocking, key=lambda x: (x.path, x.line))], ""]
@@ -1117,8 +1225,8 @@ def report_md(ctx: Ctx, findings: list[Finding], verdict: str) -> str:
         # the reason is PR-author text: shown as a code span (no markdown, links or @mentions), backticks removed
         sup.sort(key=lambda x: (-SEV_ORDER.index(x.severity), x.path, x.line))
         L += [f"<details><summary>Suppressed in this change ({len(sup)})</summary>", "",
-              *[f"- **{f.severity.upper()}** `{f.path}:{f.line}` `{f.rule}` — "
-                f"`{f.suppressed.replace('`', chr(39))[:300]}`" for f in sup[:100]],
+              *[f"- **{f.severity.upper()}** {md_code(f'{f.path}:{f.line}')} {md_code(f.rule)} — "
+                f"{md_code(f.suppressed)}" for f in sup[:100]],
               "" if len(sup) <= 100 else f"\n…and {len(sup) - 100} more", "</details>", ""]
     if old and ctx.mode == "diff":
         L += [f"<sub>{len(old)} pre-existing finding(s) outside changed lines are not shown. "
@@ -1128,7 +1236,7 @@ def report_md(ctx: Ctx, findings: list[Finding], verdict: str) -> str:
           f"(scope: {ctx.mode}). Suppress with `sast-ignore[rule-id]: reason` on or above the line.</sub>"]
     for r in ctx.runs:
         if r.status != "ran":
-            L.append(f"<sub>• {r.name} {r.status}: {r.detail}</sub>")
+            L.append(f"<sub>• {r.name} {r.status}: {md_text(r.detail)}</sub>")
     return "\n".join(L) + "\n"
 
 
@@ -1176,12 +1284,17 @@ def proposed_settings_error(repo: Path, name: str) -> str:
             check = {
                 ".gitleaks.toml": (["gitleaks", "dir", "--no-banner", "--exit-code", "0", "--config", str(conf), str(empty)], (0,)),
                 "osv-scanner.toml": (["osv-scanner", "scan", "source", "--format", "json", f"--config={conf}", "-r", str(empty)], (0, 1, 128)),
-                "trivy.yaml": (["trivy", "config", "--quiet", "--format", "json", "--config", str(conf), str(empty)], (0,)),
+                # flags override the PR's file: it can't redirect output, the cache, or pull a check bundle
+                "trivy.yaml": (["trivy", "config", "--quiet", "--format", "json", "--config", str(conf),
+                                "--output", str(Path(td) / "out.json"), "--cache-dir", str(Path(td) / "cache"),
+                                "--skip-check-update", str(empty)], (0,)),
                 **{z: (["zizmor", "--offline", "--no-progress", "--format", "json", "--config", str(conf), "--", str(wf)],
                        (0, 10, 11, 12, 13, 14)) for z in ZIZMOR_CONFIGS},
             }.get(name)
             if check and shutil.which(check[0][0]):
-                sh(check[0], Path(td), ok_codes=check[1], timeout=300)
+                # from the PR tree: a proposed trivy.yaml naming prod.tfvars or a policy dir that exists in
+                # the PR is valid (the scan itself still uses the base config)
+                sh(check[0], repo if name == "trivy.yaml" else Path(td), ok_codes=check[1], timeout=300)
     except (RuntimeError, tomllib.TOMLDecodeError) as e:
         return str(e)
     return ""
@@ -1197,12 +1310,15 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[str]:
     # a gitlink is compared tree to tree: the working-tree diff skips a submodule that is not checked out
     was = {e.split("\t", 1)[1]: e.split()[2] for e in git_z(repo, ["ls-tree", "-r", "-z", mb]) if e.startswith("160000 ")}
     now = {e.split("\t", 1)[1]: e.split()[1] for e in git_z(repo, ["ls-files", "-z", "-s"]) if e.startswith("160000 ")}
-    out = [f"submodule `{p}`" for p, sha in sorted(now.items()) if was.get(p) != sha]
+    out = [f"submodule {md_code(p)}" for p, sha in sorted(now.items()) if was.get(p) != sha]
     for f in changed:
+        if (repo / f).exists() and not in_repo(repo, repo / f):
+            out.append(f"symlink {md_code(f)} (points outside the repository)")
+            continue
         try:
             with open(repo / f, "rb") as fh:
                 if fh.read(len(LFS_POINTER)) == LFS_POINTER:
-                    out.append(f"Git LFS file `{f}`")
+                    out.append(f"Git LFS file {md_code(f)}")
         except OSError:
             continue
     return out
@@ -1243,11 +1359,14 @@ def main(argv=None) -> int:
                              "base branch's version; the new settings take effect after merge.")
         # the proposed settings must be valid too: once merged, an invalid base config would fail every PR
         # (including the one that repairs it)
-        for n in edited:   # git stores a link as its target path: once merged, the base copy would be junk
-            if (repo / n).is_symlink():
-                ctx.runs.append(ToolRun("settings", "error", f"proposed {n} is a symlink; settings must be regular files"))
+        # every settings path must be a regular file or absent, edited or not: git stores a link as its target
+        # path and a directory as a tree listing, so once merged the base copy would be junk (a symlink to an
+        # identical file, or a directory where none existed, compares equal to the base and is not "edited")
+        bad_type = [n for n in SETTINGS_FILES if (repo / n).is_symlink() or ((repo / n).exists() and not (repo / n).is_file())]
+        for n in bad_type:
+            ctx.runs.append(ToolRun("settings", "error", f"proposed {n} is a symlink or directory; settings must be regular files"))
         for n in edited if not settings_error else []:
-            if not (repo / n).is_symlink() and (why := proposed_settings_error(repo, n)):
+            if n not in bad_type and (why := proposed_settings_error(repo, n)):
                 ctx.runs.append(ToolRun("settings", "error", f"proposed {n} is invalid: {why[:250]}"))
     enabled = a.only.split(",") if a.only else [k for k, v in cfg["tools"].items() if v]
     if settings_error:
@@ -1259,12 +1378,16 @@ def main(argv=None) -> int:
     if mode == "diff":
         try:
             ctx.changed_lines = changed_lines(repo, a.base)
-        except RuntimeError as e:
+        except Exception as e:  # noqa: BLE001 - e.g. MemoryError on a huge file: report it (fail closed), never crash
             ctx.runs.append(ToolRun("git-diff", "error", f"cannot diff against {a.base}: {str(e)[:300]}"))
             enabled = []                       # nothing can be scoped; report the error (fail closed)
         ctx.changed_files = sorted(ctx.changed_lines)
         if not any(r.name == "git-diff" for r in ctx.runs) and (blind := unscanned_changes(repo, a.base, ctx.changed_files)):
             ctx.notes.append("Not scanned, review by hand: " + ", ".join(blind) + ".")
+        # excluded paths are not scanned even when changed: say so, so code placed in vendor/ is seen
+        if skipped := [f for f in ctx.changed_files if glob_any(f, cfg["paths"]["exclude"])]:
+            ctx.notes.append(f"{len(skipped)} changed file(s) under excluded paths (`paths.exclude`) were not scanned: "
+                             + ", ".join(md_code(f) for f in skipped[:10]) + (" …" if len(skipped) > 10 else "") + ".")
     findings: list[Finding] = []
     for name in enabled:
         try:

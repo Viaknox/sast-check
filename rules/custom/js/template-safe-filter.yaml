@@ -22,5 +22,6 @@ rules:
         - "*.jinja"
         - "*.jinja2"
         - "*.j2"
+    # a sanitizer counts only as a call at the start of the expression or as a whole filter name, never as part of an identifier
     pattern-regex: >-
-      (?i)\{\{-?(?!\s*(?:'[^']*'|"[^"]*")\s*\|)(?![^}]*\|\s*(?:escape|e|forceescape|striptags|sanitize|purify)\b)(?![^}\n]*\.Content\b)[^}\n]*\|\s*(?:safe|safeHTML)\b[^}\n]*-?\}\}
+      (?i)\{\{-?(?!\s*(?:'[^']*'|"[^"]*")\s*\|)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()(?![^}]*\|\s*(?:escape|e|forceescape|striptags|sanitize|purify)\s*(?:[(|]|-?\}))(?![^}\n]*\.Content\b)[^}\n]*\|\s*(?:safe|safeHTML)\b[^}\n]*-?\}\}

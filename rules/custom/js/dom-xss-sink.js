@@ -47,3 +47,11 @@ function ok5(items) {
   // ok: sast.js.dom-xss-sink
   list.innerHTML = items.map((i) => "<li>" + i.id + "</li>").join("");
 }
+function t6() {
+  // ruleid: sast.js.dom-xss-sink
+  el.innerHTML = '<a href="' + encodeURI(location.hash.slice(1)) + '">go</a>';
+}
+function t7() {
+  // ruleid: sast.js.dom-xss-sink
+  el.innerHTML = "<img src='" + encodeURIComponent(location.hash) + "'>";
+}

@@ -25,4 +25,6 @@ rules:
               document\s*\.\s*write(ln)?\s*\([^;\n]*\b(location\s*\.\s*(hash|search|href|pathname)|document\s*\.\s*(URL|documentURI|referrer)|window\s*\.\s*name)\b
           - pattern-regex: >-
               \.\s*(innerHTML|outerHTML)\s*(\+)?=(?!=)[^;\n]*\b(location\s*\.\s*(hash|search|href|pathname)|document\s*\.\s*(URL|documentURI|referrer)|window\s*\.\s*name)\b
-      - pattern-not-regex: (DOMPurify\s*\.\s*sanitize|escapeHtml)\s*\(
+      # sanitizer must wrap the URL source: no unbalanced ")" (one nested call allowed) between "sanitizer(" and the source
+      - pattern-not-regex: >-
+          (?:DOMPurify\s*\.\s*sanitize|escapeHtml)\s*\((?:[^;\n()]|\([^;\n()]*\))*?\b(?:location\s*\.\s*(?:hash|search|href|pathname)|document\s*\.\s*(?:URL|documentURI|referrer)|window\s*\.\s*name)\b

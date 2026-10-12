@@ -47,3 +47,9 @@ app.get('/safe', (req, res) => {
   spawn('ls', ['-l', req.query.dir], { shell: false });
   res.json(m);
 });
+
+app.get('/ls-path', (req, res) => {
+  // ruleid: sast.js.command-injection
+  exec('ls ' + req.path);
+  res.end();
+});

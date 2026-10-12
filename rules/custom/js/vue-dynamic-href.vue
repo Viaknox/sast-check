@@ -9,6 +9,13 @@
     <!-- ruleid: sast.js.vue-dynamic-href -->
     <a :href="'/user/' + id">profile</a>
 
+    <!-- ruleid: sast.js.vue-dynamic-href -->
+    <a :href="unsanitizedLink">x</a>
+    <!-- ruleid: sast.js.vue-dynamic-href -->
+    <a :href="purifyUser">x</a>
+    <!-- ruleid: sast.js.vue-dynamic-href -->
+    <a :href="safeUrlish">x</a>
+
     <!-- ok: sast.js.vue-dynamic-href -->
     <a href="/about">about</a>
     <!-- ok: sast.js.vue-dynamic-href -->

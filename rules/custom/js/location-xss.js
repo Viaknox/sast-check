@@ -65,6 +65,11 @@ function ok6() {
   // ok: sast.js.location-xss
   window.open("https://example.com/search?q=" + q);
 }
+function bad8() {
+  const host = new URLSearchParams(location.search).get("h");
+  // ruleid: sast.js.location-xss
+  location.href = "//" + host;
+}
 function ok5(item) {
   // ok: sast.js.location-xss
   window.open(item.url, "_blank");
