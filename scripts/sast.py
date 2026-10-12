@@ -351,7 +351,7 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
     tg = targets(ctx, (".py", ".pyi", ".pyw", ".ipynb"))
     if not tg:
         return []
-    # --ignore-noqa: a PR's `# noqa` must not hide a finding (only sast-ignore with a reason)
+    # --ignore-noqa: a PR's noqa comments must not hide a finding (only sast-ignore with a reason)
     cmd = ["ruff", "check", "--isolated", "--no-cache", "--preview", "--ignore-noqa", "--select", "S",
            "--output-format", "json", "--exit-zero"]
     for g in ctx.cfg["paths"]["exclude"]:
