@@ -94,3 +94,31 @@ data "aws_ami" "not_most_recent" {
 data "aws_availability_zones" "available" {
   state = "available"
 }
+
+# ok: sast.terraform.aws-ami-no-owner
+data "aws_ami" "owners_from_var" {
+  most_recent = true
+  owners      = var.ami_owners
+}
+
+# ok: sast.terraform.aws-ami-no-owner
+data "aws_ami" "owners_from_local" {
+  most_recent = true
+  owners      = local.owners
+}
+
+# ok: sast.terraform.aws-ami-no-owner
+data "aws_ami" "owners_from_module" {
+  most_recent = true
+  owners      = module.accounts.owners
+}
+
+# ok: sast.terraform.aws-ami-no-owner
+data "aws_ami" "owner_filter_from_var" {
+  most_recent = true
+
+  filter {
+    name   = "owner-id"
+    values = var.owner_ids
+  }
+}

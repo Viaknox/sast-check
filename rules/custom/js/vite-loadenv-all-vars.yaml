@@ -24,7 +24,6 @@ rules:
       - pattern: $ENV.$KEY
       - pattern: $ENV[...]
       - pattern: Object.keys(...)
-      - pattern: pickPublic(...)
     pattern-sinks:
       - patterns:
           - pattern: |

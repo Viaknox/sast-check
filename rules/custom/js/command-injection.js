@@ -53,3 +53,13 @@ app.get('/ls-path', (req, res) => {
   exec('ls ' + req.path);
   res.end();
 });
+
+app.get('/quote', (req, res) => {
+  // ruleid: sast.js.command-injection
+  exec('ls ' + formatter.quote(req.query.cmd));
+  // ok: sast.js.command-injection
+  exec('ls ' + shellQuote.quote([req.query.cmd]));
+  // ok: sast.js.command-injection
+  exec('ls ' + shq.quote(req.query.dir));
+  res.end();
+});

@@ -12,11 +12,6 @@ function t3() {
   // ruleid: sast.js.jquery-xss
   $(".banner").append("<h2>" + who + "</h2>");
 }
-function t4() {
-  const u = new URLSearchParams(location.search).get("u");
-  // ruleid: sast.js.jquery-xss
-  $("a.next").attr("href", u);
-}
 function t5() {
   window.addEventListener("message", function (e) {
     // ruleid: sast.js.jquery-xss
@@ -50,28 +45,17 @@ function ok5(items) {
   // ok: sast.js.jquery-xss
   $("#list").append("<li>" + items.length + "</li>");
 }
-function ok6() {
-  const id = new URLSearchParams(location.search).get("id");
-  // ok: sast.js.jquery-xss
-  $("a.next").attr("href", "/item/" + encodeURIComponent(id));
-}
-function bad9() {
-  const u = location.hash.slice(1);
-  // ruleid: sast.js.jquery-xss
-  $("a").attr("href", DOMPurify.sanitize(u));
-}
-function ok8() {
-  const u = location.hash.slice(1);
-  // ok: sast.js.jquery-xss
-  $("a").attr("href", sanitizeUrl(u));
-}
-function bad8() {
-  const u = new URLSearchParams(location.search).get("u");
-  // ruleid: sast.js.jquery-xss
-  $("a.next").attr("href", encodeURI(u));
-}
 function ok7() {
   const sel = new URLSearchParams(location.search).get("target");
   // ok: sast.js.jquery-xss
   $("<li>item</li>").appendTo(sel);
+}
+function bad10() {
+  // ruleid: sast.js.jquery-xss
+  $("#x").html(DOMPurify.sanitize(location.hash) + location.search);
+}
+function ok9() {
+  const q = new URLSearchParams(location.search).get("q");
+  // ok: sast.js.jquery-xss
+  $("#x").html(DOMPurify.sanitize(q) + "<hr>");
 }

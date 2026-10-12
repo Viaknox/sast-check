@@ -62,3 +62,10 @@ app.get('/safe', async (req, res) => {
   await page.goto(u);
   res.end(t);
 });
+
+app.get('/host', async (req, res) => {
+  const page = await (await puppeteer.launch()).newPage();
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.goto('https://' + req.query.host + '/' + 'x');
+  res.end();
+});

@@ -3,11 +3,11 @@
 A security gate for every pull request. One step in CI, one skill for your AI coding agent.
 
 It runs five open-source scanners, merges the results, and applies **one** policy:
-**critical issues your change introduces block the PR — everything else is a warning.** Code and config findings block when they are on a changed line or absent from the base version; secrets in the PR's commits always block; dependency CVEs warn unless `[deps] block = true`.
+**By default, critical issues your change introduces block the PR — everything else is a warning** (`block_on` can add other severities). Code and config findings block when they are on a changed line or absent from the base version; secrets in the PR's commits always block; dependency CVEs warn unless `[deps] block = true`.
 
 | Scanner | Checks | License |
 |---|---|---|
-| **Opengrep** + 54 custom rules (this repo) | JS/TS, Python, HTML, GitHub Actions, Docker, K8s, Terraform | engine LGPL-2.1 (run as a tool) · rules MIT |
+| **Opengrep** + 56 custom rules (this repo) | JS/TS, Python, HTML, GitHub Actions, Docker, K8s, Terraform | engine LGPL-2.1 (run as a tool) · rules MIT |
 | **Ruff** `S` rules | Python | MIT |
 | **zizmor** | GitHub Actions workflows, Dependabot config | MIT |
 | **gitleaks** | Secrets in the PR's commits | MIT |

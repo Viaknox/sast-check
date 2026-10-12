@@ -1,0 +1,60 @@
+rules:
+  - id: sast.js.jquery-url-xss
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Untrusted browser data (URL parts, referrer, window.name, postMessage payload) is set as a
+      jQuery href or src attribute. A value such as "javascript:..." runs script when the link is
+      followed. HTML sanitizers do not stop this. Validate the URL (allow http, https or a relative
+      path) before setting it.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-79"
+      category: security
+      fix: "Check the URL with an allowlist helper (isSafeUrl / sanitizeUrl) before .attr('href' or 'src', value)."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://owasp.org/www-community/attacks/DOM_Based_XSS
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: location.hash
+          - pattern: location.search
+          - pattern: location.href
+          - pattern: location.pathname
+          - pattern: window.location.hash
+          - pattern: window.location.search
+          - pattern: window.location.href
+          - pattern: window.location.pathname
+          - pattern: document.location.hash
+          - pattern: document.location.search
+          - pattern: document.location.href
+          - pattern: document.URL
+          - pattern: document.documentURI
+          - pattern: document.referrer
+          - pattern: window.name
+          - pattern: new URLSearchParams(...).get(...)
+          - pattern: new URLSearchParams(...).getAll(...)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $W.addEventListener("message", function($E) { ... })
+              - pattern-inside: |
+                  $W.addEventListener("message", ($E) => { ... })
+              - pattern-inside: |
+                  $W.onmessage = function($E) { ... }
+              - pattern-inside: |
+                  $W.onmessage = ($E) => { ... }
+          - pattern: $E.data
+    # DOMPurify / escapeHtml are deliberately absent: "javascript:alert(1)" survives them
+    pattern-sanitizers:
+      - pattern: isSafeUrl(...)
+      - pattern: sanitizeUrl(...)
+      - pattern: encodeURIComponent(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $O.attr("href", $X)
+              - pattern: $O.attr("src", $X)
+          - focus-metavariable: $X

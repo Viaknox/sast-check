@@ -39,14 +39,20 @@ rules:
                   $W.onmessage = ($E) => { ... }
           - pattern: $E.data
     pattern-sanitizers:
+      # the check only counts inside the branch it guards (or after an early return), not when its result is ignored
       - patterns:
-          - pattern: isSafeUrl($X)
-          - focus-metavariable: $X
-        by-side-effect: true
-      - patterns:
-          - pattern: isSafeRedirect($X)
-          - focus-metavariable: $X
-        by-side-effect: true
+          - pattern-either:
+              - pattern-inside: |
+                  if (isSafeUrl($X)) { ... }
+              - pattern-inside: |
+                  if (isSafeRedirect($X)) { ... }
+              - pattern-inside: |
+                  if (!isSafeUrl($X)) { return ...; }
+                  ...
+              - pattern-inside: |
+                  if (!isSafeRedirect($X)) { return ...; }
+                  ...
+          - pattern: $X
       - pattern: sanitizeUrl(...)
       - pattern: sanitizeURL(...)
       - pattern: safeRedirectTarget(...)

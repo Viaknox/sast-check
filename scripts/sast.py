@@ -487,10 +487,13 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     direct = [f for f in tg if f not in linked and f not in renamed.values()]
     results = []
     with tempfile.TemporaryDirectory() as td:
-        for dst, src in [(f, f) for f in linked] + list(renamed.items()):
-            (Path(td) / dst).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ctx.repo / src, Path(td) / dst)
-        for cwd, files in ((ctx.repo, direct), (Path(td), linked + list(renamed))):
+        # separate trees: a renamed copy (src/tool -> src/tool.js) must never overwrite a linked src/tool.js
+        tl, tr = Path(td) / "linked", Path(td) / "renamed"
+        for tree, pairs in ((tl, [(f, f) for f in linked]), (tr, list(renamed.items()))):
+            for dst, src in pairs:
+                (tree / dst).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ctx.repo / src, tree / dst)
+        for cwd, files in ((ctx.repo, direct), (tl, linked), (tr, list(renamed))):
             if not files:
                 continue
             # "--": a PR file named "--x" is never an option. Exit 2 is parsed for its error list (its stderr
@@ -502,15 +505,16 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
                     and "Syntax error" not in str(e.get("type"))]
             if errs or p.returncode == 2:
                 raise RuntimeError(f"{len(errs)} engine errors (exit {p.returncode}): {str(errs[:1])[:300]}")
-            results += [(cwd, r) for r in data.get("results", [])]
+            results += [(cwd, r, cwd == tr) for r in data.get("results", [])]
     out = []
-    for cwd, r in results:
+    for cwd, r, via_rename in results:
         md = r["extra"].get("metadata", {})
         rid = r["check_id"]
         rid = rid[rid.find("sast."):] if "sast." in rid else rid
         out.append(Finding(
             tool="opengrep", rule=rid, severity=md.get("sast_severity", "medium"),
-            confidence=md.get("confidence", "medium"), path=renamed.get(rel(cwd, r["path"]), rel(cwd, r["path"])),
+            confidence=md.get("confidence", "medium"),
+            path=renamed[rel(cwd, r["path"])] if via_rename else rel(cwd, r["path"]),
             line=r["start"]["line"], end_line=r["end"]["line"], message=" ".join(r["extra"]["message"].split()),
             fix=md.get("fix", ""), cwe=str(md.get("cwe", "")),
             url=(md.get("references") or [""])[0],
@@ -1405,7 +1409,8 @@ def main(argv=None) -> int:
     new_by_base: set[int] = set()
     if mode == "diff" and a.base and enabled:
         try:
-            new_by_base = baseline_new(ctx, findings, enabled)
+            # only scanners that actually ran: a skipped (not installed) one must not error in the base pass
+            new_by_base = baseline_new(ctx, findings, [r.name for r in ctx.runs if r.status == "ran"])
         except Exception as e:  # noqa: BLE001 - without the base comparison a new finding could pass: fail closed
             ctx.runs.append(ToolRun("baseline", "error", f"base comparison failed: {str(e)[:300]}"))
     apply_policy(ctx, findings, new_by_base)

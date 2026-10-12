@@ -74,3 +74,32 @@ function ok5(item) {
   // ok: sast.js.location-xss
   window.open(item.url, "_blank");
 }
+function bad9() {
+  const next = new URLSearchParams(location.search).get("next");
+  isSafeUrl(next);
+  // ruleid: sast.js.location-xss
+  location.href = next;
+}
+function bad10() {
+  const next = new URLSearchParams(location.search).get("next");
+  if (isSafeUrl(next)) {
+    location.href = "/ok";
+  }
+  // ruleid: sast.js.location-xss
+  location.href = next;
+}
+function ok7() {
+  const next = new URLSearchParams(location.search).get("next");
+  if (!isSafeRedirect(next)) {
+    return;
+  }
+  // ok: sast.js.location-xss
+  location.href = next;
+}
+function ok8() {
+  const next = new URLSearchParams(location.search).get("next");
+  if (isSafeRedirect(next)) {
+    // ok: sast.js.location-xss
+    window.location.assign(next);
+  }
+}

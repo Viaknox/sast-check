@@ -48,3 +48,10 @@ app.get('/safe', async (req, res) => {
   const f = await axios.post('https://api.example.com/log', { note: req.body.note });
   res.json([a, b, c, d, e, f]);
 });
+
+app.get('/host', async (req, res) => {
+  const p = req.query.p;
+  // ruleid: sast.js.ssrf
+  const a = await fetch('https://' + req.query.host + '/' + p);
+  res.json(a);
+});

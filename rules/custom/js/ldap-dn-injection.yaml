@@ -1,0 +1,89 @@
+rules:
+  - id: sast.js.ldap-dn-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request-controlled data is used as an LDAP distinguished name (search base, or the entry DN of bind, modify, delete, compare, add) without escaping. An attacker can change which entry is read, bound or modified. Escape the value with an LDAP DN escaper first.
+    metadata:
+      sast_severity: critical
+      confidence: high
+      cwe: "CWE-90"
+      category: security
+      fix: 'Escape the value with ldap-escape (ldapEscape.dn`uid=${name},ou=people`) before placing it in a DN.'
+      references:
+        - https://cwe.mitre.org/data/definitions/90.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+    mode: taint
+    # one rule per position (filter vs DN): an escaper is right for its own position only. Real sanitizers, not labels,
+    # so a raw input next to an escaped one is still reported.
+    pattern-sources:
+      - pattern-either:
+          - pattern: req.query
+          - pattern: req.body
+          - pattern: req.params
+          - pattern: req.headers
+          - pattern: req.cookies
+          - pattern: req.url
+          - pattern: req.originalUrl
+          - pattern: req.path
+          - pattern: req.get(...)
+          - pattern: req.header(...)
+          - pattern: req.param(...)
+          - pattern: req.signedCookies
+          - pattern: req.files
+          - pattern: request.query
+          - pattern: request.body
+          - pattern: request.params
+          - pattern: request.headers
+          - pattern: request.cookies
+          - pattern: ctx.query
+          - pattern: ctx.request.query
+          - pattern: ctx.headers
+          - pattern: ctx.cookies.get(...)
+          - pattern: ctx.request.body
+          - pattern: ctx.params
+          - pattern: $U.searchParams.get(...)
+          - pattern: location.search
+          - pattern: location.hash
+      # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+              - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+              - pattern: $REQ.url
+              - pattern: $REQ.originalUrl
+              - pattern: $REQ.path
+              - pattern: $REQ.get(...)
+              - pattern: $REQ.header(...)
+    pattern-sanitizers:
+      - pattern: ldapEscape.dn(...)
+      - pattern: ldapEscape.dn`...`
+      - pattern: escapeDn(...)
+    pattern-sinks:
+      # the search base and the entry DN of bind/modify/del/compare/add (receiver limited to LDAP-looking clients)
+      - patterns:
+          - pattern: $C.search($B, $OPTS, ...)
+          - metavariable-regex:
+              metavariable: $C
+              regex: '(?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$'
+          - focus-metavariable: $B
+      - patterns:
+          - pattern: $C.$M($DN, ...)
+          - metavariable-regex:
+              metavariable: $C
+              regex: '(?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$'
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(bind|modify|del|compare|add)$'
+          - focus-metavariable: $DN

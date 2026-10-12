@@ -14,11 +14,10 @@ rules:
         - https://cwe.mitre.org/data/definitions/90.html
         - https://owasp.org/Top10/A03_2021-Injection/
     mode: taint
-    # labels: INPUT is request data; FILTER_SAFE / DN_SAFE mark INPUT passed through an escaper that is right for
-    # that position only (a DN escaper does not stop filter injection, and the reverse)
+    # one rule per position (filter vs DN): an escaper is right for its own position only. Real sanitizers, not labels,
+    # so a raw input next to an escaped one is still reported.
     pattern-sources:
-      - label: INPUT
-        pattern-either:
+      - pattern-either:
           - pattern: req.query
           - pattern: req.body
           - pattern: req.params
@@ -47,8 +46,7 @@ rules:
           - pattern: location.search
           - pattern: location.hash
       # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
-      - label: INPUT
-        patterns:
+      - patterns:
           - pattern-either:
               - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
               - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
@@ -68,32 +66,21 @@ rules:
               - pattern: $REQ.path
               - pattern: $REQ.get(...)
               - pattern: $REQ.header(...)
-      - label: FILTER_SAFE
-        requires: INPUT
-        pattern-either:
-          - pattern: ldapEscape.filter(...)
-          - pattern: ldapEscape.filter`...`
-          - pattern: escapeFilter(...)
-          - pattern: escapeLdapFilter(...)
-      - label: DN_SAFE
-        requires: INPUT
-        pattern-either:
-          - pattern: ldapEscape.dn(...)
-          - pattern: ldapEscape.dn`...`
-          - pattern: escapeDn(...)
+    pattern-sanitizers:
+      - pattern: ldapEscape.filter(...)
+      - pattern: ldapEscape.filter`...`
+      - pattern: escapeFilter(...)
+      - pattern: escapeLdapFilter(...)
     pattern-sinks:
-      - requires: INPUT and not FILTER_SAFE
-        patterns:
+      - patterns:
           - pattern: |
               $C.search($B, {..., filter: $X, ...}, ...)
           - focus-metavariable: $X
-      - requires: INPUT and not FILTER_SAFE
-        patterns:
+      - patterns:
           - pattern: $C.search($B, $OPTS, ...)
           - pattern-not: $C.search($B, {...}, ...)
           - focus-metavariable: $OPTS
-      - requires: INPUT and not FILTER_SAFE
-        patterns:
+      - patterns:
           - pattern: $AD.$M($X, ...)
           - metavariable-regex:
               metavariable: $AD
@@ -102,21 +89,3 @@ rules:
               metavariable: $M
               regex: '^(find|findUser|findUsers|findGroup|findGroups|getGroupMembershipForUser|isUserMemberOf)$'
           - focus-metavariable: $X
-      # DN positions: the search base and the entry DN of bind/modify/del/compare/add (receiver limited to LDAP-looking clients)
-      - requires: INPUT and not DN_SAFE
-        patterns:
-          - pattern: $C.search($B, $OPTS, ...)
-          - metavariable-regex:
-              metavariable: $C
-              regex: '(?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$'
-          - focus-metavariable: $B
-      - requires: INPUT and not DN_SAFE
-        patterns:
-          - pattern: $C.$M($DN, ...)
-          - metavariable-regex:
-              metavariable: $C
-              regex: '(?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$'
-          - metavariable-regex:
-              metavariable: $M
-              regex: '^(bind|modify|del|compare|add)$'
-          - focus-metavariable: $DN

@@ -868,6 +868,23 @@ gate --mode diff --base HEAD~1 --only ruff
 check "file name stays inside one code span"             "$(grep -cF "\`src/x'[click](evil.example)'.py:1\`" sast-results/report.md)" "1"
 git checkout -q main
 
+# r20: a renamed copy (src/run -> src/run.js) never collides with or relabels a real or linked .js
+git checkout -q -b r20 main
+mkdir -p vendor && printf "app.get('/v', (req, res) => { eval(req.query.v); });\n" > vendor/v20.js && git add vendor/v20.js && git commit -qm v20
+printf '#!/usr/bin/env node\napp.get("/t", (req, res) => { eval(req.query.t); });\n' > src/tool20 && ln -s ../vendor/v20.js src/tool20.js
+printf '#!/usr/bin/env node\nconst x = 1;\n' > src/run20 && printf "app.get('/r', (req, res) => { eval(req.query.r); });\n" > src/run20.js
+git add src/tool20 src/tool20.js src/run20 src/run20.js && git commit -qm r20
+gate --mode diff --base HEAD~1 --only opengrep
+check "renamed copies keep their own paths"              "$(q "sorted({f['path'] for f in d['findings'] if f['blocking']})")" "['src/run20.js', 'src/tool20', 'src/tool20.js']"
+git checkout -q main
+
+# r20: a scanner that is not installed is skipped, not an error in the base comparison
+git checkout -q -b r20b main
+echo 'y = 3' >> src/util.py && git commit -qam r20b
+set +e; env PATH=/usr/bin:/bin python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "missing scanner: skipped, not a baseline error"   "$(q "[(r['name'], r['status']) for r in d['runs']]")" "[('ruff', 'skipped')]"
+git checkout -q main
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks

@@ -30,3 +30,10 @@ rules:
           metavariable: $ACTION
           regex: (?i).*(?:^|[/-])(?:ai-inference|claude|codex|anthropic|anthropics|gpt|gemini|llm|openai)(?:$|[/@-])
       - pattern-regex: '\$\{\{[^}]*(?:github\.event\.(?:issue\.(?:title|body)|pull_request\.(?:title|body|head\.ref|head\.label|head\.repo\.default_branch)|comment\.body|review\.body|review_comment\.body|discussion\.(?:title|body)|discussion_comment\.body|head_commit\.message|head_commit\.author\.(?:name|email)|commits\[?\*?[0-9]*\]?\.message|commits\.\*\.message|pages\.\*\.page_name)|github\.head_ref)[^}]*\}\}'
+    paths:
+      # only files GitHub runs: workflows and action metadata (an example in docs/ is not executed)
+      include:
+        - ".github/workflows/*.yml"
+        - ".github/workflows/*.yaml"
+        - "action.yml"
+        - "action.yaml"

@@ -68,7 +68,7 @@ rules:
           - pattern: $P + $X
           - metavariable-regex:
               metavariable: $P
-              regex: '^["''`]https?://[^/]+/'
+              regex: '^["''`]https?://[^/"''`]+/'
       - pattern: encodeURIComponent(...)
       - pattern: Number(...)
       - pattern: parseInt(...)

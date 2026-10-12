@@ -44,18 +44,8 @@ app.get('/safe', (req, res) => {
   res.end();
 });
 
-app.post('/dn', (req, res) => {
+app.get('/mixed', (req, res) => {
   // ruleid: sast.js.ldap-injection
-  client.bind('uid=' + req.body.user + ',ou=people,dc=ex,dc=com', req.body.pw, () => {});
-  // ruleid: sast.js.ldap-injection
-  client.search(req.query.base, { filter: '(objectClass=*)' }, () => {});
-  // ruleid: sast.js.ldap-injection
-  client.del('uid=' + req.body.user + ',ou=people', () => {});
-  // ok: sast.js.ldap-injection
-  client.bind('uid=' + ldapEscape.dn(req.body.user) + ',ou=people', pw, () => {});
-  // ok: sast.js.ldap-injection
-  client.search('dc=ex,dc=com', { filter: '(objectClass=*)' }, () => {});
-  // ok: sast.js.ldap-injection
-  client.search(ldapEscape.dn`ou=${req.query.ou},dc=ex`, { filter: '(objectClass=*)' }, () => {});
+  client.search('dc=ex,dc=com', { filter: '(&(uid=' + ldapEscape.filter(req.query.uid) + ')(cn=' + req.query.cn + '))' }, () => {});
   res.end();
 });

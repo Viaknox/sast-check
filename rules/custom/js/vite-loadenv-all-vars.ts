@@ -71,3 +71,12 @@ export const ok5 = defineConfig(({ mode }) => {
     define: { __BUILD__: JSON.stringify(env["BUILD_ID"]) },
   };
 });
+
+// any local function can be called pickPublic; the name alone proves nothing
+const pickPublic = (x: any) => x;
+export const e = defineConfig(({ mode }) => {
+  return {
+    // ruleid: sast.js.vite-loadenv-all-vars
+    define: pickPublic(loadEnv(mode, process.cwd(), "")),
+  };
+});

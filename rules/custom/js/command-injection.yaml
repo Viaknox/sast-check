@@ -67,7 +67,12 @@ rules:
       - pattern: shellescape(...)
       - pattern: shellEscape(...)
       - pattern: escapeShell(...)
-      - pattern: $Q.quote(...)
+      # only shell-quote style libraries; any other receiver's .quote() (formatter.quote) proves nothing
+      - patterns:
+          - pattern: $Q.quote(...)
+          - metavariable-regex:
+              metavariable: $Q
+              regex: '(?i)^(shell[-_]?quote|shq|sq|shellEscape)$'
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
