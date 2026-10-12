@@ -584,7 +584,10 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
                  *DEPENDABOT]
         tracked = (git_z(ctx.repo, ["ls-files", "-z"] + specs)                                    # committed
                    + git_z(ctx.repo, ["ls-files", "-z", "--others", "--exclude-standard"] + specs))  # new, local runs
-        tg = sorted({f for f in tracked if f and not glob_any(f, ctx.cfg["paths"]["exclude"])})
+        # git does not list files under a directory symlink: add in-repo aliases named through the link
+        aliases = [f for f in targets(ctx, (".yml", ".yaml"))[1:]
+                   if f.startswith(".github/workflows/") or Path(f).name in ("action.yml", "action.yaml") or f in DEPENDABOT]
+        tg = sorted({f for f in tracked + aliases if f and not glob_any(f, ctx.cfg["paths"]["exclude"])})
     if not tg:
         return []
     online = bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
@@ -754,7 +757,10 @@ def gitleaks_findings(ctx: Ctx, reports: list[dict]) -> list[Finding]:
 def run_osv(ctx: Ctx) -> list[Finding]:
     if not shutil.which("osv-scanner"):
         raise FileNotFoundError("osv-scanner not installed")
-    inputs = [f for f in ctx.changed_files
+    # diff: the changed files; full: in-repo symlinks named through the link (the recursive scan does not
+    # follow directory links, so a lockfile behind src/pkg -> ../vendor/pkg is scanned on its own)
+    cands = ctx.changed_files if ctx.mode == "diff" else targets(ctx)[1:]
+    inputs = [f for f in cands
               if (Path(f).name in LOCKFILES or f.endswith(SBOM_SUFFIXES)
                   or (f.endswith(".txt") and "requirements" in Path(f).name))
               and not glob_any(f, ctx.cfg["paths"]["exclude"])]
@@ -770,8 +776,8 @@ def run_osv(ctx: Ctx) -> list[Finding]:
             conf.write_text(settings_file(ctx.repo, ctx.base, "osv-scanner.toml") or "")
             cmd.append(f"--config={conf}")
         p = sh(cmd + ["."], ctx.repo, ok_codes=(0, 1, 128))
-        if ctx.mode == "diff":
-            # each changed input must parse on its own: the repo-wide scan succeeds as long as ANY lockfile
+        if inputs:
+            # each changed (or linked) input must parse on its own: the repo-wide scan succeeds as long as ANY lockfile
             # parses, which would hide a changed input OSV could not read (127 = extraction failed)
             for f in inputs:
                 conf_opt = [x for x in cmd if x.startswith("--config=")]

@@ -702,6 +702,22 @@ if command -v osv-scanner >/dev/null; then
   git checkout -q main
 fi
 
+# r16: full scope also gives zizmor and OSV the files behind directory aliases
+git checkout -q -b r16 main
+mkdir -p vendor/act16 vendor/pkg16
+printf 'name: a\ndescription: a\nruns:\n  using: composite\n  steps:\n    - run: echo "${{ github.event.issue.title }}"\n      shell: bash\n' > vendor/act16/action.yml
+printf '{"name":"x","lockfileVersion":3,"requires":true,"packages":{"":{"name":"x","dependencies":{"lodash":"4.17.15"}},"node_modules/lodash":{"version":"4.17.15","resolved":"https://registry.npmjs.org/lodash/-/lodash-4.17.15.tgz"}}}\n' > vendor/pkg16/package-lock.json
+ln -s vendor/act16 act16 && ln -s vendor/pkg16 pkg16 && git add vendor/act16 vendor/pkg16 act16 pkg16 && git commit -qm r16
+if command -v zizmor >/dev/null; then
+  gate --mode full --only zizmor
+  check "full: zizmor audits an action behind a link"     "$(q "int(any(f['path']=='act16/action.yml' for f in d['findings']))")" "1"
+fi
+if command -v osv-scanner >/dev/null; then
+  gate --mode full --only osv
+  check "full: OSV scans a lockfile behind a link"        "$(q "int(any(f['path']=='pkg16/package-lock.json' for f in d['findings']))")" "1"
+fi
+git checkout -q main
+
 # r15: full scope scans code behind a directory alias of an excluded path (once, under the link's name)
 git checkout -q -b r15f main
 mkdir -p vendor/pkg15 && printf 'eval(input())\n' > vendor/pkg15/vuln.py && ln -s vendor/pkg15 src15
