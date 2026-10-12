@@ -6,6 +6,7 @@ Stdlib only (Python 3.11+). Exit codes: 0 pass, 1 blocking findings, 2 scanner e
 from __future__ import annotations
 
 import argparse
+import ast
 import fnmatch
 import json
 import os
@@ -76,7 +77,8 @@ LOCKFILES = {  # every manifest osv-scanner v2 scans (google.github.io/osv-scann
     "requirements.txt", "pdm.lock", "pylock.toml", "uv.lock", "renv.lock", "Gemfile.lock",
     "gems.locked", "Cargo.lock",
 }
-IGNORE_RE = re.compile(r"sast-ignore\[(?P<rule>[^\]]+)\]\s*:?\s*(?P<reason>.*)")
+# only inside a comment: # (py/sh/yaml/tf/docker), // or /* (js/ts/tf), <!-- (html)
+IGNORE_RE = re.compile(r"(?:#|//|/\*|<!--)\s*sast-ignore\[(?P<rule>[^\]]+)\]\s*:?\s*(?P<reason>.*?)\s*(?:\*/|-->)?\s*$")
 
 
 @dataclass
@@ -183,11 +185,15 @@ def unquote_git_path(p: str) -> str:
 
 def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     """Map repo-relative file -> added/modified line numbers (merge-base vs working tree)."""
+    if sh(["git", "rev-parse", "--is-shallow-repository"], repo).stdout.strip() == "true":
+        raise RuntimeError("shallow clone: check out with fetch-depth: 0 so the PR diff can be computed")
     out = sh(["git", "diff", "-U0", "--no-color", "--diff-filter=ACMR", "--merge-base", base], repo).stdout
     files: dict[str, set[int]] = {}
     cur = None
+    prev = ""
     for ln in out.splitlines():
-        if ln.startswith("+++ "):
+        after_minus, prev = prev.startswith("--- "), ln
+        if ln.startswith("+++ ") and after_minus:   # a file header, never an added line starting "++"
             hdr = unquote_git_path(ln[4:])
             cur = None if hdr == "/dev/null" else hdr[2:] if hdr.startswith("b/") else hdr
             if cur:
@@ -197,8 +203,8 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
             start, count = int(m.group(1)), int(m.group(2) or 1)
             files[cur].update(range(start, start + count))
     # untracked new files (local runs) count as fully changed
-    untracked = sh(["git", "ls-files", "--others", "--exclude-standard"], repo).stdout.split()
-    for f in untracked:
+    untracked = sh(["git", "ls-files", "-z", "--others", "--exclude-standard"], repo).stdout.split("\0")
+    for f in filter(None, untracked):
         try:
             n = sum(1 for _ in open(repo / f, errors="ignore"))
         except OSError:
@@ -259,6 +265,19 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     return out
 
 
+def py_call_end(path: Path, row: int, col: int, cache: dict) -> int:
+    """End line of the call that starts at (row, col); Ruff anchors e.g. S602 on `subprocess.run(`
+    only, so a changed argument further down must still count as part of the finding."""
+    if path not in cache:
+        try:
+            cache[path] = [n for n in ast.walk(ast.parse(path.read_text(errors="ignore")))
+                           if isinstance(n, ast.Call)]
+        except (OSError, SyntaxError, ValueError):
+            cache[path] = []
+    ends = [n.end_lineno for n in cache[path] if n.lineno == row and n.col_offset == col - 1 and n.end_lineno]
+    return max(ends, default=row)
+
+
 def run_ruff(ctx: Ctx) -> list[Finding]:
     if not shutil.which("ruff"):
         raise FileNotFoundError("ruff not installed")
@@ -270,6 +289,7 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
     for g in ctx.cfg["paths"]["exclude"]:
         cmd += ["--extend-exclude", g]
     data = json.loads(sh(cmd + tg, ctx.repo).stdout or "[]")
+    calls: dict = {}
     out = []
     for r in data:
         code = r["code"]
@@ -279,6 +299,8 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
         out.append(Finding(
             tool="ruff", rule=f"ruff.{code}", severity=RUFF_SEVERITY.get(code, "low"),
             confidence="medium", path=path, line=r["location"]["row"],
+            end_line=max((r.get("end_location") or r["location"])["row"],
+                         py_call_end(ctx.repo / path, r["location"]["row"], r["location"]["column"], calls)),
             message=r["message"], url=r.get("url") or "", cwe=RUFF_CWE.get(code, "CWE-710"),
         ))
     return out
@@ -369,7 +391,8 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
 def run_osv(ctx: Ctx) -> list[Finding]:
     if not shutil.which("osv-scanner"):
         raise FileNotFoundError("osv-scanner not installed")
-    if ctx.mode == "diff" and not any(Path(f).name in LOCKFILES for f in ctx.changed_files):
+    if ctx.mode == "diff" and not any(Path(f).name in LOCKFILES and not glob_any(f, ctx.cfg["paths"]["exclude"])
+                                      for f in ctx.changed_files):
         return []
     # 0 = clean, 1 = vulns found, 128 = no packages found
     p = sh(["osv-scanner", "scan", "source", "-r", "--format", "json", "."], ctx.repo, ok_codes=(0, 1, 128))
@@ -381,6 +404,8 @@ def run_osv(ctx: Ctx) -> list[Finding]:
     for res in data.get("results", []):
         src = rel(ctx.repo, res["source"]["path"])
         if ctx.mode == "diff" and src not in ctx.changed_files:
+            continue
+        if glob_any(src, ctx.cfg["paths"]["exclude"]):   # excluded paths are never scanned
             continue
         for pkg in res.get("packages", []):
             info = pkg["package"]

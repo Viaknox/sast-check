@@ -38,9 +38,6 @@ runs:
         if [ "$RUNNER_OS" != "Linux" ] || [ "$RUNNER_ARCH" != "X64" ]; then
           echo "::error::sast-check v1 supports Linux x64 runners only"; exit 1
         fi
-        if ! git -C "$GITHUB_WORKSPACE" rev-parse --is-shallow-repository | grep -q false; then
-          echo "::error::Check out with fetch-depth: 0 so the PR diff can be computed"; exit 1
-        fi
 
     - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:

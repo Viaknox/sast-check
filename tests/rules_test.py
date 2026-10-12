@@ -75,9 +75,9 @@ def main() -> int:
             want, ok = expected(fx, rid)
             # exact: every annotated ruleid line must match, and nothing else may match
             missed, wrong = want - got, got - want
-            if not want:
+            if len(want) < 3 or len(ok) < 3:   # docs/RULE_SPEC.md: >=3 true positives, >=3 safe look-alikes
                 failures += 1
-                print(f"FAIL {rid}: fixture has no ruleid: annotations")
+                print(f"FAIL {rid}: fixture needs >=3 ruleid: and >=3 ok: annotations (has {len(want)}/{len(ok)})")
             elif missed or wrong:
                 failures += 1
                 print(f"FAIL {rid}: missed lines {sorted(missed)} unexpected lines {sorted(wrong)}")

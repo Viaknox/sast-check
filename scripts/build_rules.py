@@ -19,6 +19,7 @@ def main() -> int:
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-lock", help="rule-ids.lock from the base branch; IDs in it can never disappear")
+    ap.add_argument("--base-retired", help="RETIRED.txt from the base branch; a retirement can never be undone")
     a = ap.parse_args()
     rules, ids = [], set()
     for f in sorted((ROOT / "rules" / "custom").glob("*/*.yaml")):
@@ -44,6 +45,12 @@ def main() -> int:
     # a PR could delete an ID from both the rule and the lock; the base branch's lock catches that
     if a.base_lock and Path(a.base_lock).exists():
         shipped |= set(Path(a.base_lock).read_text().split())
+    # a PR could un-retire an ID by deleting it from RETIRED.txt; the base branch's copy catches that
+    if a.base_retired and Path(a.base_retired).exists():
+        unretired = set(Path(a.base_retired).read_text().split()) - retired
+        if unretired:
+            print(f"retired rule ids can never be un-retired: {sorted(unretired)}", file=sys.stderr)
+            return 1
     reused = ids & retired
     if reused:
         print(f"retired rule ids must never be reused: {sorted(reused)}", file=sys.stderr)

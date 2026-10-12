@@ -81,6 +81,24 @@ check "file under a non-ASCII path is scanned"            "$(q "sum(f['blocking'
 check "staged (uncommitted) secret is caught"             "$(q "sum(1 for f in d['findings'] if f['kind']=='secret' and f['path']=='staged.py')")" "1"
 git reset -q --hard && git checkout -q main
 
+# round-3 review fixes: "++" added line, string-literal ignore, Ruff multi-line range, untracked path with a space
+git checkout -q -b r3 main
+printf 'let counter = 0;\n\n\n\n\n\n\nmodule.exports = {};\n' > src/c.js
+printf 'import subprocess\nsubprocess.run(\n    ["ls"],\n    shell=False,\n)\n' > src/run.py
+git add -A && git commit -qm r3base
+sed -i '1a ++counter;' src/c.js
+printf "app.get('/z', (req, res) => { eval(req.query.z); });\n" >> src/c.js
+sed -i 's/shell=False/shell=True/' src/run.py
+printf 'note = "sast-ignore[ruff.S307]: not a comment"\neval(input())\n' > src/s.py
+git add -A && git commit -qm r3
+printf "app.get('/u', (req, res) => { eval(req.query.u); });\n" > "src/new module.js"
+set +e; python3 "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only opengrep,ruff >/dev/null; set -e
+check "eval in a later hunk after a '++' line blocks"     "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='sast.js.code-eval' and f['path']=='src/c.js')")" "1"
+check "sast-ignore inside a string does not suppress"     "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='ruff.S307' and f['path']=='src/s.py')")" "1"
+check "Ruff multi-line finding counts as new"             "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='ruff.S602' and f['path']=='src/run.py']")" "[True]"
+check "untracked file with a space in its name is scanned" "$(q "sum(1 for f in d['findings'] if f['path']=='src/new module.js')")" "1"
+rm -f "src/new module.js"; git checkout -q main
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 set +e; python3 "$HERE/scripts/sast.py" --mode diff --base main~1 --only opengrep,ruff,gitleaks >/dev/null; code=$?; set -e
