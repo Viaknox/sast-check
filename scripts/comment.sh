@@ -7,12 +7,15 @@ marker="<!-- sast-check -->"
 [ -s "$report" ] || { echo "no report to post"; exit 0; }
 body="$(printf '%s\n%s' "$marker" "$(head -c 60000 "$report")")"
 
-id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-       --jq ".[] | select(.body | startswith(\"$marker\")) | .id" 2>/dev/null | head -n1)
-# Update our sticky comment; if that fails (e.g. someone else's comment carries the marker), post a new one.
-if [ -n "$id" ] && gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" >/dev/null 2>&1; then
-  exit 0
-fi
+# Anyone can post a comment carrying the marker, so try every candidate (only our own is editable)
+# and fall back to a new comment only when none of them is ours.
+ids=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+        --jq ".[] | select(.body | startswith(\"$marker\")) | .id" 2>/dev/null)
+for id in $ids; do
+  if gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" >/dev/null 2>&1; then
+    exit 0
+  fi
+done
 gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" >/dev/null \
   || echo "::warning::could not post PR comment (token may lack pull-requests: write)"
 exit 0

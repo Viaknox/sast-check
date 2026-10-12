@@ -99,6 +99,19 @@ check "Ruff multi-line finding counts as new"             "$(q "[f['in_diff'] fo
 check "untracked file with a space in its name is scanned" "$(q "sum(1 for f in d['findings'] if f['path']=='src/new module.js')")" "1"
 rm -f "src/new module.js"
 
+# round-4: non-ASCII before a multi-line call; a symlink replaced by a real file (git type change "T")
+git checkout -q -b r4 main
+python3 -c 'open("src/u.py", "w", encoding="utf-8").write("import subprocess\n\u00e9 = subprocess.run(\n    [\"ls\"],\n    shell=False,\n)\n")'
+ln -s util.py src/link.py
+git add -A src && git commit -qm r4base
+sed -i 's/shell=False/shell=True/' src/u.py
+rm src/link.py && printf 'import pickle\npickle.loads(open(0, "rb").read())\n' > src/link.py
+git add -A src && git commit -qm r4
+set +e; python3 "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null; set -e
+check "multi-line call after non-ASCII text counts as new" "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='ruff.S602' and f['path']=='src/u.py']")" "[True]"
+check "symlink replaced by a file is scanned"             "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/link.py')")" "1"
+git checkout -q r3
+
 # a PR file named like an option must not hijack the scanner's arguments
 printf 'x\n' > ./--exclude && printf "app.get('/v', (req, res) => { eval(req.query.v); });\n" > vuln.js && printf 'x\n' > zzzz
 git add -- ./--exclude vuln.js zzzz && git commit -qm dash

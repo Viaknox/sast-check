@@ -187,7 +187,7 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     """Map repo-relative file -> added/modified line numbers (merge-base vs working tree)."""
     if sh(["git", "rev-parse", "--is-shallow-repository"], repo).stdout.strip() == "true":
         raise RuntimeError("shallow clone: check out with fetch-depth: 0 so the PR diff can be computed")
-    out = sh(["git", "diff", "-U0", "--no-color", "--diff-filter=ACMR", "--merge-base", base], repo).stdout
+    out = sh(["git", "diff", "-U0", "--no-color", "--diff-filter=ACMRT", "--merge-base", base], repo).stdout
     files: dict[str, set[int]] = {}
     cur = None
     prev = ""
@@ -270,11 +270,16 @@ def py_call_end(path: Path, row: int, col: int, cache: dict) -> int:
     only, so a changed argument further down must still count as part of the finding."""
     if path not in cache:
         try:
-            cache[path] = [n for n in ast.walk(ast.parse(path.read_text(errors="ignore")))
-                           if isinstance(n, ast.Call)]
+            src = path.read_text(errors="ignore")
+            cache[path] = ([n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Call)], src.splitlines())
         except (OSError, SyntaxError, ValueError):
-            cache[path] = []
-    ends = [n.end_lineno for n in cache[path] if n.lineno == row and n.col_offset == col - 1 and n.end_lineno]
+            cache[path] = ([], [])
+    calls, lines = cache[path]
+    # ast col_offset is a UTF-8 byte offset; Ruff's column counts characters
+    if not 0 < row <= len(lines):
+        return row
+    byte_col = len(lines[row - 1][:col - 1].encode("utf-8"))
+    ends = [n.end_lineno for n in calls if n.lineno == row and n.col_offset == byte_col and n.end_lineno]
     return max(ends, default=row)
 
 
@@ -431,6 +436,8 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
     p = sh(["trivy", "config", "--quiet", "--format", "json", "."], ctx.repo)
     out = []
     for res in json.loads(p.stdout or "{}").get("Results", []) or []:
+        if glob_any(res["Target"], ctx.cfg["paths"]["exclude"]):   # excluded paths are never scanned
+            continue
         for m in res.get("Misconfigurations", []) or []:
             out.append(Finding(
                 tool="trivy", rule=f"trivy.{m['ID']}", severity=m["Severity"].lower().replace("unknown", "low"),
