@@ -77,3 +77,9 @@ fastify.get('/x', async (request, reply) => {
     reply.code(500).send(err.stack);
   }
 });
+
+// ruleid: sast.js.express-error-leak
+app.use((err, req, res, next) => res.json(err));
+
+// ok: sast.js.express-error-leak
+app.use((data, req, res, next) => res.json(data));

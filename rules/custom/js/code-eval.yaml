@@ -32,7 +32,6 @@ rules:
       - pattern: location.search
       - pattern: location.hash
     pattern-sanitizers:
-      - pattern: JSON.parse(...)
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)

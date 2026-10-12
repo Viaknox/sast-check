@@ -38,9 +38,15 @@ rules:
       regex: ^(send|json|jsonp|end|write)$
   - pattern-either:
     - pattern-inside: try { ... } catch ($E) { ... }
-    - pattern-inside: function ($E, $RQ, $RS, $NX) { ... }
-    - pattern-inside: function $F($E, $RQ, $RS, $NX) { ... }
-    - pattern-inside: ($E, $RQ, $RS, $NX) => { ... }
-    - pattern-inside: async ($E, $RQ, $RS, $NX) => { ... }
     - pattern-inside: $P.catch(($E) => ...)
     - pattern-inside: $P.catch(function ($E) { ... })
+    - patterns:
+      - pattern-either:
+        - pattern-inside: function ($E, $RQ, $RS, $NX) { ... }
+        - pattern-inside: function $F($E, $RQ, $RS, $NX) { ... }
+        - pattern-inside: ($E, $RQ, $RS, $NX) => { ... }
+        - pattern-inside: ($E, $RQ, $RS, $NX) => $BODY
+        - pattern-inside: async ($E, $RQ, $RS, $NX) => { ... }
+      - metavariable-regex:
+          metavariable: $E
+          regex: (?i)^(err|error|e|ex|exc|exception|er)$

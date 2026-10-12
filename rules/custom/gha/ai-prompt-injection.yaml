@@ -28,5 +28,5 @@ rules:
             ...
       - metavariable-regex:
           metavariable: $ACTION
-          regex: (?i).*(ai-inference|claude|gpt|gemini|llm|openai)
+          regex: (?i).*(?:^|[/-])(?:ai-inference|claude|codex|anthropic|anthropics|gpt|gemini|llm|openai)(?:$|[/@-])
       - pattern-regex: '\$\{\{[^}]*(?:github\.event\.(?:issue\.(?:title|body)|pull_request\.(?:title|body|head\.ref|head\.label|head\.repo\.default_branch)|comment\.body|review\.body|review_comment\.body|discussion\.(?:title|body)|discussion_comment\.body|head_commit\.message|head_commit\.author\.(?:name|email)|commits\[?\*?[0-9]*\]?\.message|commits\.\*\.message|pages\.\*\.page_name)|github\.head_ref)[^}]*\}\}'

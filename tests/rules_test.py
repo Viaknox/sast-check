@@ -73,10 +73,14 @@ def main() -> int:
             total += 1
             got = {r["start"]["line"] for r in out.get("results", []) if r["check_id"].endswith(rid)}
             want, ok = expected(fx, rid)
-            missed, wrong = want - got, got & ok
-            if missed or wrong:
+            # exact: every annotated ruleid line must match, and nothing else may match
+            missed, wrong = want - got, got - want
+            if not want:
                 failures += 1
-                print(f"FAIL {rid}: missed lines {sorted(missed)} false-positive lines {sorted(wrong)}")
+                print(f"FAIL {rid}: fixture has no ruleid: annotations")
+            elif missed or wrong:
+                failures += 1
+                print(f"FAIL {rid}: missed lines {sorted(missed)} unexpected lines {sorted(wrong)}")
     print(f"{total - failures}/{total} rules passed with {Path(a.engine).name}")
     return 1 if failures else 0
 

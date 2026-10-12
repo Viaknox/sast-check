@@ -26,7 +26,15 @@ jobs:
         with:
           # ruleid: sast.gha.ai-prompt-injection
           prompt: "Check commit: ${{ github.event.commits[0].message }}"
+      - uses: openai/codex-action@v1
+        with:
+          # ruleid: sast.gha.ai-prompt-injection
+          prompt: "Review this change: ${{ github.event.pull_request.title }}"
       # Safe look-alikes
+      - uses: someorg/llmops-deploy@v1
+        with:
+          # ok: sast.gha.ai-prompt-injection
+          notes: "Deploying: ${{ github.event.pull_request.title }}"
       - uses: anthropics/claude-code-action@v1
         with:
           # ok: sast.gha.ai-prompt-injection

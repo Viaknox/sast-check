@@ -24,7 +24,12 @@ rules:
       - patterns:
           - pattern: |
               { ..., rejectUnauthorized: false, ... }
-          - pattern-not-inside: |
-              { ..., ssl: ..., ... }
-          - pattern-not-inside: |
-              { ..., dialectOptions: ..., ... }
+          - pattern-not-inside: new Sequelize(...)
+          - pattern-not-inside: new Pool(...)
+          - pattern-not-inside: new Client(...)
+          - pattern-not-inside: new $NS.Pool(...)
+          - pattern-not-inside: new $NS.Client(...)
+          - pattern-not-inside: $NS.createConnection(...)
+          - pattern-not-inside: $NS.createPool(...)
+          - pattern-not-inside: createConnection(...)
+          - pattern-not-inside: createPool(...)

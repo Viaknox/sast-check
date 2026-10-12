@@ -36,7 +36,7 @@ rules:
           - pattern: $P + $X
           - metavariable-regex:
               metavariable: $P
-              regex: '^["''`]/[^/\\]'
+              regex: '^["''`]/[^/\\"''`]'
       - pattern: encodeURIComponent(...)
       - pattern: Number(...)
       - pattern: parseInt(...)

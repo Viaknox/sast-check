@@ -48,6 +48,14 @@ export function strictVerify(token: string, key: string) {
   return jwt.verify(token, key, { algorithms: ['RS256', 'ES256'] });
 }
 
+export function otpThenDecode(code: string, token: string) {
+  const otp = new OtpChecker();
+  otp.verify(code);
+  // ruleid: sast.js.jwt-decode-unverified
+  const claims = jwt.decode(token);
+  return claims;
+}
+
 export function displayOnly(token: string) {
   // ok: sast.js.jwt-decode-unverified
   const info = decodeJwt(token);

@@ -45,6 +45,8 @@ app.post('/merge', (req, res) => {
   _.set(defaults, req.query.path, 1);
   // ruleid: sast.js.prototype-pollution
   _.zipObjectDeep(req.body.paths, [1, 2]);
+  // ruleid: sast.js.prototype-pollution
+  _.merge(defaults, _.pick(req.body, ['name', 'profile']));
   res.json(defaults);
 });
 
@@ -64,8 +66,6 @@ app.post('/safe', (req, res) => {
   }
   // ok: sast.js.prototype-pollution
   _.merge({}, { a: 1 }, { b: 2 });
-  // ok: sast.js.prototype-pollution
-  _.merge(out, _.pick(req.body, ['name', 'email']));
   // ok: sast.js.prototype-pollution
   _.set(out, 'profile.name', req.body.name);
   res.json(out);

@@ -77,8 +77,6 @@ rules:
               - pattern: $O.before($X)
               - pattern: $O.replaceWith($X)
               - pattern: $O.wrap($X)
-              - pattern: $O.appendTo($X)
-              - pattern: $O.prependTo($X)
               - pattern: $O.attr("href", $X)
               - pattern: $O.attr("src", $X)
           - focus-metavariable: $X

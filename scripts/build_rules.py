@@ -16,6 +16,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> int:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base-lock", help="rule-ids.lock from the base branch; IDs in it can never disappear")
+    a = ap.parse_args()
     rules, ids = [], set()
     for f in sorted((ROOT / "rules" / "custom").glob("*/*.yaml")):
         if f.name.endswith(".test.yaml"):
@@ -37,6 +41,9 @@ def main() -> int:
     retired_f = ROOT / "rules" / "RETIRED.txt"
     retired = set(retired_f.read_text().split()) if retired_f.exists() else set()
     shipped = set(lock.read_text().split()) if lock.exists() else set()
+    # a PR could delete an ID from both the rule and the lock; the base branch's lock catches that
+    if a.base_lock and Path(a.base_lock).exists():
+        shipped |= set(Path(a.base_lock).read_text().split())
     reused = ids & retired
     if reused:
         print(f"retired rule ids must never be reused: {sorted(reused)}", file=sys.stderr)

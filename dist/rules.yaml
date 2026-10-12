@@ -58,7 +58,7 @@ rules:
   - pattern-inside: "with:\n  ...\n"
   - metavariable-regex:
       metavariable: $ACTION
-      regex: (?i).*(ai-inference|claude|gpt|gemini|llm|openai)
+      regex: (?i).*(?:^|[/-])(?:ai-inference|claude|codex|anthropic|anthropics|gpt|gemini|llm|openai)(?:$|[/@-])
   - pattern-regex: \$\{\{[^}]*(?:github\.event\.(?:issue\.(?:title|body)|pull_request\.(?:title|body|head\.ref|head\.label|head\.repo\.default_branch)|comment\.body|review\.body|review_comment\.body|discussion\.(?:title|body)|discussion_comment\.body|head_commit\.message|head_commit\.author\.(?:name|email)|commits\[?\*?[0-9]*\]?\.message|commits\.\*\.message|pages\.\*\.page_name)|github\.head_ref)[^}]*\}\}
 - id: sast.gha.compromised-action
   languages:
@@ -167,7 +167,6 @@ rules:
   - pattern: location.search
   - pattern: location.hash
   pattern-sanitizers:
-  - pattern: JSON.parse(...)
   - pattern: Number(...)
   - pattern: parseInt(...)
   - pattern: parseFloat(...)
@@ -464,12 +463,18 @@ rules:
       regex: ^(send|json|jsonp|end|write)$
   - pattern-either:
     - pattern-inside: try { ... } catch ($E) { ... }
-    - pattern-inside: function ($E, $RQ, $RS, $NX) { ... }
-    - pattern-inside: function $F($E, $RQ, $RS, $NX) { ... }
-    - pattern-inside: ($E, $RQ, $RS, $NX) => { ... }
-    - pattern-inside: async ($E, $RQ, $RS, $NX) => { ... }
     - pattern-inside: $P.catch(($E) => ...)
     - pattern-inside: $P.catch(function ($E) { ... })
+    - patterns:
+      - pattern-either:
+        - pattern-inside: function ($E, $RQ, $RS, $NX) { ... }
+        - pattern-inside: function $F($E, $RQ, $RS, $NX) { ... }
+        - pattern-inside: ($E, $RQ, $RS, $NX) => { ... }
+        - pattern-inside: ($E, $RQ, $RS, $NX) => $BODY
+        - pattern-inside: async ($E, $RQ, $RS, $NX) => { ... }
+      - metavariable-regex:
+          metavariable: $E
+          regex: (?i)^(err|error|e|ex|exc|exception|er)$
 - id: sast.js.express-no-helmet
   languages:
   - javascript
@@ -615,13 +620,17 @@ rules:
     references:
     - https://cwe.mitre.org/data/definitions/79.html
     - https://handlebarsjs.com/api-reference/compilation.html
-  pattern-either:
-  - pattern: '$H.compile($T, { ..., noEscape: true, ... })
+  patterns:
+  - pattern-either:
+    - pattern: '$H.compile($T, { ..., noEscape: true, ... })
 
-      '
-  - pattern: '$H.precompile($T, { ..., noEscape: true, ... })
+        '
+    - pattern: '$H.precompile($T, { ..., noEscape: true, ... })
 
-      '
+        '
+  - metavariable-regex:
+      metavariable: $H
+      regex: ^(Handlebars|handlebars|hbs|exphbs)$
 - id: sast.js.handlebars-unescaped
   languages:
   - generic
@@ -722,8 +731,6 @@ rules:
       - pattern: $O.before($X)
       - pattern: $O.replaceWith($X)
       - pattern: $O.wrap($X)
-      - pattern: $O.appendTo($X)
-      - pattern: $O.prependTo($X)
       - pattern: $O.attr("href", $X)
       - pattern: $O.attr("src", $X)
     - focus-metavariable: $X
@@ -751,11 +758,11 @@ rules:
           ...
 
           '
-      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: $J.decode(...)
       - pattern-inside: 'import $J from "jsonwebtoken";
@@ -763,11 +770,11 @@ rules:
           ...
 
           '
-      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: $J.decode(...)
       - pattern-inside: 'import * as $J from "jsonwebtoken";
@@ -775,11 +782,11 @@ rules:
           ...
 
           '
-      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: decode(...)
       - pattern-inside: 'import { ..., decode, ... } from "jsonwebtoken";
@@ -987,7 +994,6 @@ rules:
   - pattern: sanitizeURL(...)
   - pattern: safeRedirectTarget(...)
   - pattern: encodeURIComponent(...)
-  - pattern: encodeURI(...)
   pattern-sinks:
   - patterns:
     - pattern-either:
@@ -1154,7 +1160,7 @@ rules:
     - pattern: $P + $X
     - metavariable-regex:
         metavariable: $P
-        regex: ^["'`]/[^/\\]
+        regex: ^["'`]/[^/\\"'`]
   - pattern: encodeURIComponent(...)
   - pattern: Number(...)
   - pattern: parseInt(...)
@@ -1288,17 +1294,6 @@ rules:
   - pattern: $U.searchParams.get(...)
   - pattern: location.search
   - pattern: location.hash
-  pattern-sanitizers:
-  - patterns:
-    - pattern: $L.pick(...)
-    - metavariable-regex:
-        metavariable: $L
-        regex: ^(_|lodash|lo)$
-  - patterns:
-    - pattern: $L.pickBy(...)
-    - metavariable-regex:
-        metavariable: $L
-        regex: ^(_|lodash|lo)$
   pattern-sinks:
   - patterns:
     - pattern: $O[$K1][$K2] = $V
@@ -1313,8 +1308,6 @@ rules:
       - pattern-inside: for ($LV in $LI) { ... }
       - pattern-inside: for (...;...;...) { ... }
       - pattern-inside: while (...) { ... }
-      - pattern-inside: $A.forEach(...)
-      - pattern-inside: $A.reduce(...)
     - focus-metavariable: $K
   - patterns:
     - pattern: $A.forEach(($K) => { ... $O[$K] = $V; ... })
@@ -1448,9 +1441,14 @@ rules:
   - pattern-not: '<$C ... dangerouslySetInnerHTML={{ __html: "..." }} ... />
 
       '
-  - pattern-not: '<$C ... dangerouslySetInnerHTML={{ __html: `...` }} ... />
+  - pattern-not:
+      patterns:
+      - pattern: '<$C ... dangerouslySetInnerHTML={{ __html: $T }} ... />
 
-      '
+          '
+      - metavariable-regex:
+          metavariable: $T
+          regex: ^`[^`$]*`$
   - pattern-not: '<$C ... dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(...) }} ... />
 
       '
@@ -1605,7 +1603,6 @@ rules:
         metavariable: $P
         regex: ^["'`]https?://[^/]+/
   - pattern: encodeURIComponent(...)
-  - pattern: encodeURI(...)
   - pattern: Number(...)
   - pattern: parseInt(...)
   - pattern: parseFloat(...)
@@ -1816,12 +1813,15 @@ rules:
     - pattern: '{ ..., rejectUnauthorized: false, ... }
 
         '
-    - pattern-not-inside: '{ ..., ssl: ..., ... }
-
-        '
-    - pattern-not-inside: '{ ..., dialectOptions: ..., ... }
-
-        '
+    - pattern-not-inside: new Sequelize(...)
+    - pattern-not-inside: new Pool(...)
+    - pattern-not-inside: new Client(...)
+    - pattern-not-inside: new $NS.Pool(...)
+    - pattern-not-inside: new $NS.Client(...)
+    - pattern-not-inside: $NS.createConnection(...)
+    - pattern-not-inside: $NS.createPool(...)
+    - pattern-not-inside: createConnection(...)
+    - pattern-not-inside: createPool(...)
 - id: sast.js.unsafe-yaml-load
   languages:
   - javascript
@@ -2065,7 +2065,11 @@ rules:
   - pattern: httpx.$M(..., verify=False, ...)
   - pattern: aiohttp.TCPConnector(..., ssl=False, ...)
   - pattern: aiohttp.TCPConnector(..., verify_ssl=False, ...)
-  - pattern: $S.$M(..., ssl=False, ...)
+  - patterns:
+    - pattern: $S.$M(..., ssl=False, ...)
+    - metavariable-regex:
+        metavariable: $S
+        regex: (?i).*(session|client|sess|connector)$
   - pattern: urllib3.PoolManager(..., cert_reqs="CERT_NONE", ...)
   - pattern: urllib3.HTTPSConnectionPool(..., cert_reqs="CERT_NONE", ...)
   - pattern: urllib3.connection_from_url(..., cert_reqs="CERT_NONE", ...)
@@ -2348,8 +2352,8 @@ rules:
   patterns:
   - pattern-either:
     - pattern-regex: document\s*\.\s*write(ln)?\s*\([^;\n]*\b(location\s*\.\s*(hash|search|href|pathname)|document\s*\.\s*(URL|documentURI|referrer)|window\s*\.\s*name)\b
-    - pattern-regex: \.\s*(innerHTML|outerHTML)\s*(\+)?=[^;\n=]*\b(location\s*\.\s*(hash|search|href|pathname)|document\s*\.\s*(URL|documentURI|referrer)|window\s*\.\s*name)\b
-  - pattern-not-regex: (DOMPurify|sanitize|escapeHtml|encodeURIComponent)\s*[.(]
+    - pattern-regex: \.\s*(innerHTML|outerHTML)\s*(\+)?=(?!=)[^;\n]*\b(location\s*\.\s*(hash|search|href|pathname)|document\s*\.\s*(URL|documentURI|referrer)|window\s*\.\s*name)\b
+  - pattern-not-regex: (DOMPurify\s*\.\s*sanitize|escapeHtml)\s*\(
 - id: sast.web.malicious-cdn-domain
   languages:
   - generic

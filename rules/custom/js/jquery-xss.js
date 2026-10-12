@@ -55,3 +55,8 @@ function ok6() {
   // ok: sast.js.jquery-xss
   $("a.next").attr("href", "/item/" + encodeURIComponent(id));
 }
+function ok7() {
+  const sel = new URLSearchParams(location.search).get("target");
+  // ok: sast.js.jquery-xss
+  $("<li>item</li>").appendTo(sel);
+}

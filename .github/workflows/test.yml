@@ -41,8 +41,19 @@ jobs:
             --certificate-identity-regexp "^https://github.com/opengrep/opengrep/" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" "$d/opengrep"
           chmod +x "$d/opengrep"
-      - name: dist/rules.yaml is up to date
-        run: python scripts/build_rules.py && git diff --exit-code dist/
+      - name: dist/rules.yaml is up to date; no shipped rule ID dropped
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.base_ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          base_lock="$RUNNER_TEMP/base-rule-ids.lock"
+          if [ -n "$BASE_REF" ]; then
+            gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/dist/rule-ids.lock?ref=$BASE_REF" > "$base_lock" 2>/dev/null || : > "$base_lock"
+          else
+            : > "$base_lock"
+          fi
+          python scripts/build_rules.py --base-lock "$base_lock" && git diff --exit-code dist/
       - name: Rule tests (semgrep CE)
         run: python tests/rules_test.py --engine "$(command -v semgrep)"
       - name: Rule tests (opengrep - the CI engine)

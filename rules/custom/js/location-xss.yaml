@@ -51,7 +51,6 @@ rules:
       - pattern: sanitizeURL(...)
       - pattern: safeRedirectTarget(...)
       - pattern: encodeURIComponent(...)
-      - pattern: encodeURI(...)
     pattern-sinks:
       - patterns:
           - pattern-either:

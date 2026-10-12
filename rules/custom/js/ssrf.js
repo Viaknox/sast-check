@@ -28,6 +28,8 @@ app.get('/https', (req, res) => {
   https.get(req.query.u, (up) => up.pipe(res));
   // ruleid: sast.js.ssrf
   axios({ method: 'post', url: req.body.endpoint, data: {} });
+  // ruleid: sast.js.ssrf
+  fetch(encodeURI(req.query.url));
   res.end();
 });
 

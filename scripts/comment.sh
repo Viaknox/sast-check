@@ -9,11 +9,10 @@ body="$(printf '%s\n%s' "$marker" "$(head -c 60000 "$report")")"
 
 id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
        --jq ".[] | select(.body | startswith(\"$marker\")) | .id" 2>/dev/null | head -n1)
-if [ -n "$id" ]; then
-  gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" >/dev/null \
-    || echo "::warning::could not update PR comment (token may lack pull-requests: write)"
-else
-  gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" >/dev/null \
-    || echo "::warning::could not post PR comment (token may lack pull-requests: write)"
+# Update our sticky comment; if that fails (e.g. someone else's comment carries the marker), post a new one.
+if [ -n "$id" ] && gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" >/dev/null 2>&1; then
+  exit 0
 fi
+gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" >/dev/null \
+  || echo "::warning::could not post PR comment (token may lack pull-requests: write)"
 exit 0

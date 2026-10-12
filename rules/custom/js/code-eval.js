@@ -35,6 +35,12 @@ app.get('/timer', (req, res) => {
   res.end();
 });
 
+app.post('/json-eval', (req, res) => {
+  // ruleid: sast.js.code-eval
+  const v = eval(JSON.parse(req.body.x));
+  res.json(v);
+});
+
 app.get('/safe', (req, res) => {
   // ok: sast.js.code-eval
   setTimeout(() => console.log(req.query.x), 10);

@@ -20,6 +20,10 @@
   // ruleid: sast.web.inline-script-dom-xss
   document.writeln('<a href="' + document.URL + '">link</a>');
 </script>
+<script>
+  // ruleid: sast.web.inline-script-dom-xss
+  el.innerHTML = '<a href="' + encodeURIComponent(x) + '">' + location.hash;
+</script>
 
 <!-- safe look-alikes -->
 <script>

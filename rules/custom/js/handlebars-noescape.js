@@ -20,3 +20,6 @@ const o3 = Handlebars.compile(source, { strict: true });
 
 // ok: sast.js.handlebars-noescape
 const o4 = other.render(source, { noEscape: true });
+
+// ok: sast.js.handlebars-noescape
+const o5 = someLib.compile(x, { noEscape: true });

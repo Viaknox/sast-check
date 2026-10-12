@@ -23,11 +23,11 @@ rules:
           ...
 
           '
-      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: $J.decode(...)
       - pattern-inside: 'import $J from "jsonwebtoken";
@@ -35,11 +35,11 @@ rules:
           ...
 
           '
-      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: $J.decode(...)
       - pattern-inside: 'import * as $J from "jsonwebtoken";
@@ -47,11 +47,11 @@ rules:
           ...
 
           '
-      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: decode(...)
       - pattern-inside: 'import { ..., decode, ... } from "jsonwebtoken";

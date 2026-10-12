@@ -24,6 +24,11 @@ function t5() {
   // ruleid: sast.js.location-xss
   window.location.replace(r);
 }
+function t6() {
+  const next = new URLSearchParams(location.search).get("next");
+  // ruleid: sast.js.location-xss
+  location.href = encodeURI(next);
+}
 
 function ok1() {
   // ok: sast.js.location-xss

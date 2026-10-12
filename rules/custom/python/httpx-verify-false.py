@@ -56,3 +56,8 @@ def ok_urllib3_required():
 async def ok_aiohttp_default():
     # ok: sast.python.httpx-verify-false
     return aiohttp.TCPConnector(limit=10)
+
+
+def ok_redis_plain():
+    # ok: sast.python.httpx-verify-false
+    return redis.Redis(host, ssl=False)

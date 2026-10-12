@@ -68,10 +68,13 @@ ZIZMOR_CWE = {
     "cache-poisoning": "CWE-349", "insecure-url-scheme": "CWE-319", "concurrency-limits": "CWE-400",
     "unsound-condition": "CWE-697", "unsound-contains": "CWE-697", "unsound-ternary": "CWE-697",
 }
-LOCKFILES = {
-    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "npm-shrinkwrap.json",
-    "requirements.txt", "poetry.lock", "Pipfile.lock", "uv.lock", "pdm.lock",
-    "go.sum", "Cargo.lock", "Gemfile.lock", "composer.lock",
+LOCKFILES = {  # every manifest osv-scanner v2 scans (google.github.io/osv-scanner/supported-languages-and-lockfiles)
+    "conan.lock", "pubspec.lock", "mix.lock", "go.mod", "cabal.project.freeze", "stack.yaml.lock",
+    "buildscript-gradle.lockfile", "gradle.lockfile", "verification-metadata.xml", "pom.xml",
+    "bun.lock", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "deps.json",
+    "packages.config", "packages.lock.json", "composer.lock", "Pipfile.lock", "poetry.lock",
+    "requirements.txt", "pdm.lock", "pylock.toml", "uv.lock", "renv.lock", "Gemfile.lock",
+    "gems.locked", "Cargo.lock",
 }
 IGNORE_RE = re.compile(r"sast-ignore\[(?P<rule>[^\]]+)\]\s*:?\s*(?P<reason>.*)")
 
@@ -91,6 +94,7 @@ class Finding:
     kind: str = "code"          # code | secret | dependency | config
     fingerprint: str = ""       # hash(rule ID + normalized code snippet); survives line moves
     in_diff: bool = True
+    end_line: int = 0           # last line of a multi-line match (0 = same as line)
     suppressed: str = ""        # reason, if suppressed
     blocking: bool = False
 
@@ -115,8 +119,11 @@ class Ctx:
 
 
 # ---------------------------------------------------------------- helpers
-def sh(cmd: list[str], cwd: Path, ok_codes=(0,), env=None) -> subprocess.CompletedProcess:
-    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
+def sh(cmd: list[str], cwd: Path, ok_codes=(0,), env=None, timeout=900) -> subprocess.CompletedProcess:
+    try:
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"{cmd[0]} timed out after {timeout}s") from e
     if p.returncode not in ok_codes:
         raise RuntimeError(f"{cmd[0]} exited {p.returncode}: {(p.stderr or p.stdout)[-800:]}")
     return p
@@ -152,6 +159,28 @@ def rel(repo: Path, p: str) -> str:
         return p.lstrip("./")
 
 
+def unquote_git_path(p: str) -> str:
+    """Git C-quotes unusual paths ("b/sp\\303\\251c.py"). Decode octal escapes as UTF-8 bytes."""
+    if not (p.startswith('"') and p.endswith('"')):
+        return p
+    raw, out, i = p[1:-1], bytearray(), 0
+    simple = {"n": 10, "t": 9, "r": 13, '"': 34, "\\": 92, "a": 7, "b": 8, "f": 12, "v": 11}
+    while i < len(raw):
+        c = raw[i]
+        if c == "\\" and i + 1 < len(raw):
+            nxt = raw[i + 1]
+            if nxt in "01234567" and i + 3 < len(raw) + 1:
+                out.append(int(raw[i + 1:i + 4], 8))
+                i += 4
+                continue
+            out.append(simple.get(nxt, ord(nxt)))
+            i += 2
+            continue
+        out += c.encode()
+        i += 1
+    return out.decode("utf-8", errors="replace")
+
+
 def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     """Map repo-relative file -> added/modified line numbers (merge-base vs working tree)."""
     out = sh(["git", "diff", "-U0", "--no-color", "--diff-filter=ACMR", "--merge-base", base], repo).stdout
@@ -159,7 +188,8 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     cur = None
     for ln in out.splitlines():
         if ln.startswith("+++ "):
-            cur = None if ln[4:] == "/dev/null" else ln[6:] if ln.startswith("+++ b/") else ln[4:]
+            hdr = unquote_git_path(ln[4:])
+            cur = None if hdr == "/dev/null" else hdr[2:] if hdr.startswith("b/") else hdr
             if cur:
                 files.setdefault(cur, set())
         elif ln.startswith("@@") and cur:
@@ -222,7 +252,7 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
         out.append(Finding(
             tool="opengrep", rule=rid, severity=md.get("sast_severity", "medium"),
             confidence=md.get("confidence", "medium"), path=rel(ctx.repo, r["path"]),
-            line=r["start"]["line"], message=" ".join(r["extra"]["message"].split()),
+            line=r["start"]["line"], end_line=r["end"]["line"], message=" ".join(r["extra"]["message"].split()),
             fix=md.get("fix", ""), cwe=str(md.get("cwe", "")),
             url=(md.get("references") or [""])[0],
         ))
@@ -262,6 +292,9 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
               if f.startswith(".github/workflows/") or Path(f).name in ("action.yml", "action.yaml")]
     else:
         tg = [".github/workflows"] if (ctx.repo / ".github/workflows").is_dir() else []
+        tracked = sh(["git", "ls-files", "-z", "--", ":(glob)**/action.yml", ":(glob)**/action.yaml"],
+                     ctx.repo).stdout.split("\0")
+        tg += sorted({f for f in tracked if f and not glob_any(f, ctx.cfg["paths"]["exclude"])})
     if not tg:
         return []
     online = bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
@@ -303,8 +336,13 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
     with tempfile.TemporaryDirectory() as td:
         runs = []
         if ctx.mode == "diff":
-            runs.append(["gitleaks", "git", f"--log-opts={ctx.base}..HEAD"])
-            runs.append(["gitleaks", "git", "--pre-commit"])          # uncommitted (local runs)
+            mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
+            runs.append(["gitleaks", "git", f"--log-opts={mb}..HEAD"])          # the PR's commits
+            runs.append(["gitleaks", "git", "--pre-commit"])                    # unstaged (local runs)
+            runs.append(["gitleaks", "git", "--pre-commit", "--staged"])        # staged (local runs)
+            untracked = sh(["git", "ls-files", "-z", "--others", "--exclude-standard"], ctx.repo).stdout.split("\0")
+            runs += [["gitleaks", "dir", f] for f in untracked
+                     if f and not glob_any(f, ctx.cfg["paths"]["exclude"])]     # new, never-added files
         else:
             runs.append(["gitleaks", "dir", "."])
         for i, cmd in enumerate(runs):
@@ -316,12 +354,12 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
     out, seen = [], set()
     for r in reports:
         key = (r["File"], r["StartLine"], r["RuleID"])
-        if key in seen:
+        if key in seen or glob_any(rel(ctx.repo, r["File"]), ctx.cfg["paths"]["exclude"]):
             continue
         seen.add(key)
         out.append(Finding(
             tool="gitleaks", rule=f"secret.{r['RuleID']}", severity="critical", confidence="high",
-            path=r["File"], line=r["StartLine"], kind="secret", cwe="CWE-798",
+            path=rel(ctx.repo, r["File"]), line=r["StartLine"], kind="secret", cwe="CWE-798",
             message=f"Possible secret committed ({r['Description']}). Value redacted.",
             fix="Revoke/rotate the credential first, then remove it from the code and git history.",
         ))
@@ -335,6 +373,9 @@ def run_osv(ctx: Ctx) -> list[Finding]:
         return []
     # 0 = clean, 1 = vulns found, 128 = no packages found
     p = sh(["osv-scanner", "scan", "source", "-r", "--format", "json", "."], ctx.repo, ok_codes=(0, 1, 128))
+    if p.returncode == 128 and ctx.mode == "diff":
+        # a dependency manifest changed but OSV found no packages: unparseable or unsupported -> not a pass
+        raise RuntimeError("osv-scanner found no packages although a dependency manifest changed")
     data = json.loads(p.stdout or "{}")
     out = []
     for res in data.get("results", []):
@@ -439,7 +480,8 @@ def apply_policy(ctx: Ctx, findings: list[Finding]) -> None:
     block_on = set(pol["block_on"])
     for f in findings:
         if ctx.mode == "diff" and f.kind in ("code", "config"):
-            f.in_diff = f.line in ctx.changed_lines.get(f.path, set())
+            changed = ctx.changed_lines.get(f.path, set())
+            f.in_diff = any(n in changed for n in range(f.line, max(f.end_line, f.line) + 1))
         elif ctx.mode == "diff" and f.kind == "dependency":
             f.in_diff = f.path in ctx.changed_files
         f.suppressed = inline_suppression(ctx.repo, f) or config_suppression(ctx.cfg, f, today)
@@ -525,11 +567,18 @@ def main(argv=None) -> int:
         print("diff mode needs --base (e.g. origin/main); falling back to full scan", file=sys.stderr)
         mode = "full"
     ctx = Ctx(repo=repo, cfg=cfg, mode=mode, base=a.base)
-    if mode == "diff":
-        ctx.changed_lines = changed_lines(repo, a.base)
-        ctx.changed_files = sorted(ctx.changed_lines)
-
     enabled = a.only.split(",") if a.only else [k for k, v in cfg["tools"].items() if v]
+    unknown = [n for n in enabled if n not in SCANNERS]
+    if unknown:
+        print(f"unknown scanner(s): {', '.join(unknown)}; valid: {', '.join(SCANNERS)}", file=sys.stderr)
+        return 2
+    if mode == "diff":
+        try:
+            ctx.changed_lines = changed_lines(repo, a.base)
+        except RuntimeError as e:
+            ctx.runs.append(ToolRun("git-diff", "error", f"cannot diff against {a.base}: {str(e)[:300]}"))
+            enabled = []                       # nothing can be scoped; report the error (fail closed)
+        ctx.changed_files = sorted(ctx.changed_lines)
     findings: list[Finding] = []
     for name in enabled:
         try:

@@ -32,5 +32,8 @@ const a3 = new https.Agent({ keepAlive: true });
 // ok: sast.js.tls-reject-unauthorized-off
 process.env.NODE_ENV = "0";
 
-// ok: sast.js.tls-reject-unauthorized-off
+// ruleid: sast.js.tls-reject-unauthorized-off
 const dbOpts = { ssl: { rejectUnauthorized: false } };
+
+// ok: sast.js.tls-reject-unauthorized-off
+const sequelize = new Sequelize(dbUrl, { dialectOptions: { ssl: { rejectUnauthorized: false } } });

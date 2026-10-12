@@ -59,6 +59,28 @@ FP2=$(python3 -c "import json;d=json.load(open('sast-results/results.sarif'));pr
 check "fingerprint survives a line move"              "$FP2" "$FP1"
 git checkout -q -- src/app.js
 
+# review fixes: multi-line match whose changed line is inside it; non-ASCII path; staged secret (local run)
+git checkout -q -b more main
+cat > ami.tf <<'TF'
+data "aws_ami" "app" {
+  most_recent = false
+  filter {
+    name   = "name"
+    values = ["app-*"]
+  }
+}
+TF
+git add -A && git commit -qm ami
+sed -i 's/most_recent = false/most_recent = true/' ami.tf
+mkdir -p "src/évil" && printf "app.get('/x', (req, res) => { eval(req.query.c); });\n" > "src/évil/h.js"
+git add -A && git commit -qm "range + path"
+echo 'K2 = "AKIAIOSFODNN7ABCDEFG"' > staged.py && git add staged.py
+set +e; python3 "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only opengrep,gitleaks >/dev/null; set -e
+check "multi-line match blocks when an inner line changed" "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='sast.terraform.aws-ami-no-owner')")" "1"
+check "file under a non-ASCII path is scanned"            "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='sast.js.code-eval' and 'vil/h.js' in f['path'])")" "1"
+check "staged (uncommitted) secret is caught"             "$(q "sum(1 for f in d['findings'] if f['kind']=='secret' and f['path']=='staged.py')")" "1"
+git reset -q --hard && git checkout -q main
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 set +e; python3 "$HERE/scripts/sast.py" --mode diff --base main~1 --only opengrep,ruff,gitleaks >/dev/null; code=$?; set -e

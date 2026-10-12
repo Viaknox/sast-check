@@ -21,6 +21,11 @@ export function D({ md }) {
   return <section dangerouslySetInnerHTML={{ __html: renderMarkdown(md) }} />;
 }
 
+export function E({ name }) {
+  // ruleid: sast.js.react-dangerous-html
+  return <p dangerouslySetInnerHTML={{ __html: `<b>${name}</b>` }} />;
+}
+
 export function Ok1() {
   // ok: sast.js.react-dangerous-html
   return <div dangerouslySetInnerHTML={{ __html: "<b>static</b>" }} />;

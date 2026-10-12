@@ -21,8 +21,13 @@ rules:
       - focus-metavariable: $X
       - pattern-not: |
           <$C ... dangerouslySetInnerHTML={{ __html: "..." }} ... />
-      - pattern-not: |
-          <$C ... dangerouslySetInnerHTML={{ __html: `...` }} ... />
+      - pattern-not:
+          patterns:
+            - pattern: |
+                <$C ... dangerouslySetInnerHTML={{ __html: $T }} ... />
+            - metavariable-regex:
+                metavariable: $T
+                regex: '^`[^`$]*`$'
       - pattern-not: |
           <$C ... dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(...) }} ... />
       - pattern-not: |

@@ -15,8 +15,12 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/79.html
         - https://handlebarsjs.com/api-reference/compilation.html
-    pattern-either:
-      - pattern: |
-          $H.compile($T, { ..., noEscape: true, ... })
-      - pattern: |
-          $H.precompile($T, { ..., noEscape: true, ... })
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $H.compile($T, { ..., noEscape: true, ... })
+          - pattern: |
+              $H.precompile($T, { ..., noEscape: true, ... })
+      - metavariable-regex:
+          metavariable: $H
+          regex: ^(Handlebars|handlebars|hbs|exphbs)$

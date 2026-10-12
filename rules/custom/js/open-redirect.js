@@ -29,6 +29,11 @@ async function handler(request, reply) {
   return reply.redirect(request.query.to);
 }
 
+app.get('/go4', (req, res) => {
+  // ruleid: sast.js.open-redirect
+  res.redirect('/' + req.query.path);
+});
+
 function middleware(req) {
   // ruleid: sast.js.open-redirect
   return NextResponse.redirect(new URL(req.nextUrl.searchParams.get('next'), req.url));

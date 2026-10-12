@@ -20,7 +20,11 @@ rules:
       - pattern: httpx.$M(..., verify=False, ...)
       - pattern: aiohttp.TCPConnector(..., ssl=False, ...)
       - pattern: aiohttp.TCPConnector(..., verify_ssl=False, ...)
-      - pattern: $S.$M(..., ssl=False, ...)
+      - patterns:
+          - pattern: $S.$M(..., ssl=False, ...)
+          - metavariable-regex:
+              metavariable: $S
+              regex: (?i).*(session|client|sess|connector)$
       - pattern: urllib3.PoolManager(..., cert_reqs="CERT_NONE", ...)
       - pattern: urllib3.HTTPSConnectionPool(..., cert_reqs="CERT_NONE", ...)
       - pattern: urllib3.connection_from_url(..., cert_reqs="CERT_NONE", ...)

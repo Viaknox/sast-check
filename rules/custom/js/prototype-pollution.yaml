@@ -27,17 +27,6 @@ rules:
       - pattern: $U.searchParams.get(...)
       - pattern: location.search
       - pattern: location.hash
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $L.pick(...)
-          - metavariable-regex:
-              metavariable: $L
-              regex: '^(_|lodash|lo)$'
-      - patterns:
-          - pattern: $L.pickBy(...)
-          - metavariable-regex:
-              metavariable: $L
-              regex: '^(_|lodash|lo)$'
     pattern-sinks:
       - patterns:
           - pattern: $O[$K1][$K2] = $V
@@ -52,8 +41,6 @@ rules:
               - pattern-inside: for ($LV in $LI) { ... }
               - pattern-inside: for (...;...;...) { ... }
               - pattern-inside: while (...) { ... }
-              - pattern-inside: $A.forEach(...)
-              - pattern-inside: $A.reduce(...)
           - focus-metavariable: $K
       - patterns:
           - pattern: $A.forEach(($K) => { ... $O[$K] = $V; ... })
