@@ -277,17 +277,33 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     # (its diff is the one-line target path; the scanners read the target's content)
     for status, path in name_status(repo, base):
         moved = status[:1] in ("R", "C")
-        if path and (moved or path not in files or (repo / path).is_symlink()) and (repo / path).is_file():
-            with open(repo / path, errors="ignore") as fh:
-                files[path] = set(range(1, sum(1 for _ in fh) + 1))
+        if path and (moved or path not in files or (repo / path).is_symlink()):
+            for f in link_dir_files(repo, path) or [path]:
+                if (repo / f).is_file():
+                    with open(repo / f, errors="ignore") as fh:
+                        files[f] = set(range(1, sum(1 for _ in fh) + 1))
     # untracked new files (local runs) count as fully changed
-    for f in untracked_files(repo):
-        try:
-            n = sum(1 for _ in open(repo / f, errors="ignore"))
-        except OSError:
-            continue
-        files[f] = set(range(1, n + 1))
+    for u in untracked_files(repo):
+        for f in link_dir_files(repo, u) or [u]:
+            try:
+                n = sum(1 for _ in open(repo / f, errors="ignore"))
+            except OSError:
+                continue
+            files[f] = set(range(1, n + 1))
     return files
+
+
+def link_dir_files(repo: Path, path: str) -> list[str]:
+    """Files under `path` when it is a symlink to a directory inside the repo (src/pkg -> ../vendor/pkg),
+    named through the link: code reached through the link is code the PR brings in. Links inside it are
+    not followed; a link leaving the repo gives nothing (never scan runner files)."""
+    p = repo / path
+    if not (p.is_symlink() and p.is_dir() and p.resolve().is_relative_to(repo)):
+        return []
+    out = []
+    for d, _, names in os.walk(p):   # os.walk follows the top link only
+        out += [(Path(d) / n).relative_to(repo).as_posix() for n in names if not (Path(d) / n).is_symlink()]
+    return sorted(out)
 
 
 # ---------------------------------------------------------------- scanners
@@ -526,7 +542,8 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
             # for the history scan to see
             moved = [p for st, p in name_status(ctx.repo, ctx.base)
                      if st[:1] in ("R", "C") or (ctx.repo / p).is_symlink()]
-            for f in sorted(set(untracked_files(ctx.repo) + moved)):
+            scan = [f for p in untracked_files(ctx.repo) + moved for f in (link_dir_files(ctx.repo, p) or [p])]
+            for f in sorted(set(scan)):
                 if glob_any(f, ctx.cfg["paths"]["exclude"]) or not (ctx.repo / f).is_file():
                     continue
                 if (ctx.repo / f).is_symlink():

@@ -407,6 +407,16 @@ print(sast.zizmor_end_line({'start_point': {'row': 2, 'column': 2}, 'end_point':
       sast.zizmor_end_line({'start_point': {'row': 2, 'column': 2}, 'end_point': {'row': 5, 'column': 17}}))" "$HERE/scripts")" "6 6"
 git checkout -q main
 
+# round-10: a symlinked directory brings in its files (code and secrets), named through the link
+git checkout -q -b r10 main
+mkdir -p vendor/pkg && printf 'def f(s):\n    return eval(s)\n' > vendor/pkg/vuln.py && echo 'K11 = "AKIAIOSFODNN7ABCDEFG"' > vendor/pkg/k.py
+git add vendor/pkg && git commit -qm r10base
+ln -s ../vendor/pkg src/pkg && git add src/pkg && git commit -qm r10
+gate --mode diff --base HEAD~1 --only ruff,gitleaks
+check "symlinked dir: its code is scanned via the link"   "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/pkg/vuln.py')")" "1"
+check "symlinked dir: its secrets are scanned via the link" "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/pkg/k.py')")" "1"
+git checkout -q main
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks
