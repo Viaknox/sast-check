@@ -763,6 +763,16 @@ rules:
       - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: '<... $J.verify(...) ...>;
+
+          ...
+
+          '
+      - pattern-not-inside: 'const $X = <... $J.verify(...) ...>;
+
+          ...
+
+          '
     - patterns:
       - pattern: $J.decode(...)
       - pattern-inside: 'import $J from "jsonwebtoken";
@@ -775,6 +785,16 @@ rules:
       - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: '<... $J.verify(...) ...>;
+
+          ...
+
+          '
+      - pattern-not-inside: 'const $X = <... $J.verify(...) ...>;
+
+          ...
+
+          '
     - patterns:
       - pattern: $J.decode(...)
       - pattern-inside: 'import * as $J from "jsonwebtoken";
@@ -787,6 +807,16 @@ rules:
       - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: '<... $J.verify(...) ...>;
+
+          ...
+
+          '
+      - pattern-not-inside: 'const $X = <... $J.verify(...) ...>;
+
+          ...
+
+          '
     - patterns:
       - pattern: decode(...)
       - pattern-inside: 'import { ..., decode, ... } from "jsonwebtoken";
@@ -799,6 +829,16 @@ rules:
       - pattern-not-inside: "(...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async (...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async function $F(...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: '<... verify(...) ...>;
+
+          ...
+
+          '
+      - pattern-not-inside: 'const $X = <... verify(...) ...>;
+
+          ...
+
+          '
     - patterns:
       - pattern: decode(...)
       - pattern-inside: 'const { ..., decode, ... } = require("jsonwebtoken");
@@ -811,6 +851,16 @@ rules:
       - pattern-not-inside: "(...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async (...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async function $F(...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: '<... verify(...) ...>;
+
+          ...
+
+          '
+      - pattern-not-inside: 'const $X = <... verify(...) ...>;
+
+          ...
+
+          '
     - patterns:
       - pattern: '$J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
 

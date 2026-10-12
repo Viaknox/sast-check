@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { decode, verify } from 'jsonwebtoken';
 import { decodeJwt } from 'jose';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -60,4 +61,38 @@ export function displayOnly(token: string) {
   // ok: sast.js.jwt-decode-unverified
   const info = decodeJwt(token);
   return info.exp;
+}
+
+export class AuthService {
+  constructor(private key: string) {}
+
+  check(token: string) {
+    jwt.verify(token, this.key, { algorithms: ['RS256'] });
+    // ok: sast.js.jwt-decode-unverified
+    return jwt.decode(token);
+  }
+
+  async checkAsync(token: string) {
+    const claims = await Promise.resolve(jwt.verify(token, this.key, { algorithms: ['RS256'] }));
+    // ok: sast.js.jwt-decode-unverified
+    return jwt.decode(token);
+  }
+
+  peek(token: string) {
+    // ruleid: sast.js.jwt-decode-unverified
+    return jwt.decode(token);
+  }
+}
+
+export class DirectAuth {
+  check(token: string, key: string) {
+    verify(token, key, { algorithms: ['ES256'] });
+    // ok: sast.js.jwt-decode-unverified
+    return decode(token);
+  }
+
+  peek(token: string) {
+    // ruleid: sast.js.jwt-decode-unverified
+    return decode(token);
+  }
 }

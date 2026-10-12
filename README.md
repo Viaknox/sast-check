@@ -18,7 +18,7 @@ Full list: [docs/coverage.md](docs/coverage.md).
 ## Add it to a repo (2 minutes)
 
 1. Copy [`templates/sast.yml`](templates/sast.yml) to `.github/workflows/sast.yml`.
-2. Replace `OWNER/sast-check@REPLACE_WITH_COMMIT_SHA` with this repo and a **full commit SHA**.
+2. Replace `OWNER/sast-check@REPLACE_WITH_COMMIT_SHA` with this repo and a **full commit SHA** — never `@main` or a tag: either can change under you, and this action runs with your PR's token.
 3. In branch protection, make **`sast-check / scan`** a required check.
 
 Each PR gets one sticky comment and a job summary. Fork PRs get the summary only (no write token).
@@ -66,6 +66,16 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **Fail closed** — if an installed scanner crashes, the check fails (`fail_on_tool_error`).
 - **Supply chain** — actions pinned by SHA; Opengrep binary verified with Sigstore/cosign; Go tools installed through the Go checksum database; Python tools pinned.
 - **Low-confidence findings never block** (they're shown as warnings).
+
+## Known limits (v1)
+
+- **Runners:** Linux x64 only (the action stops with a clear error elsewhere).
+- **Languages:** JS/TS, Python, GitHub Actions, Dockerfiles, Kubernetes YAML, Terraform. Anything else is not scanned by custom rules.
+- **Secrets** (gitleaks) are always critical and block when they appear in the PR's commits, staged or untracked files.
+- **Dependencies** (osv-scanner) warn only by default; set `[deps] block = true` to let critical CVEs (CVSS ≥ 9) in changed lockfiles block.
+- **Prototype pollution** through `Array.prototype.reduce` merge helpers is not caught: Semgrep and Opengrep disagree on that pattern, so it was left out rather than ship an engine-specific rule.
+- **NoSQL injection** ignores callbacks passed to `.find()` / `.filter()`-style calls (e.g. `arr.find(x => x === req.body.id)`). Opengrep taints closures, so without this exclusion every array lookup on request data would be flagged. A real Mongo filter is an object, which is still checked.
+- **JWT decode** counts `verify()` anywhere in the same function, or earlier in the same block (class methods included), as verification.
 
 ## Develop
 
