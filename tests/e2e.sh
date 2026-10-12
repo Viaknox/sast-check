@@ -604,6 +604,7 @@ check "a CDN URL in Markdown is not a finding"            "$(q "sum(1 for f in d
 printf '[policy]\nblock_on = ["critical"]\n' > cfg.toml && ln -sf cfg.toml .sast-check.toml && git add cfg.toml .sast-check.toml && git commit -qm cfglink
 set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
 check "symlinked .sast-check.toml in a PR fails (exit 2)" "$code" "2"
+check "...and the error names .sast-check.toml"           "$(q "any(r['name']=='settings' and r['status']=='error' and '.sast-check.toml' in r['detail'] for r in d['runs'])")" "True"
 git checkout -q main
 if command -v osv-scanner >/dev/null; then
   git checkout -q -b r13o main
@@ -611,6 +612,7 @@ if command -v osv-scanner >/dev/null; then
   printf '{"lockfileVersion": 3, "packages": {\n' > package-lock.json && git add package-lock.json && git commit -qm obad
   set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only osv >/dev/null 2>&1; code=$?; set -e
   check "unreadable changed lockfile fails (exit 2)"      "$code" "2"
+  check "...and the error names package-lock.json"        "$(q "any(r['name']=='osv' and r['status']=='error' and 'package-lock.json' in r['detail'] for r in d['runs'])")" "True"
   git checkout -q main
 fi
 
@@ -620,6 +622,14 @@ mkdir -p vendor && printf "app.get('/l', (req, res) => { eval(req.query.l); });\
 ln -s ../vendor/evil.js src/evil-link.js && git add src/evil-link.js && git commit -qm jlink
 gate --mode diff --base HEAD~1 --only opengrep
 check "symlinked JS file is scanned by Opengrep"          "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/evil-link.js')")" "1"
+git checkout -q main
+
+# full scope: gitleaks also scans in-repo aliases (gitleaks dir . does not follow links)
+git checkout -q -b r14 main
+mkdir -p vendor && echo 'K14 = "AKIAIOSFODNN7ABCDEFG"' > vendor/key14.py && ln -s ../vendor/key14.py src/key14.py
+git add vendor/key14.py src/key14.py && git commit -qm r14
+gate --mode full --base HEAD~1 --only gitleaks
+check "full: a link to an excluded secret file blocks"    "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/key14.py')")" "1"
 git checkout -q main
 
 # clean PR passes

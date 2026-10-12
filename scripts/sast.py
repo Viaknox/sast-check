@@ -307,13 +307,17 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     return files
 
 
+def repo_links(repo: Path) -> list[str]:
+    """Every symlink in the checkout: tracked (mode 120000) and untracked."""
+    links = [e.split("\t", 1)[1] for e in git_z(repo, ["ls-files", "-z", "-s"]) if e.startswith("120000 ")]
+    return links + [u for u in untracked_files(repo) if (repo / u).is_symlink()]
+
+
 def changed_aliases(repo: Path, changed: list[str]) -> list[str]:
     """Paths that reach a changed file through a symlink (a file link, or a file under a directory link)."""
     real = {(repo / f).resolve() for f in changed if (repo / f).exists()}
-    links = [e.split("\t", 1)[1] for e in git_z(repo, ["ls-files", "-z", "-s"]) if e.startswith("120000 ")]
-    links += [u for u in untracked_files(repo) if (repo / u).is_symlink()]
     out = []
-    for link in links:
+    for link in repo_links(repo):
         p = repo / link
         if not p.is_symlink() or not in_repo(repo, p):
             continue
@@ -615,20 +619,22 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
             ns = name_status(ctx.repo, ctx.base)
             moved = [p for st, p in ns if st[:1] in ("R", "C") or (ctx.repo / p).is_symlink()]
             moved += changed_aliases(ctx.repo, [p for _, p in ns])
-            scan = [f for p in untracked_files(ctx.repo) + moved for f in (link_dir_files(ctx.repo, p) or [p])]
-            for f in sorted(set(scan)):
-                if glob_any(f, ctx.cfg["paths"]["exclude"]) or not (ctx.repo / f).is_file():
-                    continue
-                if (ctx.repo / f).is_symlink():
-                    # scan the target only inside the repo (never runner files), reported under the link's path
-                    if not in_repo(ctx.repo, ctx.repo / f):
-                        continue
-                    alias[len(runs)] = f
-                    runs.append(["gitleaks", "dir", "--follow-symlinks", "--", f])
-                else:
-                    runs.append(["gitleaks", "dir", "--", f])
+            scan = untracked_files(ctx.repo) + moved
         else:
-            runs.append(["gitleaks", "dir", "."])
+            runs.append(["gitleaks", "dir", "."])   # does not follow links: every in-repo alias is added below
+            scan = repo_links(ctx.repo)
+        for f in sorted({f for p in scan for f in (link_dir_files(ctx.repo, p) or [p])}):
+            if glob_any(f, ctx.cfg["paths"]["exclude"]) or not (ctx.repo / f).is_file():
+                continue
+            if (ctx.repo / f).is_symlink():
+                # scan the target only inside the repo (never runner files), reported under the link's path
+                if not in_repo(ctx.repo, ctx.repo / f):
+                    continue
+                alias[len(runs)] = f
+                runs.append(["gitleaks", "dir", "--follow-symlinks", "--", f])
+            elif ctx.mode == "diff" or (ctx.repo / f).resolve() != ctx.repo.resolve() / f:   # full: aliases only
+                runs.append(["gitleaks", "dir", "--", f])
+        if ctx.mode != "diff":
             if ctx.base:   # a secret added then deleted in the PR is gone from the tree but not from history
                 mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
                 runs.append(["gitleaks", "git", f"--log-opts=--text --no-textconv {mb}..HEAD"])
@@ -721,8 +727,12 @@ def run_osv(ctx: Ctx) -> list[Finding]:
             # each changed input must parse on its own: the repo-wide scan succeeds as long as ANY lockfile
             # parses, which would hide a changed input OSV could not read (127 = extraction failed)
             for f in inputs:
-                q = subprocess.run(cmd[:3] + ["--format", "json", *[x for x in cmd if x.startswith("--config=")], "-L", f], cwd=ctx.repo,
-                                   capture_output=True, text=True)
+                conf_opt = [x for x in cmd if x.startswith("--config=")]
+                try:
+                    q = subprocess.run(cmd[:3] + ["--format", "json", *conf_opt, "-L", f], cwd=ctx.repo,
+                                       capture_output=True, text=True, timeout=900)
+                except subprocess.TimeoutExpired as e:
+                    raise RuntimeError(f"osv-scanner timed out reading {f}") from e
                 if q.returncode not in (0, 1):
                     raise RuntimeError(f"osv-scanner could not read changed dependency input {f}: "
                                        f"{(q.stderr or '').strip()[-200:]}")
