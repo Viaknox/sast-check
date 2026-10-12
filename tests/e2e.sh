@@ -551,6 +551,77 @@ if command -v trivy >/dev/null; then
   git checkout -q main
 fi
 
+# round-13: identical sinks with identical context; logical aliases; changed target of an old link;
+# symlinked settings; unreadable changed lockfile; CDN URL in docs
+git checkout -q -b r13 main
+cat > src/ctx.js <<'JS'
+app.get('/a', (req, res) => {
+  let v = req.query.v;
+  const p1 = 1;
+  const p2 = 2;
+  const p3 = 3;
+  res.send(String(eval(v)));
+});
+app.get('/b', (req, res) => {
+  let v = req.query.v;
+  v = Number(v);
+  const p1 = 1;
+  const p2 = 2;
+  const p3 = 3;
+  res.send(String(eval(v)));
+});
+JS
+mkdir -p vendor/root vendor/payload && printf 'eval(input())\n' > vendor/payload/vuln.py
+ln -s ../payload vendor/root/node_modules && ln -s ../payload vendor/root/src
+printf 'x = 1\n' > vendor/payload6.txt && ln -s ../vendor/payload6.txt src/vuln6.py
+git add src/ctx.js vendor src/vuln6.py && git commit -qm r13base
+cat > src/ctx.js <<'JS'
+app.get('/a', (req, res) => {
+  let v = req.query.v;
+  v = Number(v);
+  const p1 = 1;
+  const p2 = 2;
+  const p3 = 3;
+  res.send(String(eval(v)));
+});
+app.get('/b', (req, res) => {
+  let v = req.query.v;
+  const p1 = 1;
+  const p2 = 2;
+  const p3 = 3;
+  res.send(String(eval(v)));
+});
+JS
+ln -s vendor/root app
+printf 'eval(input())\n' > vendor/payload6.txt
+printf 'See [the incident](https://polyfill.io/) for background.\n' > NOTES.md
+git add src/ctx.js app vendor/payload6.txt NOTES.md && git commit -qm r13
+gate --mode diff --base HEAD~1 --only opengrep,ruff
+check "identical sinks, identical context: exposed one blocks" "$(q "[f['line'] for f in d['findings'] if f['path']=='src/ctx.js' and f['blocking']]")" "[14]"
+check "an excluded alias cannot hide another alias"       "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='app/src/vuln.py')")" "1"
+check "old link whose target changed is rescanned"        "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/vuln6.py')")" "1"
+check "a CDN URL in Markdown is not a finding"            "$(q "sum(1 for f in d['findings'] if f['path']=='NOTES.md')")" "0"
+printf '[policy]\nblock_on = ["critical"]\n' > cfg.toml && ln -sf cfg.toml .sast-check.toml && git add cfg.toml .sast-check.toml && git commit -qm cfglink
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "symlinked .sast-check.toml in a PR fails (exit 2)" "$code" "2"
+git checkout -q main
+if command -v osv-scanner >/dev/null; then
+  git checkout -q -b r13o main
+  printf 'requests==2.31.0\n' > requirements.txt && git add requirements.txt && git commit -qm obase
+  printf '{"lockfileVersion": 3, "packages": {\n' > package-lock.json && git add package-lock.json && git commit -qm obad
+  set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only osv >/dev/null 2>&1; code=$?; set -e
+  check "unreadable changed lockfile fails (exit 2)"      "$code" "2"
+  git checkout -q main
+fi
+
+# Opengrep refuses symlink targets: a linked JS file is scanned (as the link), not a scanner error
+git checkout -q -b r13j main
+mkdir -p vendor && printf "app.get('/l', (req, res) => { eval(req.query.l); });\n" > vendor/evil.js && git add vendor/evil.js && git commit -qm jbase
+ln -s ../vendor/evil.js src/evil-link.js && git add src/evil-link.js && git commit -qm jlink
+gate --mode diff --base HEAD~1 --only opengrep
+check "symlinked JS file is scanned by Opengrep"          "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/evil-link.js')")" "1"
+git checkout -q main
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks

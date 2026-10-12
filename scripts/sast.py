@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import difflib
 import fnmatch
 import json
 import os
@@ -289,6 +290,12 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
                 if (repo / f).is_file():
                     with open(repo / f, errors="ignore") as fh:
                         files[f] = set(range(1, sum(1 for _ in fh) + 1))
+    # an existing link whose target changed brings that change in under the link's path
+    # (src/vuln.py -> ../vendor/payload.txt, with only the excluded vendor/payload.txt in the diff)
+    for f in changed_aliases(repo, list(files)):
+        if f not in files and (repo / f).is_file():
+            with open(repo / f, errors="ignore") as fh:
+                files[f] = set(range(1, sum(1 for _ in fh) + 1))
     # untracked new files (local runs) count as fully changed
     for u in untracked_files(repo):
         for f in link_dir_files(repo, u) or [u]:
@@ -300,6 +307,22 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     return files
 
 
+def changed_aliases(repo: Path, changed: list[str]) -> list[str]:
+    """Paths that reach a changed file through a symlink (a file link, or a file under a directory link)."""
+    real = {(repo / f).resolve() for f in changed if (repo / f).exists()}
+    links = [e.split("\t", 1)[1] for e in git_z(repo, ["ls-files", "-z", "-s"]) if e.startswith("120000 ")]
+    links += [u for u in untracked_files(repo) if (repo / u).is_symlink()]
+    out = []
+    for link in links:
+        p = repo / link
+        if not p.is_symlink() or not in_repo(repo, p):
+            continue
+        for f in link_dir_files(repo, link) or [link]:
+            if (repo / f).resolve() in real and f not in changed:
+                out.append(f)
+    return out
+
+
 def in_repo(repo: Path, p: Path) -> bool:
     """True if p (symlinks resolved) is inside the repo's working tree and not in .git."""
     r = p.resolve()
@@ -309,28 +332,29 @@ def in_repo(repo: Path, p: Path) -> bool:
 def link_dir_files(repo: Path, path: str) -> list[str]:
     """Files under `path` when it is a symlink to a directory inside the repo (src/pkg -> ../vendor/pkg),
     named through the link: code reached through the link is code the PR brings in. Links nested inside
-    are followed too (vuln.py -> payload.txt, sub -> ../other), each directory once (no cycles); a link
-    leaving the repo or into .git gives nothing (never scan runner files)."""
+    are followed too (vuln.py -> payload.txt, sub -> ../other); every logical path is kept, and only a
+    directory already on the current path is skipped (a cycle). A link leaving the repo or into .git
+    gives nothing (never scan runner files)."""
     p = repo / path
     if not (p.is_symlink() and p.is_dir() and in_repo(repo, p)):
         return []
     out: list[str] = []
-    seen: set[Path] = set()
 
-    def walk(logical: str, real: Path) -> None:
-        if real in seen:
+    def walk(logical: str, real: Path, stack: frozenset[Path]) -> None:
+        if real in stack:                             # a cycle
             return
-        seen.add(real)
+        if len(out) > 100_000:                        # alias explosion: refuse rather than scan a subset
+            raise RuntimeError(f"symlinks under {path} expand to more than 100000 files")
         for e in sorted(os.scandir(real), key=lambda e: e.name):
             q = Path(e.path)
             if e.is_symlink() and not in_repo(repo, q):
                 continue
             if q.is_dir():
-                walk(f"{logical}/{e.name}", q.resolve())
+                walk(f"{logical}/{e.name}", q.resolve(), stack | {real})
             elif q.is_file():
                 out.append(f"{logical}/{e.name}")
 
-    walk(path, p.resolve())
+    walk(path, p.resolve(), frozenset())
     return out
 
 
@@ -371,19 +395,36 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
         cmd += ["--metrics=off"]
     for g in ctx.cfg["paths"]["exclude"]:
         cmd += ["--exclude", g]
-    p = sh(cmd + ["--"] + tg, ctx.repo, ok_codes=(0, 1))   # "--": a PR file named "--x" is never an option
-    data = json.loads(p.stdout or "{}")
-    errs = [e for e in data.get("errors", []) if e.get("level") == "error" and "Syntax error" not in str(e.get("type"))]
-    if errs:
-        raise RuntimeError(f"{len(errs)} engine errors: {str(errs[0])[:300]}")
+    # Opengrep refuses a symlink as a target ("File not found"), so a file reached through a link is scanned
+    # as a copy under its logical path in a temp mirror (paths, and so findings, stay the same)
+    root = ctx.repo.resolve()
+    linked = [f for f in tg if f != "." and (ctx.repo / f).resolve() != root / f]
+    direct = [f for f in tg if f not in linked]
+    results = []
+    with tempfile.TemporaryDirectory() as td:
+        for f in linked:
+            (Path(td) / f).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ctx.repo / f, Path(td) / f)
+        for cwd, files in ((ctx.repo, direct), (Path(td), linked)):
+            if not files:
+                continue
+            # "--": a PR file named "--x" is never an option. Exit 2 is parsed for its error list (its stderr
+            # holds only warnings); any exit 2 still fails.
+            p = sh(cmd + ["--"] + files, cwd, ok_codes=(0, 1, 2))
+            data = json.loads(p.stdout or "{}")
+            errs = [e for e in data.get("errors", []) if e.get("level") == "error"
+                    and "Syntax error" not in str(e.get("type"))]
+            if errs or p.returncode == 2:
+                raise RuntimeError(f"{len(errs)} engine errors (exit {p.returncode}): {str(errs[:1])[:300]}")
+            results += [(cwd, r) for r in data.get("results", [])]
     out = []
-    for r in data.get("results", []):
+    for cwd, r in results:
         md = r["extra"].get("metadata", {})
         rid = r["check_id"]
         rid = rid[rid.find("sast."):] if "sast." in rid else rid
         out.append(Finding(
             tool="opengrep", rule=rid, severity=md.get("sast_severity", "medium"),
-            confidence=md.get("confidence", "medium"), path=rel(ctx.repo, r["path"]),
+            confidence=md.get("confidence", "medium"), path=rel(cwd, r["path"]),
             line=r["start"]["line"], end_line=r["end"]["line"], message=" ".join(r["extra"]["message"].split()),
             fix=md.get("fix", ""), cwe=str(md.get("cwe", "")),
             url=(md.get("references") or [""])[0],
@@ -571,8 +612,9 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
             # by content: new, never-added files (local runs), rename/copy destinations and symlinks, because
             # a pure rename (vendor/key.py -> src/key.py) or a new link to a file has no added secret text
             # for the history scan to see
-            moved = [p for st, p in name_status(ctx.repo, ctx.base)
-                     if st[:1] in ("R", "C") or (ctx.repo / p).is_symlink()]
+            ns = name_status(ctx.repo, ctx.base)
+            moved = [p for st, p in ns if st[:1] in ("R", "C") or (ctx.repo / p).is_symlink()]
+            moved += changed_aliases(ctx.repo, [p for _, p in ns])
             scan = [f for p in untracked_files(ctx.repo) + moved for f in (link_dir_files(ctx.repo, p) or [p])]
             for f in sorted(set(scan)):
                 if glob_any(f, ctx.cfg["paths"]["exclude"]) or not (ctx.repo / f).is_file():
@@ -660,10 +702,11 @@ def gitleaks_findings(ctx: Ctx, reports: list[dict]) -> list[Finding]:
 def run_osv(ctx: Ctx) -> list[Finding]:
     if not shutil.which("osv-scanner"):
         raise FileNotFoundError("osv-scanner not installed")
-    if ctx.mode == "diff" and not any((Path(f).name in LOCKFILES or f.endswith(SBOM_SUFFIXES)
-                                       or (f.endswith(".txt") and "requirements" in Path(f).name))
-                                      and not glob_any(f, ctx.cfg["paths"]["exclude"])
-                                      for f in ctx.changed_files):
+    inputs = [f for f in ctx.changed_files
+              if (Path(f).name in LOCKFILES or f.endswith(SBOM_SUFFIXES)
+                  or (f.endswith(".txt") and "requirements" in Path(f).name))
+              and not glob_any(f, ctx.cfg["paths"]["exclude"])]
+    if ctx.mode == "diff" and not inputs:
         return []
     # 0 = clean, 1 = vulns found, 128 = no packages found
     with tempfile.TemporaryDirectory() as td:
@@ -674,6 +717,15 @@ def run_osv(ctx: Ctx) -> list[Finding]:
             conf.write_text(settings_file(ctx.repo, ctx.base, "osv-scanner.toml") or "")
             cmd.append(f"--config={conf}")
         p = sh(cmd + ["."], ctx.repo, ok_codes=(0, 1, 128))
+        if ctx.mode == "diff":
+            # each changed input must parse on its own: the repo-wide scan succeeds as long as ANY lockfile
+            # parses, which would hide a changed input OSV could not read (127 = extraction failed)
+            for f in inputs:
+                q = subprocess.run(cmd[:3] + ["--format", "json", *[x for x in cmd if x.startswith("--config=")], "-L", f], cwd=ctx.repo,
+                                   capture_output=True, text=True)
+                if q.returncode not in (0, 1):
+                    raise RuntimeError(f"osv-scanner could not read changed dependency input {f}: "
+                                       f"{(q.stderr or '').strip()[-200:]}")
     if p.returncode == 128 and ctx.mode == "diff":
         # a dependency manifest changed but OSV found no packages: unparseable or unsupported -> not a pass
         raise RuntimeError("osv-scanner found no packages although a dependency manifest changed")
@@ -849,13 +901,12 @@ BASELINE_SCANNERS = ("opengrep", "ruff")   # code scanners whose settings are ou
 
 def baseline_new(ctx: Ctx, findings: list[Finding], enabled: list[str]) -> set[int]:
     """id() of the code findings the PR created, by scanning the merge-base version of every
-    touched file with the same scanners and rules and comparing fingerprints (counted, so a second copy of
-    an existing sink is new). Catches findings created without touching the flagged line, e.g. a sanitizer
-    deleted several lines above an unchanged eval(). Raises on any failure: the caller fails closed."""
+    touched file with the same scanners and rules and matching findings by fingerprint and aligned line.
+    Catches findings created without touching the flagged line, e.g. a sanitizer deleted several lines
+    above an unchanged eval(). Raises on any failure: the caller fails closed."""
     names = [n for n in BASELINE_SCANNERS if n in enabled]
     if not names or not ctx.changed_files:
         return set()
-    bkeys: list[tuple[str, str, str]] = []
     mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
     src_of = {path: src for _, path, src in name_status_src(ctx.repo, ctx.base)}
     with tempfile.TemporaryDirectory() as td:
@@ -874,28 +925,28 @@ def baseline_new(ctx: Ctx, findings: list[Finding], enabled: list[str]) -> set[i
             for n in names:
                 base += SCANNERS[n](bctx)             # errors propagate: fail closed
             fingerprint(root, base)
-        # matched by fingerprint AND the lines just above the finding, so two identical sinks cannot trade
-        # places (one fixed, another made vulnerable) and cancel out
-        bkeys = [(b.path, b.fingerprint, context_key(root, b)) for b in base]
-    count: dict[tuple[str, str, str], int] = {}
-    for k in bkeys:
-        count[k] = count.get(k, 0) - 1
-    keys = {}
-    for f in findings:
-        if f.tool in names:
-            keys[id(f)] = k = (f.path, f.fingerprint, context_key(ctx.repo, f))
-            count[k] = count.get(k, 0) + 1
-    # more copies in the head than in the base: every copy counts as new (which one is new is ambiguous)
-    return {i for i, k in keys.items() if count[k] > 0}
+        # a head finding is old only if the base has the same finding (rule + fingerprint) on the base line
+        # that this head line came from (line alignment of the two file versions). Matching by location,
+        # not by count, means identical sinks cannot trade places (one fixed, another exposed) and cancel.
+        old: set[tuple[str, str, int]] = set()
+        for path in {b.path for b in base}:
+            line_map = aligned_lines(root / path, ctx.repo / path)
+            old |= {(path, b.fingerprint, line_map[b.line]) for b in base if b.path == path and b.line in line_map}
+    return {id(f) for f in findings if f.tool in names and (f.path, f.fingerprint, f.line) not in old}
 
 
-def context_key(repo: Path, f: Finding, n: int = 3) -> str:
-    """The n lines above a finding, whitespace-normalized: tells apart identical sinks at different places."""
+def aligned_lines(base_file: Path, head_file: Path) -> dict[int, int]:
+    """1-based base line -> head line, for lines the two versions share (difflib alignment). Lines that
+    changed have no entry, so a finding on them can never be matched to an old one."""
     try:
-        lines = (repo / f.path).read_text(errors="ignore").splitlines()
+        a = base_file.read_text(errors="ignore").split("\n")
+        b = head_file.read_text(errors="ignore").split("\n")
     except OSError:
-        return ""
-    return "\n".join(" ".join(x.split()) for x in lines[max(0, f.line - 1 - n):max(0, f.line - 1)])
+        return {}
+    out = {}
+    for blk in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
+        out.update({blk.a + k + 1: blk.b + k + 1 for k in range(blk.size)})
+    return out
 
 
 def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] = frozenset()) -> None:
@@ -1021,7 +1072,10 @@ def main(argv=None) -> int:
                              "base branch's version; the new settings take effect after merge.")
         # the proposed settings must be valid too: once merged, an invalid base config would fail every PR
         # (including the one that repairs it)
-        if not settings_error and ".sast-check.toml" in edited:
+        for n in edited:   # git stores a link as its target path: once merged, the base copy would be junk
+            if (repo / n).is_symlink():
+                ctx.runs.append(ToolRun("settings", "error", f"proposed {n} is a symlink; settings must be regular files"))
+        if not settings_error and ".sast-check.toml" in edited and not (repo / ".sast-check.toml").is_symlink():
             try:
                 load_config(settings_file(repo, None, ".sast-check.toml"))
             except (RuntimeError, tomllib.TOMLDecodeError) as e:

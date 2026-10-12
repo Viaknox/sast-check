@@ -2473,6 +2473,34 @@ rules:
     - https://www.censys.com/blog/july-2-polyfill-io-supply-chain-attack-digging-into-the-web-of-compromised-domains
     - https://cwe.mitre.org/data/definitions/829.html
   paths:
+    include:
+    - '*.html'
+    - '*.htm'
+    - '*.xhtml'
+    - '*.js'
+    - '*.mjs'
+    - '*.cjs'
+    - '*.jsx'
+    - '*.ts'
+    - '*.tsx'
+    - '*.vue'
+    - '*.svelte'
+    - '*.astro'
+    - '*.ejs'
+    - '*.hbs'
+    - '*.handlebars'
+    - '*.njk'
+    - '*.liquid'
+    - '*.twig'
+    - '*.jinja'
+    - '*.j2'
+    - '*.erb'
+    - '*.php'
+    - '*.jsp'
+    - '*.aspx'
+    - '*.cshtml'
+    - '*.css'
+    - '*.scss'
     exclude:
     - node_modules
   pattern-regex: (?i)(?<=[/."'`\s=(,])(?:[a-z0-9-]+\.)*(?:polyfill\.io|polyfill\.com|bsclink\.cn|bootcdn\.net|bootcss\.com|bootcss\.net|staticfile\.net|staticfile\.org)(?=[/"'`:\s?#),;<>\\]|$)
