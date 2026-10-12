@@ -1,0 +1,10 @@
+# Keeps the SHA-pinned actions (workflows + root action.yml) current. Tool versions pinned
+# inside action.yml (ruff, zizmor, gitleaks, osv-scanner, opengrep) are bumped by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

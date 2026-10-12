@@ -96,3 +96,11 @@ export class DirectAuth {
     return decode(token);
   }
 }
+
+export class TwoTokens {
+  swap(idToken: string, accessToken: string, key: string) {
+    jwt.verify(idToken, key, { algorithms: ['RS256'] });
+    // ruleid: sast.js.jwt-decode-unverified
+    return jwt.decode(accessToken);
+  }
+}

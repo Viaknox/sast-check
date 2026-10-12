@@ -3,6 +3,8 @@
 sast-check **downloads and runs** these tools; it does not copy or modify their code or rules.
 All custom rules in `rules/` are original work under this repo's MIT license.
 
+**LGPL-2.1 (Opengrep, Semgrep CE):** this repo ships no Opengrep or Semgrep code or binaries. The action fetches the unmodified upstream release at run time and calls it as a separate program, so nothing here is a derivative work and there is nothing to redistribute. If you ever vendor or bundle the binary, include its license text and offer its source as LGPL-2.1 §6 requires.
+
 | Tool | Version pinned | License | How it is obtained |
 |---|---|---|---|
 | [Opengrep](https://github.com/opengrep/opengrep) | v1.30.2 | LGPL-2.1 | release binary, Sigstore signature verified |
