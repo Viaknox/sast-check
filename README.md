@@ -7,7 +7,7 @@ It runs five open-source scanners, merges the results, and applies **one** polic
 
 | Scanner | Checks | License |
 |---|---|---|
-| **Opengrep** + 53 custom rules (this repo) | JS/TS, Python, GitHub Actions, Docker, K8s, Terraform | engine LGPL-2.1 (run as a tool) · rules MIT |
+| **Opengrep** + 53 custom rules (this repo) | JS/TS, Python, HTML, GitHub Actions, Docker, K8s, Terraform | engine LGPL-2.1 (run as a tool) · rules MIT |
 | **Ruff** `S` rules | Python | MIT |
 | **zizmor** | GitHub Actions workflows | MIT |
 | **gitleaks** | Secrets in the PR's commits | MIT |
@@ -70,7 +70,7 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 ## Known limits (v1)
 
 - **Runners:** Linux x64 only (the action stops with a clear error elsewhere).
-- **Languages:** JS/TS, Python, GitHub Actions, Dockerfiles, Kubernetes YAML, Terraform. Anything else is not scanned by custom rules.
+- **Languages:** JS/TS, Python, HTML (inline scripts and script sources), GitHub Actions, Dockerfiles, Kubernetes YAML, Terraform. Anything else is not scanned by custom rules.
 - **Secrets** (gitleaks) are always critical and block when they appear in the PR's commits, staged or untracked files.
 - **Dependencies** (osv-scanner) warn only by default; set `[deps] block = true` to let critical CVEs (CVSS ≥ 9) in changed lockfiles block.
 - **Prototype pollution** through `Array.prototype.reduce` merge helpers is not caught: Semgrep and Opengrep disagree on that pattern, so it was left out rather than ship an engine-specific rule.
