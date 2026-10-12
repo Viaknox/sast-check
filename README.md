@@ -25,7 +25,7 @@ Each PR gets one sticky comment and a job summary. Fork PRs get the summary only
 
 ## Tune it — `.sast-check.toml` in your repo root
 
-Changes to this file take effect **after they are merged**. PRs are always checked with the base branch's settings.
+Changes to this file take effect **after they are merged**. PRs are always checked with the base branch's settings. A PR that changes this file must still leave it valid, or the check fails (an invalid file would otherwise break every later PR).
 
 ```toml
 [policy]
@@ -86,7 +86,7 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **Dependency settings:** on PRs, only the base branch's root `osv-scanner.toml` is used; per-directory `osv-scanner.toml` files are ignored.
 - **Inline markers** are found line by line: a quote earlier on the line (e.g. `msg: don't # sast-ignore[...]` in YAML) hides the marker, so the finding still blocks. Put the marker on its own line above instead. A line inside a multi-line string that starts with `# sast-ignore[...]` is read as a comment; every suppression is listed with its reason in the report, so reviewers see it.
 - **Moved files:** a renamed, copied or symlinked file counts as fully changed, so moving a file can surface its old findings as new.
-- **What counts as new (diff scope):** a finding on a changed line, or (Opengrep and Ruff) a finding that the base branch's version of the file does not have. The base version of every touched file is scanned with the same rules and findings are compared by fingerprint, so deleting a sanitizer several lines above an unchanged `eval()` still blocks. For zizmor and Trivy, a deletion counts when the finding's lines span the cut (e.g. the `aws_ami` block that lost `owners`).
+- **What counts as new (diff scope):** a finding on a changed line, or (Opengrep and Ruff) a finding that the base branch's version of the file does not have. The base version of every touched file is scanned with the same rules and findings are compared by fingerprint plus the three lines above them, so deleting a sanitizer several lines above an unchanged `eval()` still blocks. For zizmor and Trivy, a deletion counts when the finding's lines span the cut (e.g. the `aws_ami` block that lost `owners`).
 - **gitleaks `[extend] path`:** on PR scans a base `.gitleaks.toml` may use `[extend] useDefault = true` but not `[extend] path` (gitleaks would read that file from the PR's checkout); the check reports a settings error. Copy the extended rules into `.gitleaks.toml`.
 - **zizmor exceptions** go in `[[ignore]]` in `.sast-check.toml` (zizmor ignore rules and comments are not honored).
 

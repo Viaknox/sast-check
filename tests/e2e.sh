@@ -450,7 +450,7 @@ sed -i '/v = Number(v);/d' src/two.js     # same sink text as an existing findin
 git add src/san.js src/two.js && git commit -qm r11
 gate --mode diff --base HEAD~1 --only opengrep
 check "deleting a distant sanitizer blocks (base compare)" "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/san.js')")" "1"
-check "second copy of an existing finding is new (counted)" "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/two.js')")" "2"
+check "identical sink text: only the newly exposed one blocks" "$(q "[f['line'] for f in d['findings'] if f['path']=='src/two.js' and f['blocking']]")" "[8]"
 printf 'const pad = 3;\n' >> src/san.js && git commit -qam r11b
 gate --mode diff --base HEAD~1 --only opengrep
 check "unrelated edit: old finding stays pre-existing"     "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/san.js')")" "0"
@@ -480,6 +480,76 @@ echo 'K12 = "AKIAIOSFODNN7ABCDEFG"' > src/k12.cfg && git add src/k12.cfg && git 
 gate --mode diff --base HEAD~1 --only gitleaks
 check "failing textconv cannot hide a secret"              "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/k12.cfg')")" "1"
 git config --unset diff.broken.textconv; git checkout -q main
+
+# round-12: nested links; identical sinks trading places; oversized file; invalid proposed settings;
+# deletions inside zizmor / Trivy findings
+git checkout -q -b r12 main
+mkdir -p vendor/npkg && printf 'eval(input())\n' > vendor/npkg/payload.txt
+ln -s payload.txt vendor/npkg/vuln.py && ln -s ../vendor/npkg src/npkg
+cat > src/swap.js <<'JS'
+app.get('/a', (req, res) => {
+  let v = req.query.v;
+  res.send(String(eval(v)));
+});
+app.get('/b', (req, res) => {
+  let v = req.query.v;
+  v = Number(v);
+  const p1 = 1;
+  const p2 = 2;
+  const p3 = 3;
+  res.send(String(eval(v)));
+});
+JS
+git add vendor/npkg src/npkg src/swap.js && git commit -qm r12base
+# route a gets the sanitizer, route b loses it: one finding before, one after, same sink text
+cat > src/swap.js <<'JS'
+app.get('/a', (req, res) => {
+  let v = req.query.v;
+  v = Number(v);
+  res.send(String(eval(v)));
+});
+app.get('/b', (req, res) => {
+  let v = req.query.v;
+  const p1 = 1;
+  const p2 = 2;
+  const p3 = 3;
+  res.send(String(eval(v)));
+});
+JS
+python3 -I -c 'open("src/big.js", "w").write("// " + "x" * 1100000 + "\napp.get(\"/big\", (req, res) => { eval(req.query.b); });\n")'
+git add src/swap.js src/big.js && git commit -qm r12
+gate --mode diff --base HEAD~1 --only opengrep
+check "identical sinks trading places: the new one blocks" "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/swap.js')")" "1"
+gate --mode full --only opengrep   # a directory scan applies Opengrep's size cutoff (explicit targets do not)
+check "full scan: file over 1 MB is still scanned"         "$(q "int(any(f['path']=='src/big.js' for f in d['findings']))")" "1"
+git checkout -q -b r12n main
+mkdir -p vendor/npkg && printf 'eval(input())\n' > vendor/npkg/payload.txt && ln -s payload.txt vendor/npkg/vuln.py
+git add vendor/npkg && git commit -qm nbase
+ln -s ../vendor/npkg src/npkg && git add src/npkg && git commit -qm nlink
+gate --mode diff --base HEAD~1 --only ruff
+check "link inside a linked dir is followed"               "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/npkg/vuln.py')")" "1"
+printf '[policy]\nblock_on = ["hgih"]\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm badcfg
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "invalid proposed settings fail the PR (exit 2)"     "$code" "2"
+git checkout -q main
+if command -v zizmor >/dev/null; then
+  git checkout -q -b r12z main && mkdir -p .github/workflows
+  printf 'on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0\n        with:\n          persist-credentials: false\n      - run: echo\n' > .github/workflows/del.yml
+  git add .github/workflows/del.yml && git commit -qm zdbase
+  sed -i '/with:/d; /persist-credentials/d' .github/workflows/del.yml && git commit -qam zd
+  gate --mode diff --base HEAD~1 --only zizmor
+  check "zizmor: deleting persist-credentials counts as new" "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='zizmor.artipacked']")" "[True]"
+  git checkout -q main
+fi
+if command -v trivy >/dev/null; then
+  git checkout -q -b r12t main
+  printf 'resource "aws_security_group_rule" "r" {\n  type              = "ingress"\n  description       = "ssh from office"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = ["10.0.0.0/8"]\n  security_group_id = "sg-1"\n}\n' > sgd.tf
+  git add sgd.tf && git commit -qm tdbase
+  sed -i '/description/d' sgd.tf && git commit -qam td
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: deleting a line inside a resource counts"  "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0124']")" "[True]"
+  git checkout -q main
+fi
 
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean

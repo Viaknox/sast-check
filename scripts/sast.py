@@ -308,15 +308,30 @@ def in_repo(repo: Path, p: Path) -> bool:
 
 def link_dir_files(repo: Path, path: str) -> list[str]:
     """Files under `path` when it is a symlink to a directory inside the repo (src/pkg -> ../vendor/pkg),
-    named through the link: code reached through the link is code the PR brings in. Links inside it are
-    not followed; a link leaving the repo gives nothing (never scan runner files)."""
+    named through the link: code reached through the link is code the PR brings in. Links nested inside
+    are followed too (vuln.py -> payload.txt, sub -> ../other), each directory once (no cycles); a link
+    leaving the repo or into .git gives nothing (never scan runner files)."""
     p = repo / path
     if not (p.is_symlink() and p.is_dir() and in_repo(repo, p)):
         return []
-    out = []
-    for d, _, names in os.walk(p):   # os.walk follows the top link only
-        out += [(Path(d) / n).relative_to(repo).as_posix() for n in names if not (Path(d) / n).is_symlink()]
-    return sorted(out)
+    out: list[str] = []
+    seen: set[Path] = set()
+
+    def walk(logical: str, real: Path) -> None:
+        if real in seen:
+            return
+        seen.add(real)
+        for e in sorted(os.scandir(real), key=lambda e: e.name):
+            q = Path(e.path)
+            if e.is_symlink() and not in_repo(repo, q):
+                continue
+            if q.is_dir():
+                walk(f"{logical}/{e.name}", q.resolve())
+            elif q.is_file():
+                out.append(f"{logical}/{e.name}")
+
+    walk(path, p.resolve())
+    return out
 
 
 # ---------------------------------------------------------------- scanners
@@ -346,8 +361,10 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
         return []
     # --disable-nosem: a PR's `// nosemgrep` comment must not hide a finding (only sast-ignore with a reason)
     # --x-ignore-semgrepignore-files: a PR's .semgrepignore/.opengrepignore must not hide files (full scans pass ".")
+    # --max-target-bytes=0: no size cutoff; an oversized file would otherwise be skipped silently (excluded
+    # paths such as dist/ and *.min.js are still never scanned)
     cmd = [engine, "scan", "--config", str(rules), "--json", "--quiet", "--disable-version-check", "--disable-nosem",
-           "--x-ignore-semgrepignore-files"]
+           "--x-ignore-semgrepignore-files", "--max-target-bytes=0"]
     if Path(engine).name == "opengrep":
         cmd.append("--taint-intrafile")
     else:
@@ -830,14 +847,15 @@ def fingerprint(repo: Path, findings: list[Finding]) -> None:
 BASELINE_SCANNERS = ("opengrep", "ruff")   # code scanners whose settings are ours, not the repo's
 
 
-def baseline_new(ctx: Ctx, findings: list[Finding], enabled: list[str]) -> set[tuple[str, str]]:
-    """(path, fingerprint) of code findings the PR created, by scanning the merge-base version of every
+def baseline_new(ctx: Ctx, findings: list[Finding], enabled: list[str]) -> set[int]:
+    """id() of the code findings the PR created, by scanning the merge-base version of every
     touched file with the same scanners and rules and comparing fingerprints (counted, so a second copy of
     an existing sink is new). Catches findings created without touching the flagged line, e.g. a sanitizer
     deleted several lines above an unchanged eval(). Raises on any failure: the caller fails closed."""
     names = [n for n in BASELINE_SCANNERS if n in enabled]
     if not names or not ctx.changed_files:
         return set()
+    bkeys: list[tuple[str, str, str]] = []
     mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
     src_of = {path: src for _, path, src in name_status_src(ctx.repo, ctx.base)}
     with tempfile.TemporaryDirectory() as td:
@@ -856,17 +874,33 @@ def baseline_new(ctx: Ctx, findings: list[Finding], enabled: list[str]) -> set[t
             for n in names:
                 base += SCANNERS[n](bctx)             # errors propagate: fail closed
             fingerprint(root, base)
-    count: dict[tuple[str, str], int] = {}
-    for b in base:
-        count[b.path, b.fingerprint] = count.get((b.path, b.fingerprint), 0) - 1
+        # matched by fingerprint AND the lines just above the finding, so two identical sinks cannot trade
+        # places (one fixed, another made vulnerable) and cancel out
+        bkeys = [(b.path, b.fingerprint, context_key(root, b)) for b in base]
+    count: dict[tuple[str, str, str], int] = {}
+    for k in bkeys:
+        count[k] = count.get(k, 0) - 1
+    keys = {}
     for f in findings:
         if f.tool in names:
-            count[f.path, f.fingerprint] = count.get((f.path, f.fingerprint), 0) + 1
+            keys[id(f)] = k = (f.path, f.fingerprint, context_key(ctx.repo, f))
+            count[k] = count.get(k, 0) + 1
     # more copies in the head than in the base: every copy counts as new (which one is new is ambiguous)
-    return {k for k, v in count.items() if v > 0}
+    return {i for i, k in keys.items() if count[k] > 0}
 
 
-def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[tuple[str, str]] = frozenset()) -> None:
+def context_key(repo: Path, f: Finding, n: int = 3) -> str:
+    """The n lines above a finding, whitespace-normalized: tells apart identical sinks at different places."""
+    try:
+        lines = (repo / f.path).read_text(errors="ignore").splitlines()
+    except OSError:
+        return ""
+    return "\n".join(" ".join(x.split()) for x in lines[max(0, f.line - 1 - n):max(0, f.line - 1)])
+
+
+def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] = frozenset()) -> None:
+    """Decide in_diff, suppression and blocking per finding. new_by_base: id() of findings the base
+    comparison found new (they count as in the diff even when no flagged line changed)."""
     from datetime import date
     today = date.today().isoformat()
     pol = ctx.cfg["policy"]
@@ -875,7 +909,7 @@ def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[tuple[str, 
         if ctx.mode == "diff" and f.kind in ("code", "config"):
             changed = ctx.changed_lines.get(f.path, set())
             f.in_diff = (any(n in changed for n in range(f.line, max(f.end_line, f.line) + 1))
-                         or (f.path, f.fingerprint) in new_by_base)
+                         or id(f) in new_by_base)
         elif ctx.mode == "diff" and f.kind == "dependency":
             f.in_diff = f.path in ctx.changed_files
         f.suppressed = inline_suppression(ctx.repo, f) or config_suppression(ctx.cfg, f, today)
@@ -985,6 +1019,19 @@ def main(argv=None) -> int:
         if edited:
             ctx.notes.append("This change edits " + ", ".join(f"`{n}`" for n in edited) + ". The check used the "
                              "base branch's version; the new settings take effect after merge.")
+        # the proposed settings must be valid too: once merged, an invalid base config would fail every PR
+        # (including the one that repairs it)
+        if not settings_error and ".sast-check.toml" in edited:
+            try:
+                load_config(settings_file(repo, None, ".sast-check.toml"))
+            except (RuntimeError, tomllib.TOMLDecodeError) as e:
+                ctx.runs.append(ToolRun("settings", "error", f"proposed .sast-check.toml is invalid: {str(e)[:250]}"))
+        if not settings_error and ".gitleaks.toml" in edited and (gl := settings_file(repo, None, ".gitleaks.toml")):
+            try:
+                if tomllib.loads(gl).get("extend", {}).get("path"):
+                    raise RuntimeError("[extend] path is not supported on PR scans")
+            except (RuntimeError, tomllib.TOMLDecodeError) as e:
+                ctx.runs.append(ToolRun("settings", "error", f"proposed .gitleaks.toml is invalid: {str(e)[:250]}"))
     enabled = a.only.split(",") if a.only else [k for k, v in cfg["tools"].items() if v]
     if settings_error:
         enabled = []                           # cannot trust the settings: report the error (fail closed)
@@ -1011,7 +1058,7 @@ def main(argv=None) -> int:
             ctx.runs.append(ToolRun(name, "error", str(e)[:400]))
 
     fingerprint(repo, findings)
-    new_by_base: set[tuple[str, str]] = set()
+    new_by_base: set[int] = set()
     if mode == "diff" and a.base and enabled:
         try:
             new_by_base = baseline_new(ctx, findings, enabled)
