@@ -9,7 +9,7 @@ It runs five open-source scanners, merges the results, and applies **one** polic
 |---|---|---|
 | **Opengrep** + 54 custom rules (this repo) | JS/TS, Python, HTML, GitHub Actions, Docker, K8s, Terraform | engine LGPL-2.1 (run as a tool) · rules MIT |
 | **Ruff** `S` rules | Python | MIT |
-| **zizmor** | GitHub Actions workflows | MIT |
+| **zizmor** | GitHub Actions workflows, Dependabot config | MIT |
 | **gitleaks** | Secrets in the PR's commits | MIT |
 | **osv-scanner** | Known-vulnerable dependencies | Apache-2.0 |
 

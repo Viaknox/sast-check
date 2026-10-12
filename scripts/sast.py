@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import tomllib
 from dataclasses import dataclass, field, asdict
@@ -146,8 +147,11 @@ def deep_merge(a: dict, b: dict) -> dict:
 
 # Settings files a PR must not be able to change for its own scan. With a base ref (a PR), each is read
 # from the base branch; a PR's change to one takes effect once it is merged.
-SETTINGS_FILES = (".sast-check.toml", ".gitleaks.toml", ".gitleaksignore", "zizmor.yml", ".github/zizmor.yml",
+# zizmor's discovery order (docs/configuration.md, v1.30.1): .github/ first, .yml before .yaml
+ZIZMOR_CONFIGS = (".github/zizmor.yml", ".github/zizmor.yaml", "zizmor.yml", "zizmor.yaml")
+SETTINGS_FILES = (".sast-check.toml", ".gitleaks.toml", ".gitleaksignore", *ZIZMOR_CONFIGS,
                   "osv-scanner.toml", "trivy.yaml", ".trivyignore")
+DEPENDABOT = (".github/dependabot.yml", ".github/dependabot.yaml")
 
 
 def settings_file(repo: Path, base: str | None, name: str) -> str | None:
@@ -437,9 +441,10 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
         raise FileNotFoundError("zizmor not installed")
     if ctx.mode == "diff":
         tg = [f for f in targets(ctx, (".yml", ".yaml"))
-              if f.startswith(".github/workflows/") or Path(f).name in ("action.yml", "action.yaml")]
+              if f.startswith(".github/workflows/") or Path(f).name in ("action.yml", "action.yaml") or f in DEPENDABOT]
     else:
-        specs = ["--", ".github/workflows/*.yml", ".github/workflows/*.yaml", ":(glob)**/action.yml", ":(glob)**/action.yaml"]
+        specs = ["--", ".github/workflows/*.yml", ".github/workflows/*.yaml", ":(glob)**/action.yml", ":(glob)**/action.yaml",
+                 *DEPENDABOT]
         tracked = (git_z(ctx.repo, ["ls-files", "-z"] + specs)                                    # committed
                    + git_z(ctx.repo, ["ls-files", "-z", "--others", "--exclude-standard"] + specs))  # new, local runs
         tg = sorted({f for f in tracked if f and not glob_any(f, ctx.cfg["paths"]["exclude"])})
@@ -447,12 +452,14 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
         return []
     online = bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
     # --no-ignores: a PR's `# zizmor: ignore[...]` must not hide a finding (only sast-ignore with a reason)
-    cmd = ["zizmor", "--format", "json", "--no-progress", "--no-ignores"] + ([] if online else ["--offline"])
+    # --strict-collection: a file zizmor cannot parse is an error, not a silently skipped input
+    cmd = ["zizmor", "--format", "json", "--no-progress", "--no-ignores", "--strict-collection"] + (
+        [] if online else ["--offline"])
     with tempfile.TemporaryDirectory() as td:
         if ctx.base:   # PR scans: the base branch's zizmor config only (a PR's could switch audits off)
-            conf = (settings_file(ctx.repo, ctx.base, "zizmor.yml")
-                    or settings_file(ctx.repo, ctx.base, ".github/zizmor.yml"))
-            if conf is None:
+            conf = next((c for c in (settings_file(ctx.repo, ctx.base, n) for n in ZIZMOR_CONFIGS) if c is not None),
+                        None)
+            if conf is None or not conf.strip():   # none, or an empty file: zizmor defaults
                 cmd.append("--no-config")
             else:
                 (Path(td) / "zizmor.yml").write_text(conf)
@@ -486,6 +493,7 @@ def zizmor_scan(ctx: Ctx, cmd: list[str], tg: list[str], online: bool) -> list[F
             tool="zizmor", rule=f"zizmor.{r['ident']}", severity=sev,
             confidence=det["confidence"].lower().replace("unknown", "low"),
             path=rel(ctx.repo, path), line=loc["concrete"]["location"]["start_point"]["row"] + 1,
+            end_line=loc["concrete"]["location"].get("end_point", {}).get("row", -1) + 1,
             message=f"{r['desc']}: {loc['symbolic'].get('annotation', '')}".strip(": "),
             url=r.get("url", ""), kind="config", cwe=ZIZMOR_CWE.get(r["ident"], "CWE-710"),
         ))
@@ -637,13 +645,23 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
                 (work / r).parent.mkdir(parents=True, exist_ok=True)
                 (work / r).write_bytes(TRIVY_INLINE_RE.sub(rb"\1_ignore", src.read_bytes()))
         work.mkdir(exist_ok=True)
-        cmd = ["trivy", "config", "--quiet", "--format", "json"]
+        cmd, cwd = ["trivy", "config", "--quiet", "--format", "json"], work
         if ctx.base:   # PR scans: the base branch's trivy.yaml / .trivyignore, never the PR's
             conf, ign = Path(td) / "trivy.yaml", Path(td) / "trivyignore"
             conf.write_text(settings_file(ctx.repo, ctx.base, "trivy.yaml") or "")
             ign.write_text(settings_file(ctx.repo, ctx.base, ".trivyignore") or "")
             cmd += ["--config", str(conf), "--ignorefile", str(ign)]
-        p = sh(cmd + ["."], work)
+            # Trivy resolves relative paths in its config (custom checks, data, ignore policy) from the
+            # working directory: run it inside a snapshot of the base tree so those files are the base's too
+            cwd = Path(td) / "base"
+            cwd.mkdir()
+            arc = subprocess.Popen(["git", "archive", "--format=tar", f"{ctx.base}^{{commit}}"], cwd=ctx.repo,
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            with tarfile.open(fileobj=arc.stdout, mode="r|") as t:
+                t.extractall(cwd, filter="data")
+            if arc.wait() != 0:
+                raise RuntimeError(f"git archive {ctx.base} failed")
+        p = sh(cmd + [str(work)], cwd)
     out = []
     for res in json.loads(p.stdout or "{}").get("Results", []) or []:
         if glob_any(res["Target"], ctx.cfg["paths"]["exclude"]):   # excluded paths are never scanned

@@ -76,7 +76,7 @@ All `S` rules run. Severity overrides (others default to low):
 
 ## GitHub Actions — zizmor (MIT)
 
-All default audits run; severity = zizmor's own, except `known-vulnerable-actions` → critical. Key ones: `template-injection`, `unpinned-uses`, `dangerous-triggers`, `excessive-permissions`, `artipacked`, `use-trusted-publishing`, `known-vulnerable-actions` (online, uses the job token).
+All default audits run; severity = zizmor's own, except `known-vulnerable-actions` → critical. Key ones: `template-injection`, `unpinned-uses`, `dangerous-triggers`, `excessive-permissions`, `artipacked`, `use-trusted-publishing`, `known-vulnerable-actions` (online, uses the job token). Also audits `.github/dependabot.yml` (e.g. `dependabot-execution`). On PRs the base branch's zizmor config is used (`.github/zizmor.yml`, `.github/zizmor.yaml`, `zizmor.yml`, `zizmor.yaml`, in zizmor's own order); a workflow zizmor cannot parse fails the check.
 
 ## Secrets — gitleaks (MIT)
 
@@ -89,7 +89,7 @@ Runs when a lockfile changes. Severity from CVSS (≥9 critical, ≥7 high, ≥4
 ## Optional — Trivy (Apache-2.0)
 
 `[tools] trivy = true` adds deep Docker/Terraform/K8s misconfiguration checks (install trivy yourself).
-On PRs it uses the base branch's `trivy.yaml` and `.trivyignore`; inline `trivy:ignore` / `tfsec:ignore` comments are not honored (use `sast-ignore` or `[[ignore]]`). Findings carry Trivy's full line range, so a change inside a resource counts.
+On PRs it uses the base branch's `trivy.yaml` and `.trivyignore`; inline `trivy:ignore` / `tfsec:ignore` comments are not honored (use `sast-ignore` or `[[ignore]]`). Findings carry Trivy's full line range, so a change inside a resource counts. On PRs Trivy runs from a snapshot of the base tree, so files the base `trivy.yaml` points to (custom checks, data, tfvars) are the base's, not the PR's.
 
 ## Not in v1
 

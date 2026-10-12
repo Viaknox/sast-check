@@ -360,6 +360,39 @@ check "base gitleaks [extend] path fails closed (exit 2)" "$code" "2"
 check "...and says why"                                   "$(q "int(any(r['name']=='gitleaks' and 'extend' in r['detail'] for r in d['runs']))")" "1"
 git checkout -q main
 
+# round-8: zizmor .yaml config names, Dependabot config, multi-line ranges, unparseable workflow;
+# Trivy config files referenced from the base trivy.yaml
+if command -v zizmor >/dev/null; then
+  git checkout -q -b r8 main
+  mkdir -p .github/workflows
+  printf 'rules:\n  forbidden-uses:\n    config:\n      deny: ["evil-org/*"]\n' > .github/zizmor.yaml
+  printf 'on: push\npermissions: {}\njobs:\n  b:\n    runs-on: ubuntu-latest\n    container:\n      image: foo@sha256:0000000000000000000000000000000000000000000000000000000000000000\n      credentials:\n        username: u\n        password: ${{ secrets.P }}\n    steps:\n      - run: echo\n' > .github/workflows/co.yml
+  git add .github/zizmor.yaml .github/workflows/co.yml && git commit -qm r8base
+  printf 'on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: evil-org/x@08eba0b27e820071cde6df949e0beb9ba4906955\n' > .github/workflows/ev.yml
+  sed -i 's/password: .*/password: hunter2/' .github/workflows/co.yml
+  printf 'version: 2\nupdates:\n  - package-ecosystem: pip\n    directory: /\n    schedule: {interval: weekly}\n    insecure-external-code-execution: allow\n' > .github/dependabot.yml
+  git add .github/workflows/ev.yml .github/workflows/co.yml .github/dependabot.yml && git commit -qm r8
+  gate --mode diff --base HEAD~1 --only zizmor
+  check "base .github/zizmor.yaml is honored"             "$(q "int(any(f['rule']=='zizmor.forbidden-uses' for f in d['findings']))")" "1"
+  check "changed dependabot.yml is audited"               "$(q "int(any(f['rule']=='zizmor.dependabot-execution' for f in d['findings']))")" "1"
+  check "zizmor multi-line finding counts as new"         "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='zizmor.hardcoded-container-credentials']")" "[True]"
+  printf 'on: [no_such_event]\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n' > .github/workflows/bad.yml
+  git add .github/workflows/bad.yml && git commit -qm bad
+  set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only zizmor >/dev/null 2>&1; code=$?; set -e
+  check "workflow zizmor cannot parse fails closed"       "$code" "2"
+  git checkout -q main
+fi
+if command -v trivy >/dev/null; then
+  git checkout -q -b r8t main
+  printf 'variable "cidr" {\n  default = "10.0.0.0/8"\n}\nresource "aws_security_group_rule" "r" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = [var.cidr]\n  security_group_id = "sg-1"\n}\n' > sgv.tf
+  printf 'cidr = "0.0.0.0/0"\n' > prod.tfvars && printf 'misconfiguration:\n  terraform:\n    vars:\n      - prod.tfvars\n' > trivy.yaml
+  git add sgv.tf prod.tfvars trivy.yaml && git commit -qm tvbase
+  printf 'cidr = "10.0.0.0/8"\n' > prod.tfvars && git add prod.tfvars && git commit -qm tvpr
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: files the base trivy.yaml names come from base" "$(q "int(any(f['rule']=='trivy.AWS-0107' for f in d['findings']))")" "1"
+  git checkout -q main
+fi
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks
