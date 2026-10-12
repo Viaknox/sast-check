@@ -386,12 +386,26 @@ if command -v trivy >/dev/null; then
   git checkout -q -b r8t main
   printf 'variable "cidr" {\n  default = "10.0.0.0/8"\n}\nresource "aws_security_group_rule" "r" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = [var.cidr]\n  security_group_id = "sg-1"\n}\n' > sgv.tf
   printf 'cidr = "0.0.0.0/0"\n' > prod.tfvars && printf 'misconfiguration:\n  terraform:\n    vars:\n      - prod.tfvars\n' > trivy.yaml
-  git add sgv.tf prod.tfvars trivy.yaml && git commit -qm tvbase
+  ln -s /etc/hostname abs.lnk   # a base symlink leaving the tree must not break the base snapshot
+  git add sgv.tf prod.tfvars trivy.yaml abs.lnk && git commit -qm tvbase
   printf 'cidr = "10.0.0.0/8"\n' > prod.tfvars && git add prod.tfvars && git commit -qm tvpr
   gate --mode diff --base HEAD~1 --only trivy
   check "trivy: files the base trivy.yaml names come from base" "$(q "int(any(f['rule']=='trivy.AWS-0107' for f in d['findings']))")" "1"
   git checkout -q main
 fi
+
+# round-9: a new symlink to a secret file; `-diff` cannot hide a secret from history; zizmor span ending at col 0
+git checkout -q -b r9 main
+mkdir -p vendor && echo 'K9 = "AKIAIOSFODNN7ABCDEFG"' > vendor/key9.py && git add vendor/key9.py && git commit -qm r9base
+ln -s ../vendor/key9.py src/key9.py && printf '*.py -diff\n' > .gitattributes && echo 'K10 = "AKIAIOSFODNN7ABCDEFH"' > src/k10.py
+git add src/key9.py .gitattributes src/k10.py && git commit -qm r9
+gate --mode diff --base HEAD~1 --only gitleaks
+check "new symlink to a secret file blocks (link path)"   "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/key9.py')")" "1"
+check "-diff in .gitattributes cannot hide a secret"      "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/k10.py')")" "1"
+check "zizmor span ending at column 0 excludes that row" "$(python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import sast
+print(sast.zizmor_end_line({'start_point': {'row': 2, 'column': 2}, 'end_point': {'row': 6, 'column': 0}}),
+      sast.zizmor_end_line({'start_point': {'row': 2, 'column': 2}, 'end_point': {'row': 5, 'column': 17}}))" "$HERE/scripts")" "6 6"
+git checkout -q main
 
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean

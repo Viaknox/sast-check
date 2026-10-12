@@ -467,6 +467,15 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
         return zizmor_scan(ctx, cmd, tg, online)
 
 
+def zizmor_end_line(loc: dict) -> int:
+    """1-based last line of a zizmor span; an end at column 0 stops before that row (0 = no end point)."""
+    end = loc.get("end_point")
+    if not end:
+        return 0
+    row = end["row"] - (1 if end.get("column") == 0 and end["row"] > loc["start_point"]["row"] else 0)
+    return row + 1
+
+
 def zizmor_scan(ctx: Ctx, cmd: list[str], tg: list[str], online: bool) -> list[Finding]:
     """Run zizmor (online, falling back to offline) and turn its results into findings."""
     # zizmor exit codes 10-14 mean "findings present"
@@ -493,7 +502,7 @@ def zizmor_scan(ctx: Ctx, cmd: list[str], tg: list[str], online: bool) -> list[F
             tool="zizmor", rule=f"zizmor.{r['ident']}", severity=sev,
             confidence=det["confidence"].lower().replace("unknown", "low"),
             path=rel(ctx.repo, path), line=loc["concrete"]["location"]["start_point"]["row"] + 1,
-            end_line=loc["concrete"]["location"].get("end_point", {}).get("row", -1) + 1,
+            end_line=zizmor_end_line(loc["concrete"]["location"]),
             message=f"{r['desc']}: {loc['symbolic'].get('annotation', '')}".strip(": "),
             url=r.get("url", ""), kind="config", cwe=ZIZMOR_CWE.get(r["ident"], "CWE-710"),
         ))
@@ -505,22 +514,34 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
         raise FileNotFoundError("gitleaks not installed")
     reports = []
     with tempfile.TemporaryDirectory() as td:
-        runs = []
+        runs, alias = [], {}
         if ctx.mode == "diff":
             mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
-            runs.append(["gitleaks", "git", f"--log-opts={mb}..HEAD"])          # the PR's commits
+            # --text: a PR's `*.py -diff` in .gitattributes must not turn its patches into "Binary files differ"
+            runs.append(["gitleaks", "git", f"--log-opts=--text {mb}..HEAD"])   # the PR's commits
             runs.append(["gitleaks", "git", "--pre-commit"])                    # unstaged (local runs)
             runs.append(["gitleaks", "git", "--pre-commit", "--staged"])        # staged (local runs)
-            # by content: new, never-added files (local runs), and rename/copy destinations, because a pure
-            # rename (vendor/key.py -> src/key.py) has no added lines for the history scan to see
-            moved = [p for st, p in name_status(ctx.repo, ctx.base) if st[:1] in ("R", "C")]
-            runs += [["gitleaks", "dir", "--", f] for f in sorted(set(untracked_files(ctx.repo) + moved))
-                     if not glob_any(f, ctx.cfg["paths"]["exclude"]) and (ctx.repo / f).is_file()]
+            # by content: new, never-added files (local runs), rename/copy destinations and symlinks, because
+            # a pure rename (vendor/key.py -> src/key.py) or a new link to a file has no added secret text
+            # for the history scan to see
+            moved = [p for st, p in name_status(ctx.repo, ctx.base)
+                     if st[:1] in ("R", "C") or (ctx.repo / p).is_symlink()]
+            for f in sorted(set(untracked_files(ctx.repo) + moved)):
+                if glob_any(f, ctx.cfg["paths"]["exclude"]) or not (ctx.repo / f).is_file():
+                    continue
+                if (ctx.repo / f).is_symlink():
+                    # scan the target only inside the repo (never runner files), reported under the link's path
+                    if not (ctx.repo / f).resolve().is_relative_to(ctx.repo):
+                        continue
+                    alias[len(runs)] = f
+                    runs.append(["gitleaks", "dir", "--follow-symlinks", "--", f])
+                else:
+                    runs.append(["gitleaks", "dir", "--", f])
         else:
             runs.append(["gitleaks", "dir", "."])
             if ctx.base:   # a secret added then deleted in the PR is gone from the tree but not from history
                 mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
-                runs.append(["gitleaks", "git", f"--log-opts={mb}..HEAD"])
+                runs.append(["gitleaks", "git", f"--log-opts=--text {mb}..HEAD"])
         # PR scans use the base branch's .gitleaks.toml / .gitleaksignore, never the PR's (a PR could
         # allow-list its own secret). gitleaks always also reads <repo>/.gitleaksignore, so the PR's copy
         # is moved aside for the scan and put back afterwards.
@@ -539,15 +560,17 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
                 aside = Path(td) / "pr.gitleaksignore"
                 shutil.move(ctx.repo / ".gitleaksignore", aside)
         try:
-            reports += gitleaks_runs(ctx, runs, settings, td)
+            reports += gitleaks_runs(ctx, runs, settings, td, alias)
         finally:
             if aside:
                 shutil.move(aside, ctx.repo / ".gitleaksignore")
     return gitleaks_findings(ctx, reports)
 
 
-def gitleaks_runs(ctx: Ctx, runs: list[list[str]], settings: list[str], td: str) -> list[dict]:
-    """Run each gitleaks command with the given settings flags; return the raw JSON findings."""
+def gitleaks_runs(ctx: Ctx, runs: list[list[str]], settings: list[str], td: str,
+                  alias: dict[int, str] | None = None) -> list[dict]:
+    """Run each gitleaks command with the given settings flags; return the raw JSON findings.
+    alias: run index -> path to report its findings under (a symlink scanned through its target)."""
     reports = []
     for i, cmd in enumerate(runs):
         rp = Path(td) / f"g{i}.json"
@@ -556,7 +579,11 @@ def gitleaks_runs(ctx: Ctx, runs: list[list[str]], settings: list[str], td: str)
                            "--report-path", str(rp)]
         sh(cmd[:2] + opts + cmd[2:], ctx.repo)                   # options before any "--" / target
         if rp.exists() and rp.stat().st_size:
-            reports += json.loads(rp.read_text())
+            found = json.loads(rp.read_text())
+            if alias and i in alias:
+                for r in found:
+                    r["File"] = alias[i]
+            reports += found
     return reports
 
 
@@ -658,7 +685,9 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
             arc = subprocess.Popen(["git", "archive", "--format=tar", f"{ctx.base}^{{commit}}"], cwd=ctx.repo,
                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             with tarfile.open(fileobj=arc.stdout, mode="r|") as t:
-                t.extractall(cwd, filter="data")
+                for m in t:   # links are skipped (as in the PR copy): the data filter refuses ones leaving the tree
+                    if not (m.issym() or m.islnk()):
+                        t.extract(m, cwd, filter="data")
             if arc.wait() != 0:
                 raise RuntimeError(f"git archive {ctx.base} failed")
         p = sh(cmd + [str(work)], cwd)
