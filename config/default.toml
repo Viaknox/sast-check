@@ -4,7 +4,8 @@
 # Findings at these severities FAIL the check. Everything else is reported as a warning.
 # Soft launch default: block critical only. Tighten later with ["critical", "high"].
 block_on = ["critical"]
-# "diff"  = only findings on lines changed in this PR can block (recommended)
+# "diff"  = only findings this PR introduces can block: on changed lines, or (code scanners) absent from
+#           the base branch's version of the touched file (recommended)
 # "full"  = every finding in the repo can block
 scope = "diff"
 # Findings with confidence "low" never block, even at a blocking severity.

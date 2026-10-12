@@ -3,6 +3,9 @@
 # Needs on PATH: opengrep or semgrep, ruff, gitleaks. zizmor/osv-scanner optional.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
+for t in ${E2E_REQUIRE:-}; do   # optional scanners whose checks must run (CI sets this)
+  command -v "$t" >/dev/null || { echo "FAIL - $t required by E2E_REQUIRE but not installed"; exit 1; }
+done
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 cd "$T"
 git init -q -b main && git config user.email t@example.com && git config user.name t
@@ -416,6 +419,67 @@ gate --mode diff --base HEAD~1 --only ruff,gitleaks
 check "symlinked dir: its code is scanned via the link"   "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/pkg/vuln.py')")" "1"
 check "symlinked dir: its secrets are scanned via the link" "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/pkg/k.py')")" "1"
 git checkout -q main
+
+# round-11: findings created without touching the flagged line are caught by comparing with the base;
+# a symlink brings excluded IaC into Trivy; identical old findings stay pre-existing
+git checkout -q -b r11 main
+cat > src/san.js <<'JS'
+app.get('/calc', (req, res) => {
+  let expr = req.query.expr;
+  expr = Number(expr);
+  const a = 1;
+  const b = 2;
+  res.send(String(eval(expr)));
+});
+JS
+cat > src/two.js <<'JS'
+app.get('/t1', (req, res) => {
+  let v = req.query.a;
+  res.send(String(eval(v)));
+});
+app.get('/t2', (req, res) => {
+  let v = req.query.a;
+  v = Number(v);
+  const pad = 1;
+  res.send(String(eval(v)));
+});
+JS
+git add src/san.js src/two.js && git commit -qm r11base
+sed -i '/expr = Number(expr);/d' src/san.js                                         # sanitizer deleted far from sink
+sed -i '/v = Number(v);/d' src/two.js     # same sink text as an existing finding: only the count shows it is new
+git add src/san.js src/two.js && git commit -qm r11
+gate --mode diff --base HEAD~1 --only opengrep
+check "deleting a distant sanitizer blocks (base compare)" "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/san.js')")" "1"
+check "second copy of an existing finding is new (counted)" "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/two.js')")" "2"
+printf 'const pad = 3;\n' >> src/san.js && git commit -qam r11b
+gate --mode diff --base HEAD~1 --only opengrep
+check "unrelated edit: old finding stays pre-existing"     "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/san.js')")" "0"
+git checkout -q main
+# a base comparison that cannot run raises (main() then records an error: the check fails closed)
+check "base comparison failure raises"                     "$(python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import sast, pathlib
+c = sast.Ctx(repo=pathlib.Path('.').resolve(), cfg=sast.load_config(None), mode='diff', base='no-such-ref', changed_files=['src/util.py'])
+try:
+    sast.baseline_new(c, [], ['ruff']); print('no')
+except RuntimeError:
+    print('raised')" "$HERE/scripts")" "raised"
+if command -v trivy >/dev/null; then
+  git checkout -q -b r11t main
+  mkdir -p vendor && printf 'resource "aws_security_group_rule" "r" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = ["0.0.0.0/0"]\n  security_group_id = "sg-1"\n}\n' > vendor/payload.tf
+  git add vendor/payload.tf && git commit -qm tlbase
+  ln -s vendor/payload.tf main.tf && git add main.tf && git commit -qm tl
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: symlink to excluded IaC is scanned as the link" "$(q "int(any(f['rule']=='trivy.AWS-0107' and f['path']=='main.tf' for f in d['findings']))")" "1"
+  git checkout -q main
+fi
+
+# gitleaks: a textconv filter that makes `git log` fail cannot turn the history scan into "no leaks"
+git checkout -q -b r11g main
+printf '*.cfg diff=broken\n' > .gitattributes && git config diff.broken.textconv false
+git add .gitattributes && git commit -qm tcbase
+echo 'K12 = "AKIAIOSFODNN7ABCDEFG"' > src/k12.cfg && git add src/k12.cfg && git commit -qm tc
+gate --mode diff --base HEAD~1 --only gitleaks
+check "failing textconv cannot hide a secret"              "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/k12.cfg')")" "1"
+git config --unset diff.broken.textconv; git checkout -q main
 
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean

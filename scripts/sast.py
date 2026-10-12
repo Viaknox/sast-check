@@ -229,12 +229,19 @@ def untracked_files(repo: Path) -> list[str]:
 
 def name_status(repo: Path, base: str) -> list[tuple[str, str]]:
     """(status, path) for each file the PR adds/changes/renames/copies; for a rename or copy, the destination."""
+    return [(st, path) for st, path, _ in name_status_src(repo, base)]
+
+
+def name_status_src(repo: Path, base: str) -> list[tuple[str, str, str]]:
+    """(status, path, source path) per changed file; the source differs from path only for a rename or copy."""
     ns, out, i = git_z(repo, ["diff", "--name-status", "-z", "-M", "-C", "--diff-filter=ACMRT", "--merge-base", base]), [], 0
     while i < len(ns) - 1:
         status, i = ns[i], i + 1
+        src = path = ns[i]
         if status[:1] in ("R", "C"):
-            i += 1                                    # skip the source path; the next field is the destination
-        out.append((status, ns[i]))
+            i += 1
+            path = ns[i]                              # the field after the source is the destination
+        out.append((status, path, src))
         i += 1
     return out
 
@@ -293,12 +300,18 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     return files
 
 
+def in_repo(repo: Path, p: Path) -> bool:
+    """True if p (symlinks resolved) is inside the repo's working tree and not in .git."""
+    r = p.resolve()
+    return r.is_relative_to(repo) and r.relative_to(repo).parts[:1] != (".git",)
+
+
 def link_dir_files(repo: Path, path: str) -> list[str]:
     """Files under `path` when it is a symlink to a directory inside the repo (src/pkg -> ../vendor/pkg),
     named through the link: code reached through the link is code the PR brings in. Links inside it are
     not followed; a link leaving the repo gives nothing (never scan runner files)."""
     p = repo / path
-    if not (p.is_symlink() and p.is_dir() and p.resolve().is_relative_to(repo)):
+    if not (p.is_symlink() and p.is_dir() and in_repo(repo, p)):
         return []
     out = []
     for d, _, names in os.walk(p):   # os.walk follows the top link only
@@ -533,8 +546,9 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
         runs, alias = [], {}
         if ctx.mode == "diff":
             mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
-            # --text: a PR's `*.py -diff` in .gitattributes must not turn its patches into "Binary files differ"
-            runs.append(["gitleaks", "git", f"--log-opts=--text {mb}..HEAD"])   # the PR's commits
+            # --text: a PR's `*.py -diff` in .gitattributes must not turn its patches into "Binary files differ";
+            # --no-textconv: a textconv filter (git-crypt) must not make git log fail and leave nothing scanned
+            runs.append(["gitleaks", "git", f"--log-opts=--text --no-textconv {mb}..HEAD"])   # the PR's commits
             runs.append(["gitleaks", "git", "--pre-commit"])                    # unstaged (local runs)
             runs.append(["gitleaks", "git", "--pre-commit", "--staged"])        # staged (local runs)
             # by content: new, never-added files (local runs), rename/copy destinations and symlinks, because
@@ -548,7 +562,7 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
                     continue
                 if (ctx.repo / f).is_symlink():
                     # scan the target only inside the repo (never runner files), reported under the link's path
-                    if not (ctx.repo / f).resolve().is_relative_to(ctx.repo):
+                    if not in_repo(ctx.repo, ctx.repo / f):
                         continue
                     alias[len(runs)] = f
                     runs.append(["gitleaks", "dir", "--follow-symlinks", "--", f])
@@ -558,7 +572,7 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
             runs.append(["gitleaks", "dir", "."])
             if ctx.base:   # a secret added then deleted in the PR is gone from the tree but not from history
                 mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
-                runs.append(["gitleaks", "git", f"--log-opts=--text {mb}..HEAD"])
+                runs.append(["gitleaks", "git", f"--log-opts=--text --no-textconv {mb}..HEAD"])
         # PR scans use the base branch's .gitleaks.toml / .gitleaksignore, never the PR's (a PR could
         # allow-list its own secret). gitleaks always also reads <repo>/.gitleaksignore, so the PR's copy
         # is moved aside for the scan and put back afterwards.
@@ -594,7 +608,12 @@ def gitleaks_runs(ctx: Ctx, runs: list[list[str]], settings: list[str], td: str,
         # --ignore-gitleaks-allow: a PR's `gitleaks:allow` must not hide a secret
         opts = settings + ["--ignore-gitleaks-allow", "--redact", "--no-banner", "--exit-code", "0", "--report-format", "json",
                            "--report-path", str(rp)]
-        sh(cmd[:2] + opts + cmd[2:], ctx.repo)                   # options before any "--" / target
+        p = sh(cmd[:2] + opts + cmd[2:], ctx.repo)               # options before any "--" / target
+        # gitleaks logs a failed `git log` (e.g. a textconv filter) as ERR, then reports "no leaks" and
+        # exits 0 having scanned nothing (gitleaks issue #2129): any ERR/FTL line is a scanner error
+        errs = [ln for ln in re.sub(r"\x1b\[[0-9;]*m", "", p.stderr or "").splitlines() if re.search(r" (ERR|FTL) ", ln)]
+        if errs:
+            raise RuntimeError("gitleaks reported errors: " + " | ".join(errs)[:300])
         if rp.exists() and rp.stat().st_size:
             found = json.loads(rp.read_text())
             if alias and i in alias:
@@ -681,13 +700,19 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
             reld = Path(d).relative_to(ctx.repo).as_posix()
             dirs[:] = [x for x in dirs if x != ".git" and not os.path.islink(os.path.join(d, x))
                        and not glob_any(f"{x}/" if reld == "." else f"{reld}/{x}/", ctx.cfg["paths"]["exclude"])]
-            for n in names:
+            # a symlink to a file or directory inside the repo is copied as its target's content under the
+            # link's path (the link can bring excluded IaC into scope); links leaving the repo are dropped
+            links = [x for x in os.listdir(d) if os.path.islink(os.path.join(d, x))]
+            for n in names + [x for x in links if x not in names]:
                 src = Path(d) / n
                 r = src.relative_to(ctx.repo).as_posix()
-                if src.is_symlink() or not src.is_file() or glob_any(r, ctx.cfg["paths"]["exclude"]):
-                    continue
-                (work / r).parent.mkdir(parents=True, exist_ok=True)
-                (work / r).write_bytes(TRIVY_INLINE_RE.sub(rb"\1_ignore", src.read_bytes()))
+                for f in link_dir_files(ctx.repo, r) or [r]:
+                    fp = ctx.repo / f
+                    if (not fp.is_file() or glob_any(f, ctx.cfg["paths"]["exclude"])
+                            or (fp.is_symlink() and not in_repo(ctx.repo, fp))):
+                        continue
+                    (work / f).parent.mkdir(parents=True, exist_ok=True)
+                    (work / f).write_bytes(TRIVY_INLINE_RE.sub(rb"\1_ignore", fp.read_bytes()))
         work.mkdir(exist_ok=True)
         cmd, cwd = ["trivy", "config", "--quiet", "--format", "json"], work
         if ctx.base:   # PR scans: the base branch's trivy.yaml / .trivyignore, never the PR's
@@ -802,7 +827,46 @@ def fingerprint(repo: Path, findings: list[Finding]) -> None:
         f.fingerprint = hashlib.sha256(f"{f.rule}\n{snippet}".encode()).hexdigest()
 
 
-def apply_policy(ctx: Ctx, findings: list[Finding]) -> None:
+BASELINE_SCANNERS = ("opengrep", "ruff")   # code scanners whose settings are ours, not the repo's
+
+
+def baseline_new(ctx: Ctx, findings: list[Finding], enabled: list[str]) -> set[tuple[str, str]]:
+    """(path, fingerprint) of code findings the PR created, by scanning the merge-base version of every
+    touched file with the same scanners and rules and comparing fingerprints (counted, so a second copy of
+    an existing sink is new). Catches findings created without touching the flagged line, e.g. a sanitizer
+    deleted several lines above an unchanged eval(). Raises on any failure: the caller fails closed."""
+    names = [n for n in BASELINE_SCANNERS if n in enabled]
+    if not names or not ctx.changed_files:
+        return set()
+    mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
+    src_of = {path: src for _, path, src in name_status_src(ctx.repo, ctx.base)}
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        present = []
+        for f in ctx.changed_files:
+            spec = f"{mb}:{src_of.get(f, f)}"
+            if subprocess.run(["git", "cat-file", "-e", spec], cwd=ctx.repo, capture_output=True).returncode:
+                continue                              # new in this PR: nothing in the base
+            (root / f).parent.mkdir(parents=True, exist_ok=True)
+            (root / f).write_bytes(sh(["git", "cat-file", "blob", spec], ctx.repo, raw=True).stdout)
+            present.append(f)
+        base: list[Finding] = []
+        if present:
+            bctx = Ctx(repo=root, cfg=ctx.cfg, mode="diff", base=None, changed_files=sorted(present))
+            for n in names:
+                base += SCANNERS[n](bctx)             # errors propagate: fail closed
+            fingerprint(root, base)
+    count: dict[tuple[str, str], int] = {}
+    for b in base:
+        count[b.path, b.fingerprint] = count.get((b.path, b.fingerprint), 0) - 1
+    for f in findings:
+        if f.tool in names:
+            count[f.path, f.fingerprint] = count.get((f.path, f.fingerprint), 0) + 1
+    # more copies in the head than in the base: every copy counts as new (which one is new is ambiguous)
+    return {k for k, v in count.items() if v > 0}
+
+
+def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[tuple[str, str]] = frozenset()) -> None:
     from datetime import date
     today = date.today().isoformat()
     pol = ctx.cfg["policy"]
@@ -810,7 +874,8 @@ def apply_policy(ctx: Ctx, findings: list[Finding]) -> None:
     for f in findings:
         if ctx.mode == "diff" and f.kind in ("code", "config"):
             changed = ctx.changed_lines.get(f.path, set())
-            f.in_diff = any(n in changed for n in range(f.line, max(f.end_line, f.line) + 1))
+            f.in_diff = (any(n in changed for n in range(f.line, max(f.end_line, f.line) + 1))
+                         or (f.path, f.fingerprint) in new_by_base)
         elif ctx.mode == "diff" and f.kind == "dependency":
             f.in_diff = f.path in ctx.changed_files
         f.suppressed = inline_suppression(ctx.repo, f) or config_suppression(ctx.cfg, f, today)
@@ -946,7 +1011,13 @@ def main(argv=None) -> int:
             ctx.runs.append(ToolRun(name, "error", str(e)[:400]))
 
     fingerprint(repo, findings)
-    apply_policy(ctx, findings)
+    new_by_base: set[tuple[str, str]] = set()
+    if mode == "diff" and a.base and enabled:
+        try:
+            new_by_base = baseline_new(ctx, findings, enabled)
+        except Exception as e:  # noqa: BLE001 - without the base comparison a new finding could pass: fail closed
+            ctx.runs.append(ToolRun("baseline", "error", f"base comparison failed: {str(e)[:300]}"))
+    apply_policy(ctx, findings, new_by_base)
     errored = any(r.status == "error" for r in ctx.runs) and cfg["policy"].get("fail_on_tool_error", True)
     verdict = "error" if errored else "fail" if any(f.blocking for f in findings) else "pass"
 
