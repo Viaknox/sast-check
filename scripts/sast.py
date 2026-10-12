@@ -149,6 +149,9 @@ def settings_file(repo: Path, base: str | None, name: str) -> str | None:
     if not base:
         f = repo / name
         return f.read_text(errors="replace") if f.is_file() else None
+    v = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}"], cwd=repo, capture_output=True)
+    if v.returncode != 0:   # an unknown base must fail closed, not read as "no settings file"
+        raise RuntimeError(f"base {base} is not a commit in this checkout")
     p = subprocess.run(["git", "show", f"{base}:{name}"], cwd=repo, capture_output=True, text=True)
     if p.returncode == 0:
         return p.stdout
@@ -656,18 +659,31 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     repo = Path(a.repo).resolve()
-    cfg = load_config(settings_file(repo, a.base, ".sast-check.toml"))
+    settings_error = ""
+    try:
+        cfg = load_config(settings_file(repo, a.base, ".sast-check.toml"))
+    except (RuntimeError, tomllib.TOMLDecodeError) as e:   # unreadable settings: report it, scan nothing (fail closed)
+        settings_error, cfg = str(e)[:300], load_config(None)
     mode = a.mode or cfg["policy"]["scope"]
     if mode == "diff" and not a.base:
         print("diff mode needs --base (e.g. origin/main); falling back to full scan", file=sys.stderr)
         mode = "full"
     ctx = Ctx(repo=repo, cfg=cfg, mode=mode, base=a.base)
-    if a.base:
-        edited = [n for n in SETTINGS_FILES if settings_file(repo, None, n) != settings_file(repo, a.base, n)]
+    if settings_error:
+        ctx.runs.append(ToolRun("settings", "error", settings_error))
+    elif a.base:
+        try:
+            edited = [n for n in SETTINGS_FILES if settings_file(repo, None, n) != settings_file(repo, a.base, n)]
+        except RuntimeError as e:
+            settings_error = str(e)[:300]
+            ctx.runs.append(ToolRun("settings", "error", settings_error))
+            edited = []
         if edited:
             ctx.notes.append("This change edits " + ", ".join(f"`{n}`" for n in edited) + ". The check used the "
                              "base branch's version; the new settings take effect after merge.")
     enabled = a.only.split(",") if a.only else [k for k, v in cfg["tools"].items() if v]
+    if settings_error:
+        enabled = []                           # cannot trust the settings: report the error (fail closed)
     unknown = [n for n in enabled if n not in SCANNERS]
     if unknown:
         print(f"unknown scanner(s): {', '.join(unknown)}; valid: {', '.join(SCANNERS)}", file=sys.stderr)

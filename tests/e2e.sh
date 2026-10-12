@@ -148,6 +148,12 @@ if command -v zizmor >/dev/null; then
 fi
 git checkout -q r3
 
+# an unreadable base fails closed with a report (no crash)
+rm -rf sast-results
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base 0000000000000000000000000000000000000bad --only ruff >/dev/null 2>&1; code=$?; set -e
+check "unreadable base: exit 2 (error), not a crash"      "$code" "2"
+check "unreadable base: settings error is reported"       "$(q "[r['status'] for r in d['runs'] if r['name']=='settings']")" "['error']"
+
 # a PR file named like an option must not hijack the scanner's arguments
 printf 'x\n' > ./--exclude && printf "app.get('/v', (req, res) => { eval(req.query.v); });\n" > vuln.js && printf 'x\n' > zzzz
 git add -- ./--exclude vuln.js zzzz && git commit -qm dash

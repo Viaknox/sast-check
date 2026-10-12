@@ -68,7 +68,7 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **Fail closed** — if an installed scanner crashes, the check fails (`fail_on_tool_error`).
 - **Supply chain** — actions pinned by SHA; Opengrep binary verified with Sigstore/cosign; Go tools installed through the Go checksum database; Python tools pinned.
 - **Low-confidence findings never block** (they're shown as warnings).
-- **Settings come from your main branch.** On a PR, `.sast-check.toml`, `.gitleaks.toml`, `.gitleaksignore` and zizmor's config are read from the base branch, never from the PR. A PR that edits them is scanned with the old settings, and the report says the change takes effect after merge. This stops a PR from switching off its own check.
+- **Settings come from the PR's base branch.** On a PR, `.sast-check.toml`, `.gitleaks.toml`, `.gitleaksignore` and zizmor's config are read from the base branch, never from the PR. A PR that edits them is scanned with the old settings, and the report says the change takes effect after merge. This stops a PR from switching off its own check.
 
 ## Known limits (v1)
 

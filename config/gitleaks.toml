@@ -1,5 +1,6 @@
-# gitleaks settings used by sast-check: the built-in rules, nothing else.
-# A repo's own .gitleaks.toml / .gitleaksignore is never read (a PR could allow-list its own secret).
-# To accept a known false positive, use [[ignore]] in .sast-check.toml on main, with a reason.
+# Fallback gitleaks settings for PR scans when the base branch has no .gitleaks.toml: the built-in rules.
+# On PR scans a PR's own .gitleaks.toml / .gitleaksignore are never used; the base branch's are (a PR could
+# otherwise allow-list its own secret). Scans without a base use the repo's files as gitleaks normally does.
+# To accept a known false positive: merge a .gitleaksignore entry, or an [[ignore]] in .sast-check.toml, with a reason.
 [extend]
 useDefault = true
