@@ -35,7 +35,7 @@ python3 "$HERE/scripts/sast.py" --mode diff --base main~1 --only opengrep,ruff,g
 code=$?
 set -e
 F=sast-results/findings.json
-q() { python3 -c "import json,sys;d=json.load(open('$F'));print($1)"; }
+q() { python3 -I -c "import json,sys;d=json.load(open('$F'));print($1)"; }
 fail=0
 check() { if [ "$2" = "$3" ]; then echo "ok   - $1"; else echo "FAIL - $1 (got $2, want $3)"; fail=1; fi; }
 
@@ -111,6 +111,18 @@ set +e; python3 "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/
 check "multi-line call after non-ASCII text counts as new" "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='ruff.S602' and f['path']=='src/u.py']")" "[True]"
 check "symlink replaced by a file is scanned"             "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/link.py')")" "1"
 git checkout -q r3
+
+# round-4 security: .gitattributes cannot hide a change; a planted json.py/pip.py cannot hijack Python
+git checkout -q -b r4s main
+printf 'def f(s):\n    return s\n' > src/h.py && git add src/h.py && git commit -qm h
+printf '*.py -diff\n' > .gitattributes
+printf 'def f(s):\n    return eval(s)\n' > src/h.py
+printf 'raise SystemExit("hijacked")\n' > json.py && cp json.py pip.py
+git add .gitattributes src/h.py && git commit -qm hide
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null; set -e
+check "-diff in .gitattributes cannot hide a change"       "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/h.py')")" "1"
+check "planted json.py does not hijack the scanner (-I)"   "$(python3 -I -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict'])" sast-results/findings.json)" "fail"
+rm -f json.py pip.py; git checkout -q r3
 
 # a PR file named like an option must not hijack the scanner's arguments
 printf 'x\n' > ./--exclude && printf "app.get('/v', (req, res) => { eval(req.query.v); });\n" > vuln.js && printf 'x\n' > zzzz

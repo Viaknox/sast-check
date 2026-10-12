@@ -56,7 +56,7 @@ runs:
         OPENGREP_VERSION: v1.30.2
       run: |
         set -euo pipefail
-        python -m pip install --quiet --disable-pip-version-check "ruff==0.16.8" "zizmor==1.30.1"
+        python -I -m pip install --quiet --disable-pip-version-check "ruff==0.16.8" "zizmor==1.30.1"
         # go install verifies module content against the public Go checksum database
         go install github.com/zricethezav/gitleaks/v8@v8.30.1
         go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0
@@ -85,9 +85,9 @@ runs:
         args=(--repo "$GITHUB_WORKSPACE" --out "$RUNNER_TEMP/sast-results")
         [ -n "$SAST_BASE" ] && args+=(--base "$SAST_BASE")
         [ -n "$SAST_MODE" ] && args+=(--mode "$SAST_MODE")
-        python "$GITHUB_ACTION_PATH/scripts/sast.py" "${args[@]}" > /dev/null
+        python -I "$GITHUB_ACTION_PATH/scripts/sast.py" "${args[@]}" > /dev/null
         code=$?
-        verdict=$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict'])" "$RUNNER_TEMP/sast-results/findings.json" 2>/dev/null || echo error)
+        verdict=$(python -I -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict'])" "$RUNNER_TEMP/sast-results/findings.json" 2>/dev/null || echo error)
         cat "$RUNNER_TEMP/sast-results/report.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "sast-check crashed (exit $code)" >> "$GITHUB_STEP_SUMMARY"
         echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
         echo "code=$code" >> "$GITHUB_OUTPUT"

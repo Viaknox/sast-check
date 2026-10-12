@@ -187,7 +187,8 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     """Map repo-relative file -> added/modified line numbers (merge-base vs working tree)."""
     if sh(["git", "rev-parse", "--is-shallow-repository"], repo).stdout.strip() == "true":
         raise RuntimeError("shallow clone: check out with fetch-depth: 0 so the PR diff can be computed")
-    out = sh(["git", "diff", "-U0", "--no-color", "--diff-filter=ACMRT", "--merge-base", base], repo).stdout
+    out = sh(["git", "diff", "-U0", "--no-color", "--text", "--no-textconv", "--no-ext-diff",
+               "--diff-filter=ACMRT", "--merge-base", base], repo).stdout
     files: dict[str, set[int]] = {}
     cur = None
     prev = ""
