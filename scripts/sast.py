@@ -214,6 +214,27 @@ def unquote_git_path(p: str) -> str:
     return out.decode("utf-8", errors="replace")
 
 
+def git_z(repo: Path, args: list[str]) -> list[str]:
+    """NUL-separated git output as paths, read as bytes: text mode would turn a CR in a file name into \n."""
+    return [os.fsdecode(x) for x in sh(["git", *args], repo, raw=True).stdout.split(b"\0") if x]
+
+
+def untracked_files(repo: Path) -> list[str]:
+    return git_z(repo, ["ls-files", "-z", "--others", "--exclude-standard"])
+
+
+def name_status(repo: Path, base: str) -> list[tuple[str, str]]:
+    """(status, path) for each file the PR adds/changes/renames/copies; for a rename or copy, the destination."""
+    ns, out, i = git_z(repo, ["diff", "--name-status", "-z", "-M", "-C", "--diff-filter=ACMRT", "--merge-base", base]), [], 0
+    while i < len(ns) - 1:
+        status, i = ns[i], i + 1
+        if status[:1] in ("R", "C"):
+            i += 1                                    # skip the source path; the next field is the destination
+        out.append((status, ns[i]))
+        i += 1
+    return out
+
+
 def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     """Map repo-relative file -> added/modified line numbers (merge-base vs working tree)."""
     if sh(["git", "rev-parse", "--is-shallow-repository"], repo).stdout.strip() == "true":
@@ -250,21 +271,13 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     # Count as fully changed: a file with no hunk, every rename/copy destination (payload.txt -> payload.py,
     # vendor/x.py -> src/x.py: the move alone makes old code scanned, with or without an edit), and a symlink
     # (its diff is the one-line target path; the scanners read the target's content)
-    ns = sh(["git", "diff", "--name-status", "-z", "-M", "-C", "--diff-filter=ACMRT", "--merge-base", base],
-            repo).stdout.split("\0")
-    i = 0
-    while i < len(ns) - 1:
-        status, i = ns[i], i + 1
+    for status, path in name_status(repo, base):
         moved = status[:1] in ("R", "C")
-        if moved:
-            i += 1                                    # skip the source path; the next field is the destination
-        path, i = ns[i], i + 1
         if path and (moved or path not in files or (repo / path).is_symlink()) and (repo / path).is_file():
             with open(repo / path, errors="ignore") as fh:
                 files[path] = set(range(1, sum(1 for _ in fh) + 1))
     # untracked new files (local runs) count as fully changed
-    untracked = sh(["git", "ls-files", "-z", "--others", "--exclude-standard"], repo).stdout.split("\0")
-    for f in filter(None, untracked):
+    for f in untracked_files(repo):
         try:
             n = sum(1 for _ in open(repo / f, errors="ignore"))
         except OSError:
@@ -427,9 +440,8 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
               if f.startswith(".github/workflows/") or Path(f).name in ("action.yml", "action.yaml")]
     else:
         specs = ["--", ".github/workflows/*.yml", ".github/workflows/*.yaml", ":(glob)**/action.yml", ":(glob)**/action.yaml"]
-        tracked = (sh(["git", "ls-files", "-z"] + specs, ctx.repo).stdout.split("\0")            # committed
-                   + sh(["git", "ls-files", "-z", "--others", "--exclude-standard"] + specs,       # new, local runs
-                        ctx.repo).stdout.split("\0"))
+        tracked = (git_z(ctx.repo, ["ls-files", "-z"] + specs)                                    # committed
+                   + git_z(ctx.repo, ["ls-files", "-z", "--others", "--exclude-standard"] + specs))  # new, local runs
         tg = sorted({f for f in tracked if f and not glob_any(f, ctx.cfg["paths"]["exclude"])})
     if not tg:
         return []
@@ -491,9 +503,11 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
             runs.append(["gitleaks", "git", f"--log-opts={mb}..HEAD"])          # the PR's commits
             runs.append(["gitleaks", "git", "--pre-commit"])                    # unstaged (local runs)
             runs.append(["gitleaks", "git", "--pre-commit", "--staged"])        # staged (local runs)
-            untracked = sh(["git", "ls-files", "-z", "--others", "--exclude-standard"], ctx.repo).stdout.split("\0")
-            runs += [["gitleaks", "dir", "--", f] for f in untracked
-                     if f and not glob_any(f, ctx.cfg["paths"]["exclude"])]     # new, never-added files
+            # by content: new, never-added files (local runs), and rename/copy destinations, because a pure
+            # rename (vendor/key.py -> src/key.py) has no added lines for the history scan to see
+            moved = [p for st, p in name_status(ctx.repo, ctx.base) if st[:1] in ("R", "C")]
+            runs += [["gitleaks", "dir", "--", f] for f in sorted(set(untracked_files(ctx.repo) + moved))
+                     if not glob_any(f, ctx.cfg["paths"]["exclude"]) and (ctx.repo / f).is_file()]
         else:
             runs.append(["gitleaks", "dir", "."])
             if ctx.base:   # a secret added then deleted in the PR is gone from the tree but not from history
@@ -505,6 +519,10 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
         settings, aside = [], None
         if ctx.base:
             conf = settings_file(ctx.repo, ctx.base, ".gitleaks.toml")
+            if conf is not None and tomllib.loads(conf).get("extend", {}).get("path"):
+                # gitleaks opens [extend] path relative to the checkout, i.e. the PR's copy of that file
+                raise RuntimeError("base .gitleaks.toml uses [extend] path; on PR scans only useDefault is "
+                                   "supported (copy the extended rules into .gitleaks.toml)")
             (Path(td) / "gitleaks.toml").write_text(conf if conf is not None else
                                                     (ROOT / "config" / "gitleaks.toml").read_text())
             (Path(td) / ".gitleaksignore").write_text(settings_file(ctx.repo, ctx.base, ".gitleaksignore") or "")
@@ -554,7 +572,8 @@ def gitleaks_findings(ctx: Ctx, reports: list[dict]) -> list[Finding]:
 def run_osv(ctx: Ctx) -> list[Finding]:
     if not shutil.which("osv-scanner"):
         raise FileNotFoundError("osv-scanner not installed")
-    if ctx.mode == "diff" and not any((Path(f).name in LOCKFILES or f.endswith(SBOM_SUFFIXES))
+    if ctx.mode == "diff" and not any((Path(f).name in LOCKFILES or f.endswith(SBOM_SUFFIXES)
+                                       or (f.endswith(".txt") and "requirements" in Path(f).name))
                                       and not glob_any(f, ctx.cfg["paths"]["exclude"])
                                       for f in ctx.changed_files):
         return []

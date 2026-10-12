@@ -79,7 +79,7 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **Runners:** Linux x64 only (the action stops with a clear error elsewhere).
 - **Languages:** JS/TS, Python, HTML (inline scripts and script sources), GitHub Actions, Dockerfiles, Kubernetes YAML, Terraform. Anything else is not scanned by custom rules.
 - **Secrets** (gitleaks) are always critical and block when they appear in the PR's commits, staged or untracked files.
-- **Dependencies** (osv-scanner) warn only by default; set `[deps] block = true` to let critical CVEs (CVSS ≥ 9) in changed lockfiles or SBOMs (`bom.json`, `*.cdx.json`, `*.spdx.json`, ...) block.
+- **Dependencies** (osv-scanner) warn only by default; set `[deps] block = true` to let critical CVEs (CVSS ≥ 9) in changed lockfiles (including `*requirements*.txt`) or SBOMs (`bom.json`, `*.cdx.json`, `*.spdx.json`, ...) block.
 - **Prototype pollution** through `Array.prototype.reduce` merge helpers is not caught: Semgrep and Opengrep disagree on that pattern, so it was left out rather than ship an engine-specific rule.
 - **NoSQL injection** ignores callbacks passed to `.find()` / `.filter()`-style calls (e.g. `arr.find(x => x === req.body.id)`). Opengrep taints closures, so without this exclusion every array lookup on request data would be flagged. A real Mongo filter is an object, which is still checked.
 - **JWT decode** counts a `verify()` of the **same token** anywhere in the same function, or earlier in the same block (class methods included), as verification. Verifying one token and decoding another is still flagged. `sast.js.jwt-verify-error-swallowed` catches a `verify()` whose error is swallowed (`catch` without `throw`/`return`) or that uses a callback, followed by `decode()`; it covers `jwt.verify` / `jwt.decode` (default or namespace import), not the named-import form.
@@ -87,6 +87,7 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **Inline markers** are found line by line: a quote earlier on the line (e.g. `msg: don't # sast-ignore[...]` in YAML) hides the marker, so the finding still blocks. Put the marker on its own line above instead. A line inside a multi-line string that starts with `# sast-ignore[...]` is read as a comment; every suppression is listed with its reason in the report, so reviewers see it.
 - **Moved files:** a renamed, copied or symlinked file counts as fully changed, so moving a file can surface its old findings as new.
 - **Deleted lines:** a finding caused only by deleting a line counts as new when its match spans the cut (e.g. the `aws_ami` block that lost `owners`). A finding whose lines do not touch the cut is not tied to the deletion.
+- **gitleaks `[extend] path`:** on PR scans a base `.gitleaks.toml` may use `[extend] useDefault = true` but not `[extend] path` (gitleaks would read that file from the PR's checkout); the check reports a settings error. Copy the extended rules into `.gitleaks.toml`.
 - **zizmor exceptions** go in `[[ignore]]` in `.sast-check.toml` (zizmor ignore rules and comments are not honored).
 
 ## Develop

@@ -337,6 +337,29 @@ if command -v osv-scanner >/dev/null; then
 fi
 git checkout -q main
 
+# round-7: CR in a renamed file's name; a renamed secret; alternate requirements file; gitleaks extend path
+git checkout -q -b r7 main
+mkdir -p vendor && echo 'K7 = "AKIAIOSFODNN7ABCDEFG"' > vendor/key.py
+printf 'eval(input())\n' > src/inert.txt
+git add vendor/key.py src/inert.txt && git commit -qm r7base
+git mv src/inert.txt "$(printf 'src/evil\r.py')" && git mv vendor/key.py src/key.py && git commit -qm r7
+gate --mode diff --base HEAD~1 --only ruff,gitleaks
+check "rename to a name with a CR is scanned"             "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/evil'+chr(13)+'.py')")" "1"
+check "pure rename brings a secret into scope: blocks"    "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/key.py')")" "1"
+if command -v osv-scanner >/dev/null; then
+  printf 'requests==2.19.0\n' > requirements-dev.txt && git add requirements-dev.txt && git commit -qm reqdev
+  gate --mode diff --base HEAD~1 --only osv
+  check "changed requirements-dev.txt is scanned"         "$(q "int(any(f['kind']=='dependency' and f['path']=='requirements-dev.txt' for f in d['findings']))")" "1"
+fi
+printf '[extend]\npath = "extra-gitleaks.toml"\n' > .gitleaks.toml && printf '[extend]\nuseDefault = true\n' > extra-gitleaks.toml
+git add .gitleaks.toml extra-gitleaks.toml && git commit -qm extbase
+printf '[extend]\nuseDefault = true\n[allowlist]\npaths = [".*"]\n' > extra-gitleaks.toml
+echo 'K8 = "AKIAIOSFODNN7ABCDEFG"' > src/k8.py && git add extra-gitleaks.toml src/k8.py && git commit -qm ext
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only gitleaks >/dev/null 2>&1; code=$?; set -e
+check "base gitleaks [extend] path fails closed (exit 2)" "$code" "2"
+check "...and says why"                                   "$(q "int(any(r['name']=='gitleaks' and 'extend' in r['detail'] for r in d['runs']))")" "1"
+git checkout -q main
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks
