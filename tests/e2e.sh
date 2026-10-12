@@ -124,6 +124,30 @@ check "-diff in .gitattributes cannot hide a change"       "$(q "sum(f['blocking
 check "planted json.py does not hijack the scanner (-I)"   "$(python3 -I -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict'])" sast-results/findings.json)" "fail"
 rm -f json.py pip.py; git checkout -q r3
 
+# settings come from the base branch: a PR cannot switch off its own blocking or allow-list its own secret
+git checkout -q -b cfg main
+printf '[policy]\nblock_on = []\n[tools]\nopengrep = false\nruff = false\ngitleaks = false\n' > .sast-check.toml
+printf '[extend]\nuseDefault = true\n[allowlist]\npaths = [".*"]\n' > .gitleaks.toml
+printf "app.get('/k', (req, res) => { eval(req.query.k); });\n" > src/k.js
+echo 'K3 = "AKIAIOSFODNN7ABCDEFG"' > src/k.py
+git add .sast-check.toml .gitleaks.toml src/k.js src/k.py && git commit -qm cfg
+G=$(git log -1 --format=%H); for f in src/k.py; do echo "$G:$f:aws-access-token:1" >> .gitleaksignore; done
+git add .gitleaksignore && git commit -qm ignore
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~2 --only opengrep,gitleaks >/dev/null; set -e
+check "PR's .sast-check.toml cannot turn off blocking"   "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/k.js')")" "1"
+check "PR's .gitleaks.toml/.gitleaksignore cannot hide a secret" "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/k.py')")" "1"
+check "PR's .gitleaksignore is put back after the scan" "$(test -f .gitleaksignore && git status --porcelain .gitleaksignore | wc -l)" "0"
+check "report says the settings change applies after merge" "$(grep -c 'take effect after merge' sast-results/report.md)" "1"
+if command -v zizmor >/dev/null; then
+  mkdir -p .github/workflows
+  printf 'rules:\n  template-injection:\n    disable: true\n' > zizmor.yml
+  printf 'on: pull_request_target\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.pull_request.title }}"\n' > .github/workflows/x.yml
+  git add zizmor.yml .github/workflows/x.yml && git commit -qm zcfg
+  set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~3 --only zizmor >/dev/null; set -e
+  check "PR's zizmor.yml cannot switch audits off"        "$(q "int(any(f['rule']=='zizmor.template-injection' for f in d['findings']))")" "1"
+fi
+git checkout -q r3
+
 # a PR file named like an option must not hijack the scanner's arguments
 printf 'x\n' > ./--exclude && printf "app.get('/v', (req, res) => { eval(req.query.v); });\n" > vuln.js && printf 'x\n' > zzzz
 git add -- ./--exclude vuln.js zzzz && git commit -qm dash

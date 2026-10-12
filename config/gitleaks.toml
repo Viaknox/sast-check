@@ -1,0 +1,5 @@
+# gitleaks settings used by sast-check: the built-in rules, nothing else.
+# A repo's own .gitleaks.toml / .gitleaksignore is never read (a PR could allow-list its own secret).
+# To accept a known false positive, use [[ignore]] in .sast-check.toml on main, with a reason.
+[extend]
+useDefault = true

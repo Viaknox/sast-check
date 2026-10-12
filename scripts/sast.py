@@ -118,6 +118,7 @@ class Ctx:
     changed_lines: dict[str, set[int]] = field(default_factory=dict)
     changed_files: list[str] = field(default_factory=list)
     runs: list[ToolRun] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------- helpers
@@ -138,11 +139,28 @@ def deep_merge(a: dict, b: dict) -> dict:
     return out
 
 
-def load_config(repo: Path) -> dict:
+# Settings files a PR must not be able to change for its own scan. With a base ref (a PR), each is read
+# from the base branch; a PR's change to one takes effect once it is merged.
+SETTINGS_FILES = (".sast-check.toml", ".gitleaks.toml", ".gitleaksignore", "zizmor.yml", ".github/zizmor.yml")
+
+
+def settings_file(repo: Path, base: str | None, name: str) -> str | None:
+    """Text of a settings file: from the base branch when scanning a PR, else from the working tree."""
+    if not base:
+        f = repo / name
+        return f.read_text(errors="replace") if f.is_file() else None
+    p = subprocess.run(["git", "show", f"{base}:{name}"], cwd=repo, capture_output=True, text=True)
+    if p.returncode == 0:
+        return p.stdout
+    if "does not exist" in p.stderr or "exists on disk, but not in" in p.stderr:
+        return None
+    raise RuntimeError(f"cannot read {name} from base {base}: {p.stderr.strip()[:200]}")
+
+
+def load_config(text: str | None) -> dict:
     cfg = tomllib.loads((ROOT / "config" / "default.toml").read_text())
-    user = repo / ".sast-check.toml"
-    if user.exists():
-        uc = tomllib.loads(user.read_text())
+    if text is not None:
+        uc = tomllib.loads(text)
         defaults_excl = cfg["paths"]["exclude"]
         cfg = deep_merge(cfg, uc)
         # user excludes ADD to the defaults (never silently re-include node_modules etc.)
@@ -327,6 +345,20 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
         return []
     online = bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
     cmd = ["zizmor", "--format", "json", "--no-progress"] + ([] if online else ["--offline"])
+    with tempfile.TemporaryDirectory() as td:
+        if ctx.base:   # PR scans: the base branch's zizmor config only (a PR's could switch audits off)
+            conf = (settings_file(ctx.repo, ctx.base, "zizmor.yml")
+                    or settings_file(ctx.repo, ctx.base, ".github/zizmor.yml"))
+            if conf is None:
+                cmd.append("--no-config")
+            else:
+                (Path(td) / "zizmor.yml").write_text(conf)
+                cmd += ["--config", str(Path(td) / "zizmor.yml")]
+        return zizmor_scan(ctx, cmd, tg, online)
+
+
+def zizmor_scan(ctx: Ctx, cmd: list[str], tg: list[str], online: bool) -> list[Finding]:
+    """Run zizmor (online, falling back to offline) and turn its results into findings."""
     # zizmor exit codes 10-14 mean "findings present"
     ok = (0, 10, 11, 12, 13, 14)
     try:
@@ -335,7 +367,7 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
         if not online:
             raise
         # GitHub API unavailable/unauthorized: keep the offline audits rather than lose all of them
-        p = sh(["zizmor", "--format", "json", "--no-progress", "--offline", "--"] + tg, ctx.repo, ok_codes=ok)
+        p = sh(cmd + ["--offline", "--"] + tg, ctx.repo, ok_codes=ok)   # same settings flags, offline
         why = next((l.strip() for l in str(e).splitlines() if re.search(r"status|unauthorized|timed? ?out|dns", l, re.I)),
                    "GitHub API error")
         ctx.runs.append(ToolRun("zizmor-online", "skipped", "online audits unavailable (" + why[:160] + ")"))
@@ -369,16 +401,46 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
             runs.append(["gitleaks", "git", "--pre-commit"])                    # unstaged (local runs)
             runs.append(["gitleaks", "git", "--pre-commit", "--staged"])        # staged (local runs)
             untracked = sh(["git", "ls-files", "-z", "--others", "--exclude-standard"], ctx.repo).stdout.split("\0")
-            runs += [["gitleaks", "dir", f] for f in untracked
+            runs += [["gitleaks", "dir", "--", f] for f in untracked
                      if f and not glob_any(f, ctx.cfg["paths"]["exclude"])]     # new, never-added files
         else:
             runs.append(["gitleaks", "dir", "."])
-        for i, cmd in enumerate(runs):
-            rp = Path(td) / f"g{i}.json"
-            sh(cmd + ["--redact", "--no-banner", "--exit-code", "0", "--report-format", "json",
-                      "--report-path", str(rp)], ctx.repo)
-            if rp.exists() and rp.stat().st_size:
-                reports += json.loads(rp.read_text())
+        # PR scans use the base branch's .gitleaks.toml / .gitleaksignore, never the PR's (a PR could
+        # allow-list its own secret). gitleaks always also reads <repo>/.gitleaksignore, so the PR's copy
+        # is moved aside for the scan and put back afterwards.
+        settings, aside = [], None
+        if ctx.base:
+            conf = settings_file(ctx.repo, ctx.base, ".gitleaks.toml")
+            (Path(td) / "gitleaks.toml").write_text(conf if conf is not None else
+                                                    (ROOT / "config" / "gitleaks.toml").read_text())
+            (Path(td) / ".gitleaksignore").write_text(settings_file(ctx.repo, ctx.base, ".gitleaksignore") or "")
+            settings = ["--config", str(Path(td) / "gitleaks.toml"), "--gitleaks-ignore-path", td]
+            if (ctx.repo / ".gitleaksignore").is_file():
+                aside = Path(td) / "pr.gitleaksignore"
+                shutil.move(ctx.repo / ".gitleaksignore", aside)
+        try:
+            reports += gitleaks_runs(ctx, runs, settings, td)
+        finally:
+            if aside:
+                shutil.move(aside, ctx.repo / ".gitleaksignore")
+    return gitleaks_findings(ctx, reports)
+
+
+def gitleaks_runs(ctx: Ctx, runs: list[list[str]], settings: list[str], td: str) -> list[dict]:
+    """Run each gitleaks command with the given settings flags; return the raw JSON findings."""
+    reports = []
+    for i, cmd in enumerate(runs):
+        rp = Path(td) / f"g{i}.json"
+        opts = settings + ["--redact", "--no-banner", "--exit-code", "0", "--report-format", "json",
+                           "--report-path", str(rp)]
+        sh(cmd[:2] + opts + cmd[2:], ctx.repo)                   # options before any "--" / target
+        if rp.exists() and rp.stat().st_size:
+            reports += json.loads(rp.read_text())
+    return reports
+
+
+def gitleaks_findings(ctx: Ctx, reports: list[dict]) -> list[Finding]:
+    """Deduplicate gitleaks results and turn them into findings (secret values stay redacted)."""
     out, seen = [], set()
     for r in reports:
         key = (r["File"], r["StartLine"], r["RuleID"])
@@ -534,7 +596,7 @@ def report_md(ctx: Ctx, findings: list[Finding], verdict: str) -> str:
     icon = {"pass": "✅", "fail": "❌", "error": "⚠️"}[verdict]
     head = {"pass": "No blocking security issues", "fail": f"{len(blocking)} blocking security issue(s)",
             "error": "A scanner failed — result incomplete"}[verdict]
-    L = [f"## {icon} SAST check: {head}", ""]
+    L = [f"## {icon} SAST check: {head}", ""] + [f"> {n}" for n in ctx.notes] + ([""] if ctx.notes else [])
     counts = {s: sum(1 for f in active if f.in_diff and f.severity == s) for s in reversed(SEV_ORDER)}
     L += ["| Critical | High | Medium | Low | Pre-existing | Suppressed |", "|---|---|---|---|---|---|",
           f"| {counts['critical']} | {counts['high']} | {counts['medium']} | {counts['low']} | {len(old)} | "
@@ -594,12 +656,17 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     repo = Path(a.repo).resolve()
-    cfg = load_config(repo)
+    cfg = load_config(settings_file(repo, a.base, ".sast-check.toml"))
     mode = a.mode or cfg["policy"]["scope"]
     if mode == "diff" and not a.base:
         print("diff mode needs --base (e.g. origin/main); falling back to full scan", file=sys.stderr)
         mode = "full"
     ctx = Ctx(repo=repo, cfg=cfg, mode=mode, base=a.base)
+    if a.base:
+        edited = [n for n in SETTINGS_FILES if settings_file(repo, None, n) != settings_file(repo, a.base, n)]
+        if edited:
+            ctx.notes.append("This change edits " + ", ".join(f"`{n}`" for n in edited) + ". The check used the "
+                             "base branch's version; the new settings take effect after merge.")
     enabled = a.only.split(",") if a.only else [k for k, v in cfg["tools"].items() if v]
     unknown = [n for n in enabled if n not in SCANNERS]
     if unknown:
