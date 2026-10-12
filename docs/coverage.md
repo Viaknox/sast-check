@@ -89,6 +89,7 @@ Runs when a lockfile changes. Severity from CVSS (≥9 critical, ≥7 high, ≥4
 ## Optional — Trivy (Apache-2.0)
 
 `[tools] trivy = true` adds deep Docker/Terraform/K8s misconfiguration checks (install trivy yourself).
+On PRs it uses the base branch's `trivy.yaml` and `.trivyignore`; inline `trivy:ignore` / `tfsec:ignore` comments are not honored (use `sast-ignore` or `[[ignore]]`). Findings carry Trivy's full line range, so a change inside a resource counts.
 
 ## Not in v1
 

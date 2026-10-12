@@ -38,6 +38,12 @@ F=sast-results/findings.json
 q() { python3 -I -c "import json,sys;d=json.load(open('$F'));print($1)"; }
 fail=0
 check() { if [ "$2" = "$3" ]; then echo "ok   - $1"; else echo "FAIL - $1 (got $2, want $3)"; fail=1; fi; }
+# run the gate; its exit code lands in $code. Exit 2 (a scanner errored) fails the test: an erroring
+# scanner reports no findings, which would make every "expect 0 findings" check pass for the wrong reason.
+gate() {
+  set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" "$@" >/dev/null 2>&1; code=$?; set -e
+  if [ "$code" = 2 ]; then echo "FAIL - gate errored: $* :: $(q "[r for r in d['runs'] if r['status']=='error']")"; fail=1; fi
+}
 
 check "exit code is 1 (blocking findings)"            "$code" "1"
 check "new eval blocks"                               "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='sast.js.code-eval' and f['line']==6)")" "1"
@@ -54,7 +60,7 @@ check "all requested scanners ran"                    "$(q "sorted(r['status'] f
 
 # same finding moved down 3 lines keeps its fingerprint
 sed -i '1i // a\n// b\n// c' src/app.js
-python3 "$HERE/scripts/sast.py" --mode full --only opengrep >/dev/null || true
+gate --mode full --only opengrep
 FP2=$(python3 -c "import json;d=json.load(open('sast-results/results.sarif'));print([r['partialFingerprints']['sastCheck/v1'] for r in d['runs'][0]['results'] if r['ruleId']=='sast.js.code-eval' and r['locations'][0]['physicalLocation']['region']['startLine']==9][0])")
 check "fingerprint survives a line move"              "$FP2" "$FP1"
 git checkout -q -- src/app.js
@@ -75,7 +81,7 @@ sed -i 's/most_recent = false/most_recent = true/' ami.tf
 mkdir -p "src/évil" && printf "app.get('/x', (req, res) => { eval(req.query.c); });\n" > "src/évil/h.js"
 git add -A && git commit -qm "range + path"
 echo 'K2 = "AKIAIOSFODNN7ABCDEFG"' > staged.py && git add staged.py
-set +e; python3 "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only opengrep,gitleaks >/dev/null; set -e
+gate --mode diff --base HEAD~1 --only opengrep,gitleaks
 check "multi-line match blocks when an inner line changed" "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='sast.terraform.aws-ami-no-owner')")" "1"
 check "file under a non-ASCII path is scanned"            "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='sast.js.code-eval' and 'vil/h.js' in f['path'])")" "1"
 check "staged (uncommitted) secret is caught"             "$(q "sum(1 for f in d['findings'] if f['kind']=='secret' and f['path']=='staged.py')")" "1"
@@ -92,7 +98,7 @@ sed -i 's/shell=False/shell=True/' src/run.py
 printf 'note = "sast-ignore[ruff.S307]: not a comment"\neval(input())\n' > src/s.py
 git add -A && git commit -qm r3
 printf "app.get('/u', (req, res) => { eval(req.query.u); });\n" > "src/new module.js"
-set +e; python3 "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only opengrep,ruff >/dev/null; set -e
+gate --mode diff --base HEAD~1 --only opengrep,ruff
 check "eval in a later hunk after a '++' line blocks"     "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='sast.js.code-eval' and f['path']=='src/c.js')")" "1"
 check "sast-ignore inside a string does not suppress"     "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='ruff.S307' and f['path']=='src/s.py')")" "1"
 check "Ruff multi-line finding counts as new"             "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='ruff.S602' and f['path']=='src/run.py']")" "[True]"
@@ -107,7 +113,7 @@ git add -A src && git commit -qm r4base
 sed -i 's/shell=False/shell=True/' src/u.py
 rm src/link.py && printf 'import pickle\npickle.loads(open(0, "rb").read())\n' > src/link.py
 git add -A src && git commit -qm r4
-set +e; python3 "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null; set -e
+gate --mode diff --base HEAD~1 --only ruff
 check "multi-line call after non-ASCII text counts as new" "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='ruff.S602' and f['path']=='src/u.py']")" "[True]"
 check "symlink replaced by a file is scanned"             "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/link.py')")" "1"
 git checkout -q r3
@@ -119,7 +125,7 @@ printf '*.py -diff\n' > .gitattributes
 printf 'def f(s):\n    return eval(s)\n' > src/h.py
 printf 'raise SystemExit("hijacked")\n' > json.py && cp json.py pip.py
 git add .gitattributes src/h.py && git commit -qm hide
-set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null; set -e
+gate --mode diff --base HEAD~1 --only ruff
 check "-diff in .gitattributes cannot hide a change"       "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/h.py')")" "1"
 check "planted json.py does not hijack the scanner (-I)"   "$(python3 -I -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict'])" sast-results/findings.json)" "fail"
 rm -f json.py pip.py; git checkout -q r3
@@ -133,7 +139,7 @@ echo 'K3 = "AKIAIOSFODNN7ABCDEFG"' > src/k.py
 git add .sast-check.toml .gitleaks.toml src/k.js src/k.py && git commit -qm cfg
 G=$(git log -1 --format=%H); for f in src/k.py; do echo "$G:$f:aws-access-token:1" >> .gitleaksignore; done
 git add .gitleaksignore && git commit -qm ignore
-set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~2 --only opengrep,gitleaks >/dev/null; set -e
+gate --mode diff --base HEAD~2 --only opengrep,gitleaks
 check "PR's .sast-check.toml cannot turn off blocking"   "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/k.js')")" "1"
 check "PR's .gitleaks.toml/.gitleaksignore cannot hide a secret" "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/k.py')")" "1"
 check "PR's .gitleaksignore is put back after the scan" "$(test -f .gitleaksignore && git status --porcelain .gitleaksignore | wc -l)" "0"
@@ -143,7 +149,7 @@ if command -v zizmor >/dev/null; then
   printf 'rules:\n  template-injection:\n    disable: true\n' > zizmor.yml
   printf 'on: pull_request_target\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.pull_request.title }}"\n' > .github/workflows/x.yml
   git add zizmor.yml .github/workflows/x.yml && git commit -qm zcfg
-  set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~3 --only zizmor >/dev/null; set -e
+  gate --mode diff --base HEAD~3 --only zizmor
   check "PR's zizmor.yml cannot switch audits off"        "$(q "int(any(f['rule']=='zizmor.template-injection' for f in d['findings']))")" "1"
 fi
 git checkout -q r3
@@ -160,7 +166,7 @@ printf -- '-- old\n\n\n\n\n\n\n\nmodule.exports = {};\n' > src/hd.js && git add 
 sed -i 's/^-- old$/++ new/' src/hd.js
 printf "app.get('/h', (req, res) => { eval(req.query.h); });\n" >> src/hd.js
 git commit -qam hd2
-set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only opengrep >/dev/null; set -e
+gate --mode diff --base HEAD~1 --only opengrep
 check "pseudo '---/+++' lines inside a hunk are not headers" "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/hd.js')")" "1"
 git checkout -q r3
 
@@ -176,7 +182,7 @@ git add src/n.ipynb && git commit -qm nb
 sed -i 's/"y = 2"/"eval(input())"/' src/n.ipynb
 printf 'eval(input())\n' > src/w.pyw
 git add src/n.ipynb src/w.pyw && git commit -qm nb2
-set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null; set -e
+gate --mode diff --base HEAD~1 --only ruff
 check "notebook finding blocks on the changed line"      "$(q "[(f['blocking'], open('src/n.ipynb').read().split(chr(10))[f['line']-1].strip()) for f in d['findings'] if f['path']=='src/n.ipynb' and f['rule']=='ruff.S307']")" "[(True, '\"eval(input())\"')]"
 check ".pyw files are scanned"                            "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/w.pyw')")" "1"
 git checkout -q r3
@@ -185,14 +191,14 @@ git checkout -q r3
 git checkout -q -b hist main
 echo 'K5 = "AKIAIOSFODNN7ABCDEFG"' > src/h5.py && git add src/h5.py && git commit -qm add
 git rm -q src/h5.py && git commit -qm del
-set +e; python3 -I "$HERE/scripts/sast.py" --mode full --base HEAD~2 --only gitleaks >/dev/null; set -e
+gate --mode full --base HEAD~2 --only gitleaks
 check "full scope: secret added then deleted is caught"   "$(q "int(any(f['kind']=='secret' and f['path']=='src/h5.py' for f in d['findings']))")" "1"
 # full scope honors excludes for workflows
 mkdir -p .github/workflows && printf '[paths]\nexclude = [".github/workflows/skip.yml"]\n' > .sast-check.toml
 printf 'on: pull_request_target\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.pull_request.title }}"\n' > .github/workflows/skip.yml
 git add .sast-check.toml .github/workflows/skip.yml && git commit -qm skip
 if command -v zizmor >/dev/null; then
-  set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" --mode full --only zizmor >/dev/null; set -e
+  gate --mode full --only zizmor
   check "full scope: excluded workflow is not scanned"    "$(q "sum(1 for f in d['findings'] if f['path']=='.github/workflows/skip.yml')")" "0"
 fi
 # a PR's osv-scanner.toml cannot hide a vulnerable dependency
@@ -200,7 +206,7 @@ if command -v osv-scanner >/dev/null; then
   printf 'requests==2.19.0\n' > requirements.txt
   printf '[[PackageOverrides]]\nname = "requests"\nignore = true\n' > osv-scanner.toml
   git add requirements.txt osv-scanner.toml && git commit -qm osv
-  set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only osv >/dev/null; set -e
+  gate --mode diff --base HEAD~1 --only osv
   check "PR's osv-scanner.toml cannot hide a vulnerable dep" "$(q "int(sum(1 for f in d['findings'] if f['kind']=='dependency') > 0)")" "1"
 fi
 git checkout -q r3
@@ -213,7 +219,8 @@ printf 'def f(s):\n    return eval(s)\n' > src/ig/v.py
 printf 'src/ig/\n' > .semgrepignore && cp .semgrepignore .opengrepignore && printf 'src/ig/\n' > .gitignore
 git add -f src/ig/v.js src/ig/v.py .semgrepignore .opengrepignore .gitignore && git commit -qm ign
 printf 'on: pull_request_target\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.pull_request.title }}"\n' > .github/workflows/new.yml
-set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" --mode full --only opengrep,ruff,zizmor >/dev/null; set -e
+gate --mode full --only opengrep,ruff,zizmor
+check "full: committed findings block (exit 1)"         "$code" "1"
 check "full: .semgrepignore cannot hide committed code"   "$(q "sum(1 for f in d['findings'] if f['path']=='src/ig/v.js')")" "1"
 check "full: .gitignore cannot hide committed Python"     "$(q "int(any(f['path']=='src/ig/v.py' and f['rule']=='ruff.S307' for f in d['findings']))")" "1"
 if command -v zizmor >/dev/null; then
@@ -225,7 +232,7 @@ rm -f .github/workflows/new.yml; git checkout -q r3
 git checkout -q -b ren main
 printf 'eval(input())\n' > src/payload.txt && git add src/payload.txt && git commit -qm txt
 git mv src/payload.txt src/payload.py && git commit -qm ren
-set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null; set -e
+gate --mode diff --base HEAD~1 --only ruff
 check "pure rename into .py is scanned"                   "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/payload.py')")" "1"
 git checkout -q r3
 
@@ -237,7 +244,7 @@ echo 'K4 = "AKIAIOSFODNN7ABCDEFG" # gitleaks:allow' > src/ga.py
 printf '<div>{{{ user.bio }}}</div>\n' > src/t.hbs
 printf '<template><div v-html="post.body"></div></template>\n' > src/t.vue
 git add src/nq.py src/ns.js src/ga.py src/t.hbs src/t.vue && git commit -qm noqa
-set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only opengrep,ruff,gitleaks >/dev/null; set -e
+gate --mode diff --base HEAD~1 --only opengrep,ruff,gitleaks
 check "# noqa cannot hide a Ruff finding"                 "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/nq.py')")" "1"
 check "// nosemgrep cannot hide an Opengrep finding"      "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/ns.js')")" "1"
 check "gitleaks:allow cannot hide a secret"               "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/ga.py')")" "1"
@@ -246,7 +253,7 @@ if command -v zizmor >/dev/null; then
   mkdir -p .github/workflows
   printf 'on: pull_request_target\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.pull_request.title }}" # zizmor: ignore[template-injection]\n' > .github/workflows/z.yml
   git add .github/workflows/z.yml && git commit -qm zig
-  set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only zizmor >/dev/null; set -e
+  gate --mode diff --base HEAD~1 --only zizmor
   check "# zizmor: ignore cannot hide a workflow finding" "$(q "int(any(f['rule']=='zizmor.template-injection' for f in d['findings']))")" "1"
 fi
 git checkout -q r3
@@ -254,13 +261,46 @@ git checkout -q r3
 # a PR file named like an option must not hijack the scanner's arguments
 printf 'x\n' > ./--exclude && printf "app.get('/v', (req, res) => { eval(req.query.v); });\n" > vuln.js && printf 'x\n' > zzzz
 git add -- ./--exclude vuln.js zzzz && git commit -qm dash
-set +e; python3 "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only opengrep >/dev/null; set -e
+gate --mode diff --base HEAD~1 --only opengrep
 check "file named '--exclude' cannot hide another file"   "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='vuln.js')")" "1"
+git checkout -q main
+
+# round-5: a deletion alone can create a finding; a '#' inside a string is not a comment; typo'd block_on
+git checkout -q -b r5 main
+printf 'data "aws_ami" "base" {\n  most_recent = true\n  owners      = ["amazon"]\n  filter {\n    name   = "name"\n    values = ["al2023-*"]\n  }\n}\n' > del.tf
+git add del.tf && git commit -qm delbase
+sed -i '/owners/d' del.tf
+printf 'note = "# sast-ignore[ruff.S307]: data, not a comment"\neval(input())\n' > src/hs.py
+printf 'x = "it'"'"'s"  # sast-ignore[ruff.S307]: reviewed, quote before the comment\neval(x)\n' > src/hq.py
+git add del.tf src/hs.py src/hq.py && git commit -qm r5
+gate --mode diff --base HEAD~1 --only opengrep,ruff
+check "deleting a protective line blocks"                 "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='sast.terraform.aws-ami-no-owner' and f['path']=='del.tf')")" "1"
+check "'# sast-ignore' inside a string does not suppress" "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='ruff.S307' and f['path']=='src/hs.py')")" "1"
+check "real comment after a quoted string suppresses"     "$(q "[bool(f['suppressed']) for f in d['findings'] if f['rule']=='ruff.S307' and f['path']=='src/hq.py']")" "[True]"
+printf '[policy]\nblock_on = ["criticial"]\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm typo
+printf 'eval(input())\n' > src/ty.py && git add src/ty.py && git commit -qm ty
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "typo in base block_on fails closed (exit 2)"       "$code" "2"
+check "typo in base block_on is reported"                 "$(q "int(any(r['name']=='settings' and 'block_on' in r['detail'] for r in d['runs']))")" "1"
+# Trivy (optional): a PR's .trivyignore / trivy.yaml / inline trivy:ignore cannot hide a finding; ranges hold
+if command -v trivy >/dev/null; then
+  git checkout -q -b tv main
+  printf 'resource "aws_security_group_rule" "r" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = ["10.0.0.0/8"]\n  security_group_id = "sg-1"\n}\n' > sg.tf
+  git add sg.tf && git commit -qm sgbase
+  sed -i 's#10.0.0.0/8#0.0.0.0/0#' sg.tf && sed -i '1i #trivy:ignore:AWS-0124' sg.tf
+  printf 'AWS-0107\n' > .trivyignore && printf 'misconfiguration:\n  scanners: [dockerfile]\n' > trivy.yaml
+  git add sg.tf .trivyignore trivy.yaml && git commit -qm tv
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: PR's .trivyignore/trivy.yaml cannot hide"  "$(q "int(any(f['rule']=='trivy.AWS-0107' for f in d['findings']))")" "1"
+  check "trivy: inline trivy:ignore cannot hide"           "$(q "int(any(f['rule']=='trivy.AWS-0124' for f in d['findings']))")" "1"
+  check "trivy: inner-line change inside a resource is new" "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0124']")" "[True]"
+  git checkout -q main
+fi
 git checkout -q main
 
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
-set +e; python3 "$HERE/scripts/sast.py" --mode diff --base main~1 --only opengrep,ruff,gitleaks >/dev/null; code=$?; set -e
+gate --mode diff --base main~1 --only opengrep,ruff,gitleaks
 check "clean PR passes"                                "$code" "0"
 
 exit $fail

@@ -142,7 +142,7 @@ def deep_merge(a: dict, b: dict) -> dict:
 # Settings files a PR must not be able to change for its own scan. With a base ref (a PR), each is read
 # from the base branch; a PR's change to one takes effect once it is merged.
 SETTINGS_FILES = (".sast-check.toml", ".gitleaks.toml", ".gitleaksignore", "zizmor.yml", ".github/zizmor.yml",
-                  "osv-scanner.toml")
+                  "osv-scanner.toml", "trivy.yaml", ".trivyignore")
 
 
 def settings_file(repo: Path, base: str | None, name: str) -> str | None:
@@ -169,6 +169,10 @@ def load_config(text: str | None) -> dict:
         cfg = deep_merge(cfg, uc)
         # user excludes ADD to the defaults (never silently re-include node_modules etc.)
         cfg["paths"]["exclude"] = sorted(set(defaults_excl) | set(cfg["paths"]["exclude"]))
+    block_on = cfg["policy"].get("block_on")
+    # a typo ("criticial") would match no finding and silently turn the gate into report-only: fail closed
+    if not isinstance(block_on, list) or any(s not in SEV_ORDER for s in block_on):
+        raise RuntimeError(f"policy.block_on must be a list of {', '.join(SEV_ORDER)}; got {block_on!r}")
     return cfg
 
 
@@ -233,6 +237,11 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
             old_left = int(m.group(1) or 1)
             start, new_left = int(m.group(2)), int(m.group(3) or 1)
             files[cur].update(range(start, start + new_left))
+            if new_left == 0:
+                # pure deletion ("+N,0": lines removed after new line N). Deleting a protective line (e.g.
+                # `owners = [...]`) can create a finding with no added line, so the lines on both sides of
+                # the cut count as changed; a finding spanning the cut then counts as new.
+                files[cur].update(n for n in (start, start + 1) if n >= 1)
     # a file in the diff with no hunk (a 100% rename or copy, e.g. payload.txt -> payload.py) still changed
     # what gets scanned: count it as fully changed
     ns = sh(["git", "diff", "--name-status", "-z", "-M", "-C", "--diff-filter=ACMRT", "--merge-base", base],
@@ -572,19 +581,45 @@ def run_osv(ctx: Ctx) -> list[Finding]:
     return out
 
 
+TRIVY_INLINE_RE = re.compile(rb"(trivy|tfsec):ignore", re.IGNORECASE)
+
+
 def run_trivy(ctx: Ctx) -> list[Finding]:
     if not shutil.which("trivy"):
         raise FileNotFoundError("trivy not installed")
-    p = sh(["trivy", "config", "--quiet", "--format", "json", "."], ctx.repo)
+    with tempfile.TemporaryDirectory() as td:
+        # Trivy has no switch for inline `trivy:ignore` / `tfsec:ignore` comments, so it scans a copy of the
+        # tree with those markers defused (same length, so line numbers hold). Symlinks are not copied.
+        work = Path(td) / "src"
+        for d, dirs, names in os.walk(ctx.repo):
+            reld = Path(d).relative_to(ctx.repo).as_posix()
+            dirs[:] = [x for x in dirs if x != ".git" and not os.path.islink(os.path.join(d, x))
+                       and not glob_any(f"{x}/" if reld == "." else f"{reld}/{x}/", ctx.cfg["paths"]["exclude"])]
+            for n in names:
+                src = Path(d) / n
+                r = src.relative_to(ctx.repo).as_posix()
+                if src.is_symlink() or not src.is_file() or glob_any(r, ctx.cfg["paths"]["exclude"]):
+                    continue
+                (work / r).parent.mkdir(parents=True, exist_ok=True)
+                (work / r).write_bytes(TRIVY_INLINE_RE.sub(rb"\1_ignore", src.read_bytes()))
+        work.mkdir(exist_ok=True)
+        cmd = ["trivy", "config", "--quiet", "--format", "json"]
+        if ctx.base:   # PR scans: the base branch's trivy.yaml / .trivyignore, never the PR's
+            conf, ign = Path(td) / "trivy.yaml", Path(td) / "trivyignore"
+            conf.write_text(settings_file(ctx.repo, ctx.base, "trivy.yaml") or "")
+            ign.write_text(settings_file(ctx.repo, ctx.base, ".trivyignore") or "")
+            cmd += ["--config", str(conf), "--ignorefile", str(ign)]
+        p = sh(cmd + ["."], work)
     out = []
     for res in json.loads(p.stdout or "{}").get("Results", []) or []:
         if glob_any(res["Target"], ctx.cfg["paths"]["exclude"]):   # excluded paths are never scanned
             continue
         for m in res.get("Misconfigurations", []) or []:
+            cm = m.get("CauseMetadata") or {}
             out.append(Finding(
                 tool="trivy", rule=f"trivy.{m['ID']}", severity=m["Severity"].lower().replace("unknown", "low"),
                 confidence="medium", path=res["Target"],
-                line=(m.get("CauseMetadata") or {}).get("StartLine") or 1, kind="config", cwe="CWE-710",
+                line=cm.get("StartLine") or 1, end_line=cm.get("EndLine") or 0, kind="config", cwe="CWE-710",
                 message=m["Title"], fix=m.get("Resolution", ""), url=m.get("PrimaryURL", ""),
             ))
     return out
@@ -597,6 +632,27 @@ SCANNERS = {
 
 
 # ---------------------------------------------------------------- policy
+def comment_text(line: str) -> str | None:
+    """The comment part of a source line: from the first comment opener (#, //, /*, <!--) outside a
+    '...', "..." or `...` string, so a marker inside string data never suppresses. None if no comment.
+    Line-local: a stray quote before the comment hides it (the finding then blocks: fails safe)."""
+    quote, i = None, 0
+    while i < len(line):
+        c = line[i]
+        if quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+        elif c in "'\"`":
+            quote = c
+        elif c == "#" or line.startswith(("//", "/*", "<!--"), i):
+            return line[i:]
+        i += 1
+    return None
+
+
 def inline_suppression(repo: Path, f: Finding) -> str:
     try:
         lines = (repo / f.path).read_text(errors="ignore").splitlines()
@@ -604,7 +660,8 @@ def inline_suppression(repo: Path, f: Finding) -> str:
         return ""
     for idx in (f.line - 1, f.line - 2):          # same line or the line above
         if 0 <= idx < len(lines):
-            m = IGNORE_RE.search(lines[idx])
+            c = comment_text(lines[idx])
+            m = IGNORE_RE.search(c) if c else None
             if m and m.group("rule").strip() in (f.rule, "*") and m.group("reason").strip():
                 return "inline: " + m.group("reason").strip()
     return ""

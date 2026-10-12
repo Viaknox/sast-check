@@ -40,7 +40,9 @@ expires = "2027-01-01"
 ```
 Inline, on or above the line: `// sast-ignore[sast.js.code-eval]: <reason>` (no reason = not suppressed).
 This is the **only** inline suppression. The scanners' own comments (`# noqa`, `// nosemgrep`, `gitleaks:allow`,
-`# zizmor: ignore[...]`) are ignored, so every suppression has a written reason and shows up in the report.
+`# zizmor: ignore[...]`, `trivy:ignore`) are ignored, so every suppression has a written reason and shows up in the report.
+The marker counts only in a real comment: inside a string (`"# sast-ignore[...]"`) it does nothing.
+A misspelled `block_on` severity is a settings error (the check fails) rather than a gate that never blocks.
 All keys and defaults: [config/default.toml](config/default.toml).
 
 ## Run locally / with an AI agent
@@ -70,7 +72,7 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **Fail closed** — if an installed scanner crashes, the check fails (`fail_on_tool_error`).
 - **Supply chain** — actions pinned by SHA; Opengrep binary verified with Sigstore/cosign; Go tools installed through the Go checksum database; Python tools pinned.
 - **Low-confidence findings never block** (they're shown as warnings).
-- **Settings come from the PR's base branch.** On a PR, `.sast-check.toml`, `.gitleaks.toml`, `.gitleaksignore` and zizmor's config are read from the base branch, never from the PR. A PR that edits them is scanned with the old settings, and the report says the change takes effect after merge. This stops a PR from switching off its own check.
+- **Settings come from the PR's base branch.** On a PR, `.sast-check.toml`, `.gitleaks.toml`, `.gitleaksignore`, zizmor's config, `osv-scanner.toml`, `trivy.yaml` and `.trivyignore` are read from the base branch, never from the PR. A PR that edits them is scanned with the old settings, and the report says the change takes effect after merge. This stops a PR from switching off its own check.
 
 ## Known limits (v1)
 
@@ -82,6 +84,8 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **NoSQL injection** ignores callbacks passed to `.find()` / `.filter()`-style calls (e.g. `arr.find(x => x === req.body.id)`). Opengrep taints closures, so without this exclusion every array lookup on request data would be flagged. A real Mongo filter is an object, which is still checked.
 - **JWT decode** counts a `verify()` of the **same token** anywhere in the same function, or earlier in the same block (class methods included), as verification. Verifying one token and decoding another is still flagged. `sast.js.jwt-verify-error-swallowed` catches a `verify()` whose error is swallowed (`catch` without `throw`/`return`) or that uses a callback, followed by `decode()`; it covers `jwt.verify` / `jwt.decode` (default or namespace import), not the named-import form.
 - **Dependency settings:** on PRs, only the base branch's root `osv-scanner.toml` is used; per-directory `osv-scanner.toml` files are ignored.
+- **Inline markers** are found line by line: a quote earlier on the line (e.g. `msg: don't # sast-ignore[...]` in YAML) hides the marker, so the finding still blocks. Put the marker on its own line above instead.
+- **Deleted lines:** a finding caused only by deleting a line counts as new when its match spans the cut (e.g. the `aws_ami` block that lost `owners`). A finding whose lines do not touch the cut is not tied to the deletion.
 - **zizmor exceptions** go in `[[ignore]]` in `.sast-check.toml` (zizmor ignore rules and comments are not honored).
 
 ## Develop
