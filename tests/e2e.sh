@@ -97,7 +97,14 @@ check "eval in a later hunk after a '++' line blocks"     "$(q "sum(f['blocking'
 check "sast-ignore inside a string does not suppress"     "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='ruff.S307' and f['path']=='src/s.py')")" "1"
 check "Ruff multi-line finding counts as new"             "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='ruff.S602' and f['path']=='src/run.py']")" "[True]"
 check "untracked file with a space in its name is scanned" "$(q "sum(1 for f in d['findings'] if f['path']=='src/new module.js')")" "1"
-rm -f "src/new module.js"; git checkout -q main
+rm -f "src/new module.js"
+
+# a PR file named like an option must not hijack the scanner's arguments
+printf 'x\n' > ./--exclude && printf "app.get('/v', (req, res) => { eval(req.query.v); });\n" > vuln.js && printf 'x\n' > zzzz
+git add -- ./--exclude vuln.js zzzz && git commit -qm dash
+set +e; python3 "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only opengrep >/dev/null; set -e
+check "file named '--exclude' cannot hide another file"   "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='vuln.js')")" "1"
+git checkout -q main
 
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean

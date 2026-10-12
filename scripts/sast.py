@@ -245,7 +245,7 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
         cmd += ["--metrics=off"]
     for g in ctx.cfg["paths"]["exclude"]:
         cmd += ["--exclude", g]
-    p = sh(cmd + tg, ctx.repo, ok_codes=(0, 1))
+    p = sh(cmd + ["--"] + tg, ctx.repo, ok_codes=(0, 1))   # "--": a PR file named "--x" is never an option
     data = json.loads(p.stdout or "{}")
     errs = [e for e in data.get("errors", []) if e.get("level") == "error" and "Syntax error" not in str(e.get("type"))]
     if errs:
@@ -288,7 +288,7 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
            "--output-format", "json", "--exit-zero"]
     for g in ctx.cfg["paths"]["exclude"]:
         cmd += ["--extend-exclude", g]
-    data = json.loads(sh(cmd + tg, ctx.repo).stdout or "[]")
+    data = json.loads(sh(cmd + ["--"] + tg, ctx.repo).stdout or "[]")
     calls: dict = {}
     out = []
     for r in data:
@@ -324,12 +324,12 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
     # zizmor exit codes 10-14 mean "findings present"
     ok = (0, 10, 11, 12, 13, 14)
     try:
-        p = sh(cmd + tg, ctx.repo, ok_codes=ok)
+        p = sh(cmd + ["--"] + tg, ctx.repo, ok_codes=ok)
     except RuntimeError as e:
         if not online:
             raise
         # GitHub API unavailable/unauthorized: keep the offline audits rather than lose all of them
-        p = sh(["zizmor", "--format", "json", "--no-progress", "--offline"] + tg, ctx.repo, ok_codes=ok)
+        p = sh(["zizmor", "--format", "json", "--no-progress", "--offline", "--"] + tg, ctx.repo, ok_codes=ok)
         why = next((l.strip() for l in str(e).splitlines() if re.search(r"status|unauthorized|timed? ?out|dns", l, re.I)),
                    "GitHub API error")
         ctx.runs.append(ToolRun("zizmor-online", "skipped", "online audits unavailable (" + why[:160] + ")"))
