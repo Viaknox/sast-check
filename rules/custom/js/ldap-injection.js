@@ -35,6 +35,8 @@ app.get('/safe', (req, res) => {
   client.search('dc=ex,dc=com', { filter: '(uid=' + ldapEscape.filter(req.query.uid) + ')' }, () => {});
   // ok: sast.js.ldap-injection
   client.search('dc=ex,dc=com', { filter: '(objectClass=person)', scope: 'sub' }, () => {});
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + ldapEscape.dn(req.query.uid) + ')' }, () => {});
   // ok: sast.js.ldap-injection
   ad.findUser('jdoe', () => {});
   // ok: sast.js.ldap-injection

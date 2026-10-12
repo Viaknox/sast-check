@@ -229,7 +229,10 @@ def check_settings(uc: dict, defaults: dict) -> None:
 
 
 def glob_any(path: str, globs: list[str]) -> bool:
-    return any(fnmatch.fnmatch(path, g) or fnmatch.fnmatch("/" + path, "*/" + g.lstrip("*/")) for g in globs)
+    """True if the repo-relative path matches a glob; "**/x" also matches x at the root. Only the exact
+    "**/" prefix is dropped: "**/*_test.py" must still need the "*" (root-level foo_test.py)."""
+    return any(fnmatch.fnmatch(path, g) or fnmatch.fnmatch("/" + path, "*/" + (g[3:] if g.startswith("**/") else g))
+               for g in globs)
 
 
 def rel(repo: Path, p: str) -> str:
@@ -869,15 +872,22 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
                         t.extract(m, cwd, filter="data")
             if arc.wait() != 0:
                 raise RuntimeError(f"git archive {ctx.base} failed")
-            if any(f.endswith((".tfvars", ".tfvars.json")) for f in ctx.changed_files):
-                base_p = sh(cmd + ["."], cwd)   # the base tree with its own vars, for the comparison below
             # Terraform variable files are scan inputs, not policy: a vars file named in the config
-            # (misconfiguration.terraform.vars) must be the PR's version, or a changed value goes unseen
-            for f in git_z(ctx.repo, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]):
-                fp = ctx.repo / f
-                if f.endswith((".tfvars", ".tfvars.json")) and fp.is_file() and in_repo(ctx.repo, fp):
-                    (cwd / f).parent.mkdir(parents=True, exist_ok=True)
-                    (cwd / f).write_bytes(fp.read_bytes())
+            # (misconfiguration.terraform.vars) must be the PR's version, or a changed value goes unseen.
+            # A vars file the PR deletes is emptied (Trivy fails on a named file that is missing): the defaults
+            # apply, as they will after merge, so a safe base override cannot mask an unsafe default.
+            is_vars = lambda f: f.endswith((".tfvars", ".tfvars.json"))  # noqa: E731
+            head_vars = {f: (ctx.repo / f).read_bytes()
+                         for f in git_z(ctx.repo, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+                         if is_vars(f) and (ctx.repo / f).is_file() and in_repo(ctx.repo, ctx.repo / f)}
+            base_vars = {q.relative_to(cwd).as_posix(): q.read_bytes() for q in cwd.rglob("*") if q.is_file() and is_vars(q.name)}
+            if head_vars != base_vars:
+                base_p = sh(cmd + ["."], cwd)   # the base tree with its own vars, for the comparison below
+            for f in base_vars.keys() - head_vars.keys():
+                (cwd / f).write_text("{}" if f.endswith(".json") else "")
+            for f, data in head_vars.items():
+                (cwd / f).parent.mkdir(parents=True, exist_ok=True)
+                (cwd / f).write_bytes(data)
         p = sh(cmd + [str(work)], cwd)
         out = trivy_findings(ctx, p.stdout)
         if base_p is not None:

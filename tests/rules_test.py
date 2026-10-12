@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -60,7 +61,15 @@ def main() -> int:
             continue
         cmd = [a.engine, "scan", "--config", str(rule), "--json", "--quiet", "--scan-unknown-extensions"]
         cmd += ["--taint-intrafile"] if is_og else ["--metrics=off", "--disable-version-check"]
-        out = json.loads(subprocess.run(cmd + [str(fx)], capture_output=True, text=True).stdout or "{}")
+        # a rule limited to workflow files is tested on a copy of its fixture at such a path
+        include = [p for r in yaml.safe_load(rule.read_text())["rules"] for p in r.get("paths", {}).get("include", [])]
+        with tempfile.TemporaryDirectory() as td:
+            cwd, target = None, str(fx)
+            if any(p.startswith(".github/workflows/") for p in include):
+                (Path(td) / ".github" / "workflows").mkdir(parents=True)
+                shutil.copyfile(fx, Path(td) / ".github" / "workflows" / fx.name)
+                cwd, target = td, f".github/workflows/{fx.name}"
+            out = json.loads(subprocess.run(cmd + [target], cwd=cwd, capture_output=True, text=True).stdout or "{}")
         # a rule the engine cannot parse is silently skipped -> treat it as a failure
         rule_errs = [e for e in out.get("errors", []) if "Syntax error" not in str(e.get("type"))
                      and "PartialParsing" not in str(e.get("type"))]

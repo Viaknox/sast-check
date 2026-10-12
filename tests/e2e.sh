@@ -318,6 +318,15 @@ if command -v trivy >/dev/null; then
   gate --mode diff --base HEAD~1 --only trivy
   check "trivy: a vars change moving a finding is new"     "$(q "[(f['line'] > 14, f['in_diff']) for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='two.tf']")" "[(True, True)]"
   git checkout -q main
+  # ...and when the PR deletes the vars file whose safe value masked an unsafe default
+  git checkout -q -b tvd main
+  printf 'variable "cidr" {\n  default = "0.0.0.0/0"\n}\nresource "aws_security_group_rule" "r" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = [var.cidr]\n  security_group_id = "sg-1"\n}\n' > dsg.tf
+  printf 'cidr = "10.0.0.0/8"\n' > prod.tfvars && printf 'misconfiguration:\n  terraform:\n    vars: [prod.tfvars]\n' > trivy.yaml
+  git add dsg.tf prod.tfvars trivy.yaml && git commit -qm tvdbase
+  git rm -q prod.tfvars && git commit -qm tvd
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: deleting a masking tfvars file is new"     "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='dsg.tf']")" "[True]"
+  git checkout -q main
 fi
 git checkout -q main
 
@@ -701,6 +710,13 @@ if command -v osv-scanner >/dev/null; then
   check "lockfile behind a directory link is reported"     "$(q "int(any(f['path']=='src/pkg15l/package-lock.json' and f['in_diff'] for f in d['findings']))")" "1"
   git checkout -q main
 fi
+
+# r17: "**/*_test.py" also matches a root-level test file (only the "**/" prefix is optional)
+git checkout -q -b r17 main
+printf 'def test_x():\n    assert 1 + 1 == 2\n' > root_test.py && git add root_test.py && git commit -qm r17
+gate --mode diff --base HEAD~1 --only ruff
+check "root-level *_test.py is treated as a test"        "$(q "sum(1 for f in d['findings'] if f['path']=='root_test.py' and f['rule']=='ruff.S101')")" "0"
+git checkout -q main
 
 # r16: full scope also gives zizmor and OSV the files behind directory aliases
 git checkout -q -b r16 main

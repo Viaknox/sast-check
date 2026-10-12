@@ -39,6 +39,8 @@ app.get('/safe', (req, res) => {
   exec('uptime', (e, o) => res.send(o));
   // ok: sast.js.command-injection
   exec('sleep ' + Number(req.query.secs));
+  // ruleid: sast.js.command-injection
+  exec('echo ' + JSON.stringify(req.query.msg));
   // ok: sast.js.command-injection
   const m = /a(b)/.exec(req.query.text);
   // ok: sast.js.command-injection

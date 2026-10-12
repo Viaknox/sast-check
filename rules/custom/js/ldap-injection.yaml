@@ -34,7 +34,6 @@ rules:
     pattern-sanitizers:
       - pattern: ldapEscape.filter(...)
       - pattern: ldapEscape.filter`...`
-      - pattern: ldapEscape.dn(...)
       - pattern: escapeFilter(...)
       - pattern: escapeLdapFilter(...)
     pattern-sinks:

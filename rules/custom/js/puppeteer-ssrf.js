@@ -49,5 +49,9 @@ app.get('/safe', async (req, res) => {
   await page.evaluate((n) => window.scrollTo(0, n), Number(req.query.y));
   // ok: sast.js.puppeteer-ssrf
   await page.goto(process.env.REPORT_URL);
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.evaluate(encodeURIComponent(req.query.code));
+  // ok: sast.js.puppeteer-ssrf
+  await page.goto(encodeURIComponent(req.query.slug));
   res.end(t);
 });

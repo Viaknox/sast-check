@@ -51,6 +51,20 @@ function ok4() {
   // ok: sast.js.location-xss
   location.href = "/items/" + encodeURIComponent(id);
 }
+function bad6() {
+  // ruleid: sast.js.location-xss
+  location.href = "javascript:" + location.hash.slice(1);
+}
+function bad7() {
+  const v = new URLSearchParams(location.search).get("v");
+  // ruleid: sast.js.location-xss
+  window.open("javascript:" + v);
+}
+function ok6() {
+  const q = new URLSearchParams(location.search).get("q");
+  // ok: sast.js.location-xss
+  window.open("https://example.com/search?q=" + q);
+}
 function ok5(item) {
   // ok: sast.js.location-xss
   window.open(item.url, "_blank");

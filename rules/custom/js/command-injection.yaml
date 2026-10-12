@@ -36,7 +36,6 @@ rules:
       - pattern: shellEscape(...)
       - pattern: escapeShell(...)
       - pattern: $Q.quote(...)
-      - pattern: JSON.stringify(...)
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)

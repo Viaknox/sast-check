@@ -51,7 +51,6 @@ rules:
       - pattern: DOMPurify.sanitize(...)
       - pattern: sanitizeHtml(...)
       - pattern: encodeURIComponent(...)
-      - pattern: encodeURI(...)
       - pattern: escapeHtml(...)
       - pattern: $.text(...)
       - pattern: isSafeUrl(...)

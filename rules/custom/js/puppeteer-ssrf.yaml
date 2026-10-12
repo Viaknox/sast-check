@@ -37,13 +37,14 @@ rules:
           - metavariable-regex:
               metavariable: $P
               regex: '^["''`]https?://[^/]+/'
-      - pattern: encodeURIComponent(...)
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
     pattern-sinks:
       - patterns:
           - pattern: $PAGE.$M($X, ...)
+          # component encoding protects a navigation URL, never code run in the page
+          - pattern-not: $PAGE.goto(encodeURIComponent(...), ...)
           - metavariable-regex:
               metavariable: $M
               regex: '^(goto|setContent|evaluate|evaluateOnNewDocument|waitForFunction)$'

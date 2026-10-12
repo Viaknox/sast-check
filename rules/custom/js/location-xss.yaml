@@ -51,6 +51,13 @@ rules:
       - pattern: sanitizeURL(...)
       - pattern: safeRedirectTarget(...)
       - pattern: encodeURIComponent(...)
+      # a literal prefix that fixes the start of the URL (path, query, fragment or http(s) origin) leaves
+      # no room for a "javascript:" scheme; any other literal ("javascript:" + x) does not
+      - patterns:
+          - pattern: $P + $X
+          - metavariable-regex:
+              metavariable: $P
+              regex: '^["''`](?:/|\./|\?|#|https?://)'
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -60,7 +67,6 @@ rules:
               - pattern: location.href = $X
               - pattern: window.location.href = $X
               - pattern: document.location.href = $X
-          - pattern-not: $L = "..." + $Y
           - pattern-not: $L = `/...`
           - focus-metavariable: $X
       - patterns:
@@ -74,6 +80,5 @@ rules:
               - pattern: window.open($X, ...)
               - pattern: window.open($X)
               - pattern: open($X)
-          - pattern-not: $F("..." + $Y, ...)
           - pattern-not: $F(`/...`, ...)
           - focus-metavariable: $X
