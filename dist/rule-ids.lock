@@ -16,6 +16,7 @@ sast.js.handlebars-noescape
 sast.js.handlebars-unescaped
 sast.js.jquery-xss
 sast.js.jwt-decode-unverified
+sast.js.jwt-verify-error-swallowed
 sast.js.ldap-injection
 sast.js.libxml-noent
 sast.js.location-xss

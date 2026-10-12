@@ -141,7 +141,8 @@ def deep_merge(a: dict, b: dict) -> dict:
 
 # Settings files a PR must not be able to change for its own scan. With a base ref (a PR), each is read
 # from the base branch; a PR's change to one takes effect once it is merged.
-SETTINGS_FILES = (".sast-check.toml", ".gitleaks.toml", ".gitleaksignore", "zizmor.yml", ".github/zizmor.yml")
+SETTINGS_FILES = (".sast-check.toml", ".gitleaks.toml", ".gitleaksignore", "zizmor.yml", ".github/zizmor.yml",
+                  "osv-scanner.toml")
 
 
 def settings_file(repo: Path, base: str | None, name: str) -> str | None:
@@ -212,18 +213,26 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
                "--diff-filter=ACMRT", "--merge-base", base], repo).stdout
     files: dict[str, set[int]] = {}
     cur = None
-    prev = ""
-    for ln in out.splitlines():
-        after_minus, prev = prev.startswith("--- "), ln
-        if ln.startswith("+++ ") and after_minus:   # a file header, never an added line starting "++"
+    old_left = new_left = 0      # lines still to come in the current hunk: inside a hunk nothing is a header
+    hunk = re.compile(r"^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+    for ln in out.split("\n"):  # "\n" only: str.splitlines() also splits on \r, \f, \x1c... inside file content
+        if old_left or new_left:
+            if ln.startswith("-"):
+                old_left -= 1
+            elif ln.startswith("+"):
+                new_left -= 1
+            elif ln.startswith(" "):
+                old_left, new_left = old_left - 1, new_left - 1
+            continue                                      # "\ No newline at end of file" counts as neither
+        if ln.startswith("+++ "):
             hdr = unquote_git_path(ln[4:])
             cur = None if hdr == "/dev/null" else hdr[2:] if hdr.startswith("b/") else hdr
             if cur:
                 files.setdefault(cur, set())
-        elif ln.startswith("@@") and cur:
-            m = re.search(r"\+(\d+)(?:,(\d+))?", ln)
-            start, count = int(m.group(1)), int(m.group(2) or 1)
-            files[cur].update(range(start, start + count))
+        elif (m := hunk.match(ln)) and cur:
+            old_left = int(m.group(1) or 1)
+            start, new_left = int(m.group(2)), int(m.group(3) or 1)
+            files[cur].update(range(start, start + new_left))
     # untracked new files (local runs) count as fully changed
     untracked = sh(["git", "ls-files", "-z", "--others", "--exclude-standard"], repo).stdout.split("\0")
     for f in filter(None, untracked):
@@ -260,7 +269,8 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     tg = targets(ctx)
     if not tg:
         return []
-    cmd = [engine, "scan", "--config", str(rules), "--json", "--quiet", "--disable-version-check"]
+    # --disable-nosem: a PR's `// nosemgrep` comment must not hide a finding (only sast-ignore with a reason)
+    cmd = [engine, "scan", "--config", str(rules), "--json", "--quiet", "--disable-version-check", "--disable-nosem"]
     if Path(engine).name == "opengrep":
         cmd.append("--taint-intrafile")
     else:
@@ -305,13 +315,44 @@ def py_call_end(path: Path, row: int, col: int, cache: dict) -> int:
     return max(ends, default=row)
 
 
+def notebook_line(path: Path, cell: int, row: int) -> tuple[int, int]:
+    """Map Ruff's (cell, row) in a .ipynb to (line, end_line) in the file on disk.
+
+    Jupyter writes one JSON string per source line, so the n-th string of the cell's "source" list is
+    its row. If the layout is anything else (e.g. minified JSON), return the whole file so that any
+    change to the notebook counts the finding as new (fail safe)."""
+    try:
+        lines = path.read_text(errors="ignore").split("\n")
+    except OSError:
+        return 1, 1
+    seen, in_source, n = 0, False, 0
+    for i, ln in enumerate(lines, 1):
+        t = ln.strip()
+        if t.startswith('"cell_type"'):
+            seen, in_source = seen + 1, False
+        elif seen == cell and t.startswith('"source"'):
+            if t.endswith("[]") or t.endswith("[],"):
+                break
+            in_source, n = True, 0
+            if t.endswith('"') or t.endswith('",'):   # "source": "single string"
+                return (i, i) if row == 1 else (1, len(lines))
+        elif in_source:
+            if t.startswith("]"):
+                break
+            n += 1
+            if n == row:
+                return i, i
+    return 1, len(lines)
+
+
 def run_ruff(ctx: Ctx) -> list[Finding]:
     if not shutil.which("ruff"):
         raise FileNotFoundError("ruff not installed")
-    tg = targets(ctx, (".py",))
+    tg = targets(ctx, (".py", ".pyi", ".pyw", ".ipynb"))
     if not tg:
         return []
-    cmd = ["ruff", "check", "--isolated", "--no-cache", "--preview", "--select", "S",
+    # --ignore-noqa: a PR's `# noqa` must not hide a finding (only sast-ignore with a reason)
+    cmd = ["ruff", "check", "--isolated", "--no-cache", "--preview", "--ignore-noqa", "--select", "S",
            "--output-format", "json", "--exit-zero"]
     for g in ctx.cfg["paths"]["exclude"]:
         cmd += ["--extend-exclude", g]
@@ -323,11 +364,16 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
         path = rel(ctx.repo, r["filename"])
         if code in RUFF_LOW_SIGNAL_IN_TESTS and glob_any(path, ctx.cfg["paths"]["tests"]):
             continue
+        end_row = (r.get("end_location") or r["location"])["row"]
+        if r.get("cell"):              # notebook: Ruff counts rows within a cell; map to file lines
+            line, end = notebook_line(ctx.repo / path, r["cell"], r["location"]["row"])
+            end = max(end, notebook_line(ctx.repo / path, r["cell"], end_row)[1])
+        else:
+            line = r["location"]["row"]
+            end = max(end_row, py_call_end(ctx.repo / path, line, r["location"]["column"], calls))
         out.append(Finding(
             tool="ruff", rule=f"ruff.{code}", severity=RUFF_SEVERITY.get(code, "low"),
-            confidence="medium", path=path, line=r["location"]["row"],
-            end_line=max((r.get("end_location") or r["location"])["row"],
-                         py_call_end(ctx.repo / path, r["location"]["row"], r["location"]["column"], calls)),
+            confidence="medium", path=path, line=line, end_line=end,
             message=r["message"], url=r.get("url") or "", cwe=RUFF_CWE.get(code, "CWE-710"),
         ))
     return out
@@ -340,14 +386,14 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
         tg = [f for f in targets(ctx, (".yml", ".yaml"))
               if f.startswith(".github/workflows/") or Path(f).name in ("action.yml", "action.yaml")]
     else:
-        tg = [".github/workflows"] if (ctx.repo / ".github/workflows").is_dir() else []
-        tracked = sh(["git", "ls-files", "-z", "--", ":(glob)**/action.yml", ":(glob)**/action.yaml"],
-                     ctx.repo).stdout.split("\0")
-        tg += sorted({f for f in tracked if f and not glob_any(f, ctx.cfg["paths"]["exclude"])})
+        tracked = sh(["git", "ls-files", "-z", "--", ".github/workflows/*.yml", ".github/workflows/*.yaml",
+                      ":(glob)**/action.yml", ":(glob)**/action.yaml"], ctx.repo).stdout.split("\0")
+        tg = sorted({f for f in tracked if f and not glob_any(f, ctx.cfg["paths"]["exclude"])})
     if not tg:
         return []
     online = bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
-    cmd = ["zizmor", "--format", "json", "--no-progress"] + ([] if online else ["--offline"])
+    # --no-ignores: a PR's `# zizmor: ignore[...]` must not hide a finding (only sast-ignore with a reason)
+    cmd = ["zizmor", "--format", "json", "--no-progress", "--no-ignores"] + ([] if online else ["--offline"])
     with tempfile.TemporaryDirectory() as td:
         if ctx.base:   # PR scans: the base branch's zizmor config only (a PR's could switch audits off)
             conf = (settings_file(ctx.repo, ctx.base, "zizmor.yml")
@@ -375,13 +421,13 @@ def zizmor_scan(ctx: Ctx, cmd: list[str], tg: list[str], online: bool) -> list[F
                    "GitHub API error")
         ctx.runs.append(ToolRun("zizmor-online", "skipped", "online audits unavailable (" + why[:160] + ")"))
     out = []
-    for r in json.loads(p.stdout or "[]"):
-        if r.get("ignored"):
-            continue
+    for r in json.loads(p.stdout or "[]"):   # "ignored" is not honored: suppress only via sast-ignore / [[ignore]]
         det = r["determinations"]
         loc = next((l for l in r["locations"] if l["symbolic"].get("kind") == "Primary"), r["locations"][0])
         sev = ZIZMOR_OVERRIDE.get(r["ident"], det["severity"].lower().replace("informational", "low").replace("unknown", "low"))
         path = loc["symbolic"]["key"].get("Local", {}).get("verbatim_path") or loc["symbolic"]["key"].get("Local", {}).get("given_path", "")
+        if glob_any(rel(ctx.repo, path), ctx.cfg["paths"]["exclude"]):   # excluded paths are never scanned
+            continue
         out.append(Finding(
             tool="zizmor", rule=f"zizmor.{r['ident']}", severity=sev,
             confidence=det["confidence"].lower().replace("unknown", "low"),
@@ -408,6 +454,9 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
                      if f and not glob_any(f, ctx.cfg["paths"]["exclude"])]     # new, never-added files
         else:
             runs.append(["gitleaks", "dir", "."])
+            if ctx.base:   # a secret added then deleted in the PR is gone from the tree but not from history
+                mb = sh(["git", "merge-base", ctx.base, "HEAD"], ctx.repo).stdout.strip()
+                runs.append(["gitleaks", "git", f"--log-opts={mb}..HEAD"])
         # PR scans use the base branch's .gitleaks.toml / .gitleaksignore, never the PR's (a PR could
         # allow-list its own secret). gitleaks always also reads <repo>/.gitleaksignore, so the PR's copy
         # is moved aside for the scan and put back afterwards.
@@ -434,7 +483,8 @@ def gitleaks_runs(ctx: Ctx, runs: list[list[str]], settings: list[str], td: str)
     reports = []
     for i, cmd in enumerate(runs):
         rp = Path(td) / f"g{i}.json"
-        opts = settings + ["--redact", "--no-banner", "--exit-code", "0", "--report-format", "json",
+        # --ignore-gitleaks-allow: a PR's `gitleaks:allow` must not hide a secret
+        opts = settings + ["--ignore-gitleaks-allow", "--redact", "--no-banner", "--exit-code", "0", "--report-format", "json",
                            "--report-path", str(rp)]
         sh(cmd[:2] + opts + cmd[2:], ctx.repo)                   # options before any "--" / target
         if rp.exists() and rp.stat().st_size:
@@ -466,7 +516,13 @@ def run_osv(ctx: Ctx) -> list[Finding]:
                                       for f in ctx.changed_files):
         return []
     # 0 = clean, 1 = vulns found, 128 = no packages found
-    p = sh(["osv-scanner", "scan", "source", "-r", "--format", "json", "."], ctx.repo, ok_codes=(0, 1, 128))
+    with tempfile.TemporaryDirectory() as td:
+        cmd = ["osv-scanner", "scan", "source", "-r", "--format", "json"]
+        if ctx.base:   # PR scans: --config replaces every osv-scanner.toml in the tree (a PR's could hide vulns)
+            conf = Path(td) / "osv-scanner.toml"
+            conf.write_text(settings_file(ctx.repo, ctx.base, "osv-scanner.toml") or "")
+            cmd.append(f"--config={conf}")
+        p = sh(cmd + ["."], ctx.repo, ok_codes=(0, 1, 128))
     if p.returncode == 128 and ctx.mode == "diff":
         # a dependency manifest changed but OSV found no packages: unparseable or unsupported -> not a pass
         raise RuntimeError("osv-scanner found no packages although a dependency manifest changed")

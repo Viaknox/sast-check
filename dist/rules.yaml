@@ -906,6 +906,60 @@ rules:
           ...
 
           '
+- id: sast.js.jwt-verify-error-swallowed
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: 'The jsonwebtoken verify() result is not enforced before the same token is decoded: either the error from verify() is caught and ignored, or verify() was given a callback (it runs later) and decode() runs straight after it. In both cases a forged or expired token reaches decode() and its claims are trusted. Use the value returned by verify() and let a failed check stop the request.'
+  metadata:
+    sast_severity: high
+    confidence: medium
+    cwe: CWE-347
+    category: security
+    fix: 'const claims = jwt.verify(token, key, { algorithms: ["RS256"] }); and do not catch the error without rejecting the request.'
+    references:
+    - https://cwe.mitre.org/data/definitions/347.html
+    - https://github.com/auth0/node-jsonwebtoken#jwtverifytoken-secretorpublickey-options-callback
+  patterns:
+  - pattern-either:
+    - pattern-inside: 'const $J = require("jsonwebtoken");
+
+        ...
+
+        '
+    - pattern-inside: 'import $J from "jsonwebtoken";
+
+        ...
+
+        '
+    - pattern-inside: 'import * as $J from "jsonwebtoken";
+
+        ...
+
+        '
+  - pattern-either:
+    - patterns:
+      - pattern: $J.decode($TOK, ...)
+      - pattern-inside: "try {\n  ...\n  <... $J.verify($TOK, ...) ...>;\n  ...\n} catch ($E) {\n  ...\n}\n...\n"
+      - pattern-not-inside: "try {\n  ...\n} catch ($E) {\n  ...\n  throw $X;\n}\n...\n"
+      - pattern-not-inside: "try {\n  ...\n} catch ($E) {\n  ...\n  return ...;\n}\n...\n"
+    - patterns:
+      - pattern: $J.decode($TOK, ...)
+      - pattern-inside: '$J.verify($TOK, ..., function ($ERR, ...) { ... });
+
+          ...
+
+          '
+      - pattern-not-inside: $J.verify($TOK, ...)
+    - patterns:
+      - pattern: $J.decode($TOK, ...)
+      - pattern-inside: '$J.verify($TOK, ..., ($ERR, ...) => $BODY);
+
+          ...
+
+          '
+      - pattern-not-inside: $J.verify($TOK, ...)
 - id: sast.js.ldap-injection
   languages:
   - javascript

@@ -27,6 +27,7 @@ Severity is ours. Baseline: a commercial SAST checklist with 99 checks in these 
 | JavaScript / TypeScript | `sast.js.handlebars-unescaped` | high | medium |
 | JavaScript / TypeScript | `sast.js.jquery-xss` | high | medium |
 | JavaScript / TypeScript | `sast.js.jwt-decode-unverified` | high | medium |
+| JavaScript / TypeScript | `sast.js.jwt-verify-error-swallowed` | high | medium |
 | JavaScript / TypeScript | `sast.js.ldap-injection` | critical | high |
 | JavaScript / TypeScript | `sast.js.libxml-noent` | medium | high |
 | JavaScript / TypeScript | `sast.js.location-xss` | high | medium |

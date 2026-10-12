@@ -154,6 +154,79 @@ set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base 000000000000000000
 check "unreadable base: exit 2 (error), not a crash"      "$code" "2"
 check "unreadable base: settings error is reported"       "$(q "[r['status'] for r in d['runs'] if r['name']=='settings']")" "['error']"
 
+# a "-- x" line replaced by "++ y" looks like a file header in the diff; it must not derail later hunks
+git checkout -q -b hdr main
+printf -- '-- old\n\n\n\n\n\n\n\nmodule.exports = {};\n' > src/hd.js && git add src/hd.js && git commit -qm hd
+sed -i 's/^-- old$/++ new/' src/hd.js
+printf "app.get('/h', (req, res) => { eval(req.query.h); });\n" >> src/hd.js
+git commit -qam hd2
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only opengrep >/dev/null; set -e
+check "pseudo '---/+++' lines inside a hunk are not headers" "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/hd.js')")" "1"
+git checkout -q r3
+
+# notebooks and .pyw files are Python too; a notebook finding maps to the right file line
+git checkout -q -b nb main
+python3 -I -c '
+import json
+cell = lambda src: {"cell_type": "code", "execution_count": None, "id": "c", "metadata": {}, "outputs": [], "source": src}
+nb = {"cells": [{"cell_type": "markdown", "id": "m", "metadata": {}, "source": ["# t"]},
+                cell(["x = 1\n", "y = 2"])], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}
+open("src/n.ipynb", "w").write(json.dumps(nb, indent=1, sort_keys=True) + "\n")'
+git add src/n.ipynb && git commit -qm nb
+sed -i 's/"y = 2"/"eval(input())"/' src/n.ipynb
+printf 'eval(input())\n' > src/w.pyw
+git add src/n.ipynb src/w.pyw && git commit -qm nb2
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null; set -e
+check "notebook finding blocks on the changed line"      "$(q "[(f['blocking'], open('src/n.ipynb').read().split(chr(10))[f['line']-1].strip()) for f in d['findings'] if f['path']=='src/n.ipynb' and f['rule']=='ruff.S307']")" "[(True, '\"eval(input())\"')]"
+check ".pyw files are scanned"                            "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/w.pyw')")" "1"
+git checkout -q r3
+
+# full scope with a base still scans the PR's history: a secret added then deleted is caught
+git checkout -q -b hist main
+echo 'K5 = "AKIAIOSFODNN7ABCDEFG"' > src/h5.py && git add src/h5.py && git commit -qm add
+git rm -q src/h5.py && git commit -qm del
+set +e; python3 -I "$HERE/scripts/sast.py" --mode full --base HEAD~2 --only gitleaks >/dev/null; set -e
+check "full scope: secret added then deleted is caught"   "$(q "int(any(f['kind']=='secret' and f['path']=='src/h5.py' for f in d['findings']))")" "1"
+# full scope honors excludes for workflows
+mkdir -p .github/workflows && printf '[paths]\nexclude = [".github/workflows/skip.yml"]\n' > .sast-check.toml
+printf 'on: pull_request_target\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.pull_request.title }}"\n' > .github/workflows/skip.yml
+git add .sast-check.toml .github/workflows/skip.yml && git commit -qm skip
+if command -v zizmor >/dev/null; then
+  set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" --mode full --only zizmor >/dev/null; set -e
+  check "full scope: excluded workflow is not scanned"    "$(q "sum(1 for f in d['findings'] if f['path']=='.github/workflows/skip.yml')")" "0"
+fi
+# a PR's osv-scanner.toml cannot hide a vulnerable dependency
+if command -v osv-scanner >/dev/null; then
+  printf 'requests==2.19.0\n' > requirements.txt
+  printf '[[PackageOverrides]]\nname = "requests"\nignore = true\n' > osv-scanner.toml
+  git add requirements.txt osv-scanner.toml && git commit -qm osv
+  set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only osv >/dev/null; set -e
+  check "PR's osv-scanner.toml cannot hide a vulnerable dep" "$(q "int(sum(1 for f in d['findings'] if f['kind']=='dependency') > 0)")" "1"
+fi
+git checkout -q r3
+
+# native "ignore this line" comments never hide a finding (only sast-ignore with a reason does)
+git checkout -q -b noqa main
+printf 'import pickle\ndef f(b):\n    return pickle.loads(b)  # noqa: S301\n' > src/nq.py
+printf "app.get('/n', (req, res) => { eval(req.query.n); }); // nosemgrep\n" > src/ns.js
+echo 'K4 = "AKIAIOSFODNN7ABCDEFG" # gitleaks:allow' > src/ga.py
+printf '<div>{{{ user.bio }}}</div>\n' > src/t.hbs
+printf '<template><div v-html="post.body"></div></template>\n' > src/t.vue
+git add src/nq.py src/ns.js src/ga.py src/t.hbs src/t.vue && git commit -qm noqa
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only opengrep,ruff,gitleaks >/dev/null; set -e
+check "# noqa cannot hide a Ruff finding"                 "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/nq.py')")" "1"
+check "// nosemgrep cannot hide an Opengrep finding"      "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/ns.js')")" "1"
+check "gitleaks:allow cannot hide a secret"               "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/ga.py')")" "1"
+check "template files (.hbs, .vue) are scanned"           "$(q "len({f['path'] for f in d['findings'] if f['path'] in ('src/t.hbs','src/t.vue')})")" "2"
+if command -v zizmor >/dev/null; then
+  mkdir -p .github/workflows
+  printf 'on: pull_request_target\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.pull_request.title }}" # zizmor: ignore[template-injection]\n' > .github/workflows/z.yml
+  git add .github/workflows/z.yml && git commit -qm zig
+  set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only zizmor >/dev/null; set -e
+  check "# zizmor: ignore cannot hide a workflow finding" "$(q "int(any(f['rule']=='zizmor.template-injection' for f in d['findings']))")" "1"
+fi
+git checkout -q r3
+
 # a PR file named like an option must not hijack the scanner's arguments
 printf 'x\n' > ./--exclude && printf "app.get('/v', (req, res) => { eval(req.query.v); });\n" > vuln.js && printf 'x\n' > zzzz
 git add -- ./--exclude vuln.js zzzz && git commit -qm dash

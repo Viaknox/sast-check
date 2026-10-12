@@ -7,7 +7,7 @@ It runs five open-source scanners, merges the results, and applies **one** polic
 
 | Scanner | Checks | License |
 |---|---|---|
-| **Opengrep** + 53 custom rules (this repo) | JS/TS, Python, HTML, GitHub Actions, Docker, K8s, Terraform | engine LGPL-2.1 (run as a tool) · rules MIT |
+| **Opengrep** + 54 custom rules (this repo) | JS/TS, Python, HTML, GitHub Actions, Docker, K8s, Terraform | engine LGPL-2.1 (run as a tool) · rules MIT |
 | **Ruff** `S` rules | Python | MIT |
 | **zizmor** | GitHub Actions workflows | MIT |
 | **gitleaks** | Secrets in the PR's commits | MIT |
@@ -39,6 +39,8 @@ reason = "demo apps, never deployed"
 expires = "2027-01-01"
 ```
 Inline, on or above the line: `// sast-ignore[sast.js.code-eval]: <reason>` (no reason = not suppressed).
+This is the **only** inline suppression. The scanners' own comments (`# noqa`, `// nosemgrep`, `gitleaks:allow`,
+`# zizmor: ignore[...]`) are ignored, so every suppression has a written reason and shows up in the report.
 All keys and defaults: [config/default.toml](config/default.toml).
 
 ## Run locally / with an AI agent
@@ -78,7 +80,9 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **Dependencies** (osv-scanner) warn only by default; set `[deps] block = true` to let critical CVEs (CVSS ≥ 9) in changed lockfiles block.
 - **Prototype pollution** through `Array.prototype.reduce` merge helpers is not caught: Semgrep and Opengrep disagree on that pattern, so it was left out rather than ship an engine-specific rule.
 - **NoSQL injection** ignores callbacks passed to `.find()` / `.filter()`-style calls (e.g. `arr.find(x => x === req.body.id)`). Opengrep taints closures, so without this exclusion every array lookup on request data would be flagged. A real Mongo filter is an object, which is still checked.
-- **JWT decode** counts a `verify()` of the **same token** anywhere in the same function, or earlier in the same block (class methods included), as verification. Verifying one token and decoding another is still flagged.
+- **JWT decode** counts a `verify()` of the **same token** anywhere in the same function, or earlier in the same block (class methods included), as verification. Verifying one token and decoding another is still flagged. `sast.js.jwt-verify-error-swallowed` catches a `verify()` whose error is swallowed (`catch` without `throw`/`return`) or that uses a callback, followed by `decode()`; it covers `jwt.verify` / `jwt.decode` (default or namespace import), not the named-import form.
+- **Dependency settings:** on PRs, only the base branch's root `osv-scanner.toml` is used; per-directory `osv-scanner.toml` files are ignored.
+- **zizmor exceptions** go in `[[ignore]]` in `.sast-check.toml` (zizmor ignore rules and comments are not honored).
 
 ## Develop
 
