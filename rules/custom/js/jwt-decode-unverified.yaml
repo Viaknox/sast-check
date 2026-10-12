@@ -1,252 +1,123 @@
 rules:
-  - id: sast.js.jwt-decode-unverified
-    languages: [javascript, typescript]
-    severity: ERROR
-    message: >-
-      jsonwebtoken decode() is used in a function that never calls verify(), or verify() is told to accept the "none" algorithm. decode() does not check the signature, so a forged token passes as genuine. Verify the signature with a pinned algorithm before trusting any claim.
-    metadata:
-      sast_severity: high
-      confidence: medium
-      cwe: "CWE-347"
-      category: security
-      fix: 'Use jwt.verify(token, key, { algorithms: ["RS256"] }) for any decision; never allow the none algorithm.'
-      references:
-        - https://cwe.mitre.org/data/definitions/347.html
-        - https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/
-    patterns:
-      - pattern-either:
-          - patterns:
-              - pattern: $J.decode(...)
-              - pattern-inside: |
-                  const $J = require("jsonwebtoken");
-                  ...
-              - pattern-not-inside: |
-                  function $F(...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  function (...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  (...) => {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async (...) => {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async function $F(...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async function (...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-          - patterns:
-              - pattern: $J.decode(...)
-              - pattern-inside: |
-                  import $J from "jsonwebtoken";
-                  ...
-              - pattern-not-inside: |
-                  function $F(...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  function (...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  (...) => {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async (...) => {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async function $F(...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async function (...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-          - patterns:
-              - pattern: $J.decode(...)
-              - pattern-inside: |
-                  import * as $J from "jsonwebtoken";
-                  ...
-              - pattern-not-inside: |
-                  function $F(...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  function (...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  (...) => {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async (...) => {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async function $F(...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async function (...) {
-                    ...
-                    <... $V.verify(...) ...>
-                    ...
-                  }
-          - patterns:
-              - pattern: decode(...)
-              - pattern-inside: |
-                  import { ..., decode, ... } from "jsonwebtoken";
-                  ...
-              - pattern-not-inside: |
-                  function $F(...) {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  function (...) {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  (...) => {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async (...) => {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async function $F(...) {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async function (...) {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-          - patterns:
-              - pattern: decode(...)
-              - pattern-inside: |
-                  const { ..., decode, ... } = require("jsonwebtoken");
-                  ...
-              - pattern-not-inside: |
-                  function $F(...) {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  function (...) {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  (...) => {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async (...) => {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async function $F(...) {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-              - pattern-not-inside: |
-                  async function (...) {
-                    ...
-                    <... verify(...) ...>
-                    ...
-                  }
-          - patterns:
-              - pattern: |
-                  $J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
-              - pattern-inside: |
-                  const $J = require("jsonwebtoken");
-                  ...
-          - patterns:
-              - pattern: |
-                  $J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
-              - pattern-inside: |
-                  import $J from "jsonwebtoken";
-                  ...
-          - patterns:
-              - pattern: |
-                  $J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
-              - pattern-inside: |
-                  import * as $J from "jsonwebtoken";
-                  ...
-          - patterns:
-              - pattern: |
-                  verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
-              - pattern-inside: |
-                  import { ..., verify, ... } from "jsonwebtoken";
-                  ...
-          - patterns:
-              - pattern: |
-                  verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
-              - pattern-inside: |
-                  const { ..., verify, ... } = require("jsonwebtoken");
-                  ...
+- id: sast.js.jwt-decode-unverified
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: jsonwebtoken decode() is used in a function that never calls verify(), or verify() is told to accept the "none" algorithm. decode() does not check the signature, so a forged token passes as genuine. Verify the signature with a pinned algorithm before trusting any claim.
+  metadata:
+    sast_severity: high
+    confidence: medium
+    cwe: CWE-347
+    category: security
+    fix: 'Use jwt.verify(token, key, { algorithms: ["RS256"] }) for any decision; never allow the none algorithm.'
+    references:
+    - https://cwe.mitre.org/data/definitions/347.html
+    - https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: $J.decode(...)
+      - pattern-inside: 'const $J = require("jsonwebtoken");
+
+          ...
+
+          '
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+    - patterns:
+      - pattern: $J.decode(...)
+      - pattern-inside: 'import $J from "jsonwebtoken";
+
+          ...
+
+          '
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+    - patterns:
+      - pattern: $J.decode(...)
+      - pattern-inside: 'import * as $J from "jsonwebtoken";
+
+          ...
+
+          '
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
+    - patterns:
+      - pattern: decode(...)
+      - pattern-inside: 'import { ..., decode, ... } from "jsonwebtoken";
+
+          ...
+
+          '
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+    - patterns:
+      - pattern: decode(...)
+      - pattern-inside: 'const { ..., decode, ... } = require("jsonwebtoken");
+
+          ...
+
+          '
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
+    - patterns:
+      - pattern: '$J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+          '
+      - pattern-inside: 'const $J = require("jsonwebtoken");
+
+          ...
+
+          '
+    - patterns:
+      - pattern: '$J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+          '
+      - pattern-inside: 'import $J from "jsonwebtoken";
+
+          ...
+
+          '
+    - patterns:
+      - pattern: '$J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+          '
+      - pattern-inside: 'import * as $J from "jsonwebtoken";
+
+          ...
+
+          '
+    - patterns:
+      - pattern: 'verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+          '
+      - pattern-inside: 'import { ..., verify, ... } from "jsonwebtoken";
+
+          ...
+
+          '
+    - patterns:
+      - pattern: 'verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+          '
+      - pattern-inside: 'const { ..., verify, ... } = require("jsonwebtoken");
+
+          ...
+
+          '

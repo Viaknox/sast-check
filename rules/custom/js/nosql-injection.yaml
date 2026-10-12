@@ -61,6 +61,9 @@ rules:
               metavariable: $FN
               regex: '^(find|findOne|findOneAndUpdate|findOneAndDelete|findOneAndReplace|updateOne|updateMany|deleteOne|deleteMany|countDocuments|where|exists|replaceOne)$'
           - pattern-not: $M.$FN({...}, ...)
+          # a callback is never a Mongo filter (e.g. Array.prototype.find); some engines taint closures
+          - pattern-not: $M.$FN((...) => $B, ...)
+          - pattern-not: $M.$FN(function (...) {...}, ...)
           - focus-metavariable: $Q
       - patterns:
           - pattern: |

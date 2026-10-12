@@ -61,6 +61,14 @@ def main() -> int:
         cmd = [a.engine, "scan", "--config", str(rule), "--json", "--quiet", "--scan-unknown-extensions"]
         cmd += ["--taint-intrafile"] if is_og else ["--metrics=off", "--disable-version-check"]
         out = json.loads(subprocess.run(cmd + [str(fx)], capture_output=True, text=True).stdout or "{}")
+        # a rule the engine cannot parse is silently skipped -> treat it as a failure
+        rule_errs = [e for e in out.get("errors", []) if "Syntax error" not in str(e.get("type"))
+                     and "PartialParsing" not in str(e.get("type"))]
+        if rule_errs:
+            failures += len(rids)
+            total += len(rids)
+            print(f"FAIL {rule.relative_to(ROOT)}: engine error: {str(rule_errs[0].get('message'))[:200]}")
+            continue
         for rid in rids:
             total += 1
             got = {r["start"]["line"] for r in out.get("results", []) if r["check_id"].endswith(rid)}

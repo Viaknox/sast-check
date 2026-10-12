@@ -756,7 +756,6 @@ rules:
       - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: $J.decode(...)
       - pattern-inside: 'import $J from "jsonwebtoken";
@@ -769,7 +768,6 @@ rules:
       - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: $J.decode(...)
       - pattern-inside: 'import * as $J from "jsonwebtoken";
@@ -782,7 +780,6 @@ rules:
       - pattern-not-inside: "(...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async (...) => {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function (...) {\n  ...\n  <... $V.verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: decode(...)
       - pattern-inside: 'import { ..., decode, ... } from "jsonwebtoken";
@@ -795,7 +792,6 @@ rules:
       - pattern-not-inside: "(...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async (...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async function $F(...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function (...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: decode(...)
       - pattern-inside: 'const { ..., decode, ... } = require("jsonwebtoken");
@@ -808,7 +804,6 @@ rules:
       - pattern-not-inside: "(...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async (...) => {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
       - pattern-not-inside: "async function $F(...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
-      - pattern-not-inside: "async function (...) {\n  ...\n  <... verify(...) ...>\n  ...\n}\n"
     - patterns:
       - pattern: '$J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
 
@@ -1084,6 +1079,8 @@ rules:
         metavariable: $FN
         regex: ^(find|findOne|findOneAndUpdate|findOneAndDelete|findOneAndReplace|updateOne|updateMany|deleteOne|deleteMany|countDocuments|where|exists|replaceOne)$
     - pattern-not: $M.$FN({...}, ...)
+    - pattern-not: $M.$FN((...) => $B, ...)
+    - pattern-not: $M.$FN(function (...) {...}, ...)
     - focus-metavariable: $Q
   - patterns:
     - pattern: '{..., $K: $X, ...}
