@@ -76,7 +76,9 @@ LOCKFILES = {  # every manifest osv-scanner v2 scans (google.github.io/osv-scann
     "packages.config", "packages.lock.json", "composer.lock", "Pipfile.lock", "poetry.lock",
     "requirements.txt", "pdm.lock", "pylock.toml", "uv.lock", "renv.lock", "Gemfile.lock",
     "gems.locked", "Cargo.lock",
+    "bom.json", "bom.xml",                       # CycloneDX SBOMs (google.github.io/osv-scanner/usage/scan-source)
 }
+SBOM_SUFFIXES = (".spdx.json", ".spdx", ".spdx.yml", ".spdx.rdf", ".spdx.rdf.xml", ".cdx.json", ".cdx.xml")
 # only inside a comment: # (py/sh/yaml/tf/docker), // or /* (js/ts/tf), <!-- (html)
 IGNORE_RE = re.compile(r"(?:#|//|/\*|<!--)\s*sast-ignore\[(?P<rule>[^\]]+)\]\s*:?\s*(?P<reason>.*?)\s*(?:\*/|-->)?\s*$")
 
@@ -122,13 +124,16 @@ class Ctx:
 
 
 # ---------------------------------------------------------------- helpers
-def sh(cmd: list[str], cwd: Path, ok_codes=(0,), env=None, timeout=900) -> subprocess.CompletedProcess:
+def sh(cmd: list[str], cwd: Path, ok_codes=(0,), env=None, timeout=900, raw=False) -> subprocess.CompletedProcess:
+    """Run a command; raise on an unexpected exit code. raw=True keeps stdout as bytes: text mode
+    translates a bare \r inside file content into a line break."""
     try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env, timeout=timeout)
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=not raw, env=env, timeout=timeout)
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(f"{cmd[0]} timed out after {timeout}s") from e
     if p.returncode not in ok_codes:
-        raise RuntimeError(f"{cmd[0]} exited {p.returncode}: {(p.stderr or p.stdout)[-800:]}")
+        err = p.stderr or p.stdout
+        raise RuntimeError(f"{cmd[0]} exited {p.returncode}: {(err.decode(errors='replace') if raw else err)[-800:]}")
     return p
 
 
@@ -181,10 +186,10 @@ def glob_any(path: str, globs: list[str]) -> bool:
 
 
 def rel(repo: Path, p: str) -> str:
-    try:
-        return str(Path(p).resolve().relative_to(repo.resolve()))
-    except ValueError:
-        return p.lstrip("./")
+    """Repo-relative form of a scanner-reported path. Symlinks are not followed: a finding in a PR's new
+    symlink keeps the symlink's path, which is what the changed-line map is keyed by."""
+    r = os.path.relpath(os.path.normpath(os.path.join(repo, p)), repo)
+    return p if r == ".." or r.startswith("../") else Path(r).as_posix()
 
 
 def unquote_git_path(p: str) -> str:
@@ -214,7 +219,7 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
     if sh(["git", "rev-parse", "--is-shallow-repository"], repo).stdout.strip() == "true":
         raise RuntimeError("shallow clone: check out with fetch-depth: 0 so the PR diff can be computed")
     out = sh(["git", "diff", "-U0", "--no-color", "--text", "--no-textconv", "--no-ext-diff",
-               "--diff-filter=ACMRT", "--merge-base", base], repo).stdout
+               "--diff-filter=ACMRT", "--merge-base", base], repo, raw=True).stdout.decode("utf-8", "replace")
     files: dict[str, set[int]] = {}
     cur = None
     old_left = new_left = 0      # lines still to come in the current hunk: inside a hunk nothing is a header
@@ -242,17 +247,19 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
                 # `owners = [...]`) can create a finding with no added line, so the lines on both sides of
                 # the cut count as changed; a finding spanning the cut then counts as new.
                 files[cur].update(n for n in (start, start + 1) if n >= 1)
-    # a file in the diff with no hunk (a 100% rename or copy, e.g. payload.txt -> payload.py) still changed
-    # what gets scanned: count it as fully changed
+    # Count as fully changed: a file with no hunk, every rename/copy destination (payload.txt -> payload.py,
+    # vendor/x.py -> src/x.py: the move alone makes old code scanned, with or without an edit), and a symlink
+    # (its diff is the one-line target path; the scanners read the target's content)
     ns = sh(["git", "diff", "--name-status", "-z", "-M", "-C", "--diff-filter=ACMRT", "--merge-base", base],
             repo).stdout.split("\0")
     i = 0
     while i < len(ns) - 1:
         status, i = ns[i], i + 1
-        if status[:1] in ("R", "C"):
+        moved = status[:1] in ("R", "C")
+        if moved:
             i += 1                                    # skip the source path; the next field is the destination
         path, i = ns[i], i + 1
-        if path and path not in files and (repo / path).is_file():
+        if path and (moved or path not in files or (repo / path).is_symlink()) and (repo / path).is_file():
             with open(repo / path, errors="ignore") as fh:
                 files[path] = set(range(1, sum(1 for _ in fh) + 1))
     # untracked new files (local runs) count as fully changed
@@ -321,16 +328,21 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     return out
 
 
-def py_call_end(path: Path, row: int, col: int, cache: dict) -> int:
+def py_call_end(path: Path, row: int, col: int, cache: dict, cell: int = 0) -> int:
     """End line of the call that starts at (row, col); Ruff anchors e.g. S602 on `subprocess.run(`
-    only, so a changed argument further down must still count as part of the finding."""
-    if path not in cache:
+    only, so a changed argument further down must still count as part of the finding.
+    cell > 0: a notebook; rows count within that cell (1-based, all cells), and so does the result."""
+    if (path, cell) not in cache:
         try:
-            src = path.read_text(errors="ignore")
-            cache[path] = ([n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Call)], src.splitlines())
-        except (OSError, SyntaxError, ValueError):
-            cache[path] = ([], [])
-    calls, lines = cache[path]
+            if cell:
+                c = json.loads(path.read_text(errors="ignore"))["cells"][cell - 1]["source"]
+                src = "".join(c) if isinstance(c, list) else str(c)
+            else:
+                src = path.read_text(errors="ignore")
+            cache[path, cell] = ([n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Call)], src.splitlines())
+        except (OSError, SyntaxError, ValueError, KeyError, IndexError, TypeError):
+            cache[path, cell] = ([], [])
+    calls, lines = cache[path, cell]
     # ast col_offset is a UTF-8 byte offset; Ruff's column counts characters
     if not 0 < row <= len(lines):
         return row
@@ -392,7 +404,9 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
             continue
         end_row = (r.get("end_location") or r["location"])["row"]
         if r.get("cell"):              # notebook: Ruff counts rows within a cell; map to file lines
-            line, end = notebook_line(ctx.repo / path, r["cell"], r["location"]["row"])
+            row, col = r["location"]["row"], r["location"]["column"]
+            end_row = max(end_row, py_call_end(ctx.repo / path, row, col, calls, cell=r["cell"]))
+            line, end = notebook_line(ctx.repo / path, r["cell"], row)
             end = max(end, notebook_line(ctx.repo / path, r["cell"], end_row)[1])
         else:
             line = r["location"]["row"]
@@ -540,7 +554,8 @@ def gitleaks_findings(ctx: Ctx, reports: list[dict]) -> list[Finding]:
 def run_osv(ctx: Ctx) -> list[Finding]:
     if not shutil.which("osv-scanner"):
         raise FileNotFoundError("osv-scanner not installed")
-    if ctx.mode == "diff" and not any(Path(f).name in LOCKFILES and not glob_any(f, ctx.cfg["paths"]["exclude"])
+    if ctx.mode == "diff" and not any((Path(f).name in LOCKFILES or f.endswith(SBOM_SUFFIXES))
+                                      and not glob_any(f, ctx.cfg["paths"]["exclude"])
                                       for f in ctx.changed_files):
         return []
     # 0 = clean, 1 = vulns found, 128 = no packages found
@@ -749,6 +764,14 @@ def report_md(ctx: Ctx, findings: list[Finding], verdict: str) -> str:
         new.sort(key=lambda x: (-SEV_ORDER.index(x.severity), x.path, x.line))
         L += [f"<details><summary>Warnings in this change ({len(new)})</summary>", "",
               *[row(f) for f in new[:100]], "" if len(new) <= 100 else f"\n…and {len(new) - 100} more", "</details>", ""]
+    sup = [f for f in findings if f.suppressed and (f.in_diff or ctx.mode != "diff")]
+    if sup:
+        # the reason is PR-author text: shown as a code span (no markdown, links or @mentions), backticks removed
+        sup.sort(key=lambda x: (-SEV_ORDER.index(x.severity), x.path, x.line))
+        L += [f"<details><summary>Suppressed in this change ({len(sup)})</summary>", "",
+              *[f"- **{f.severity.upper()}** `{f.path}:{f.line}` `{f.rule}` — "
+                f"`{f.suppressed.replace('`', chr(39))[:300]}`" for f in sup[:100]],
+              "" if len(sup) <= 100 else f"\n…and {len(sup) - 100} more", "</details>", ""]
     if old and ctx.mode == "diff":
         L += [f"<sub>{len(old)} pre-existing finding(s) outside changed lines are not shown. "
               "Run with `--mode full` to see them.</sub>", ""]

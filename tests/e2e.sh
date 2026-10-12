@@ -49,6 +49,7 @@ check "exit code is 1 (blocking findings)"            "$code" "1"
 check "new eval blocks"                               "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='sast.js.code-eval' and f['line']==6)")" "1"
 check "pre-existing eval does not block"              "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='sast.js.code-eval' and f['line']==3)")" "0"
 check "inline sast-ignore with reason suppresses"     "$(q "sum(1 for f in d['findings'] if f['suppressed'] and f['line']==10)")" "1"
+check "report lists the suppression and its reason"   "$(grep -c 'sast.js.code-eval.*inline: reviewed sandbox endpoint' sast-results/report.md)" "1"
 check "high (open redirect) warns, does not block"    "$(q "[f['blocking'] for f in d['findings'] if f['rule']=='sast.js.open-redirect']")" "[False]"
 check "ruff S506 yaml.load blocks"                    "$(q "sum(f['blocking'] for f in d['findings'] if f['rule']=='ruff.S506')")" "1"
 check "gitleaks secret blocks"                        "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret')")" "1"
@@ -295,6 +296,44 @@ if command -v trivy >/dev/null; then
   check "trivy: inline trivy:ignore cannot hide"           "$(q "int(any(f['rule']=='trivy.AWS-0124' for f in d['findings']))")" "1"
   check "trivy: inner-line change inside a resource is new" "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0124']")" "[True]"
   git checkout -q main
+fi
+git checkout -q main
+
+# round-6: rename+edit into a scanned type; bare CR inside a changed line; new symlink; notebook multi-line
+# call; changed SBOM
+git checkout -q -b r6 main
+printf 'eval(input())\n\n\n\nz = 1\n' > src/p6.txt
+printf 'x = 1\ny = 2\nz = 3\neval(input())\n' > src/target.txt
+python3 -I -c '
+import json
+cell = lambda src: {"cell_type": "code", "execution_count": None, "id": "c", "metadata": {}, "outputs": [], "source": src}
+nb = {"cells": [cell(["import subprocess\n", "subprocess.run(\n", "    [\"ls\"],\n", "    shell=False,\n", ")\n"])],
+      "metadata": {}, "nbformat": 4, "nbformat_minor": 5}
+open("src/m.ipynb", "w").write(json.dumps(nb, indent=1, sort_keys=True) + "\n")'
+git add src/p6.txt src/target.txt src/m.ipynb && git commit -qm r6base
+git mv src/p6.txt src/p6.py && sed -i 's/z = 1/z = 2/' src/p6.py
+ln -s target.txt src/link6.py
+sed -i 's/shell=False/shell=True/' src/m.ipynb
+git add -A src && git commit -qm r6
+gate --mode diff --base HEAD~1 --only ruff
+check "rename+edit into .py: old line 1 is new"          "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/p6.py')")" "1"
+check "new symlink: finding keeps the link's path"       "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/link6.py')")" "1"
+check "notebook multi-line call counts as new"           "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='ruff.S602' and f['path']=='src/m.ipynb']")" "[True]"
+# a bare CR inside a changed line must not desync the diff reader (later hunks of the same file)
+printf '// a\r-- c\n' > src/cr.js && for i in $(seq 1 12); do echo "const v$i = $i;" >> src/cr.js; done
+git add src/cr.js && git commit -qm crbase
+python3 -I -c '
+s = open("src/cr.js", newline="").read().replace("a\r-- c", "a\r-- d")
+s = s.replace("const v12 = 12;", "app.get(\"/cr\", (req, res) => { eval(req.query.cr); });")
+open("src/cr.js", "w", newline="").write(s)'
+git add src/cr.js && git commit -qm cr
+gate --mode diff --base HEAD~1 --only opengrep
+check "bare CR in a changed line: later hunk still read"  "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/cr.js')")" "1"
+if command -v osv-scanner >/dev/null; then
+  printf '{"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[{"type":"library","name":"requests","version":"2.19.0","purl":"pkg:pypi/requests@2.19.0"}]}\n' > bom.json
+  git add bom.json && git commit -qm sbom
+  gate --mode diff --base HEAD~1 --only osv
+  check "changed SBOM (bom.json) is scanned"             "$(q "int(any(f['kind']=='dependency' and f['path']=='bom.json' for f in d['findings']))")" "1"
 fi
 git checkout -q main
 
