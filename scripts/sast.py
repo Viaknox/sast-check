@@ -233,6 +233,19 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
             old_left = int(m.group(1) or 1)
             start, new_left = int(m.group(2)), int(m.group(3) or 1)
             files[cur].update(range(start, start + new_left))
+    # a file in the diff with no hunk (a 100% rename or copy, e.g. payload.txt -> payload.py) still changed
+    # what gets scanned: count it as fully changed
+    ns = sh(["git", "diff", "--name-status", "-z", "-M", "-C", "--diff-filter=ACMRT", "--merge-base", base],
+            repo).stdout.split("\0")
+    i = 0
+    while i < len(ns) - 1:
+        status, i = ns[i], i + 1
+        if status[:1] in ("R", "C"):
+            i += 1                                    # skip the source path; the next field is the destination
+        path, i = ns[i], i + 1
+        if path and path not in files and (repo / path).is_file():
+            with open(repo / path, errors="ignore") as fh:
+                files[path] = set(range(1, sum(1 for _ in fh) + 1))
     # untracked new files (local runs) count as fully changed
     untracked = sh(["git", "ls-files", "-z", "--others", "--exclude-standard"], repo).stdout.split("\0")
     for f in filter(None, untracked):

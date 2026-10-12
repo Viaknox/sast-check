@@ -221,6 +221,14 @@ if command -v zizmor >/dev/null; then
 fi
 rm -f .github/workflows/new.yml; git checkout -q r3
 
+# a pure rename into a scanned file type is scanned (no hunk in the diff)
+git checkout -q -b ren main
+printf 'eval(input())\n' > src/payload.txt && git add src/payload.txt && git commit -qm txt
+git mv src/payload.txt src/payload.py && git commit -qm ren
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null; set -e
+check "pure rename into .py is scanned"                   "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src/payload.py')")" "1"
+git checkout -q r3
+
 # native "ignore this line" comments never hide a finding (only sast-ignore with a reason does)
 git checkout -q -b noqa main
 printf 'import pickle\ndef f(b):\n    return pickle.loads(b)  # noqa: S301\n' > src/nq.py
