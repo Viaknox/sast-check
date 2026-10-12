@@ -205,6 +205,22 @@ if command -v osv-scanner >/dev/null; then
 fi
 git checkout -q r3
 
+# full scope: a PR's ignore files (.semgrepignore, .opengrepignore, .gitignore) cannot hide committed code
+git checkout -q -b ign main
+mkdir -p src/ig .github/workflows
+printf "app.get('/i', (req, res) => { eval(req.query.i); });\n" > src/ig/v.js
+printf 'def f(s):\n    return eval(s)\n' > src/ig/v.py
+printf 'src/ig/\n' > .semgrepignore && cp .semgrepignore .opengrepignore && printf 'src/ig/\n' > .gitignore
+git add -f src/ig/v.js src/ig/v.py .semgrepignore .opengrepignore .gitignore && git commit -qm ign
+printf 'on: pull_request_target\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.pull_request.title }}"\n' > .github/workflows/new.yml
+set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" --mode full --only opengrep,ruff,zizmor >/dev/null; set -e
+check "full: .semgrepignore cannot hide committed code"   "$(q "sum(1 for f in d['findings'] if f['path']=='src/ig/v.js')")" "1"
+check "full: .gitignore cannot hide committed Python"     "$(q "int(any(f['path']=='src/ig/v.py' and f['rule']=='ruff.S307' for f in d['findings']))")" "1"
+if command -v zizmor >/dev/null; then
+  check "full (local): untracked workflow is scanned"     "$(q "int(any(f['path']=='.github/workflows/new.yml' for f in d['findings']))")" "1"
+fi
+rm -f .github/workflows/new.yml; git checkout -q r3
+
 # native "ignore this line" comments never hide a finding (only sast-ignore with a reason does)
 git checkout -q -b noqa main
 printf 'import pickle\ndef f(b):\n    return pickle.loads(b)  # noqa: S301\n' > src/nq.py

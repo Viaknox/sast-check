@@ -270,7 +270,9 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     if not tg:
         return []
     # --disable-nosem: a PR's `// nosemgrep` comment must not hide a finding (only sast-ignore with a reason)
-    cmd = [engine, "scan", "--config", str(rules), "--json", "--quiet", "--disable-version-check", "--disable-nosem"]
+    # --x-ignore-semgrepignore-files: a PR's .semgrepignore/.opengrepignore must not hide files (full scans pass ".")
+    cmd = [engine, "scan", "--config", str(rules), "--json", "--quiet", "--disable-version-check", "--disable-nosem",
+           "--x-ignore-semgrepignore-files"]
     if Path(engine).name == "opengrep":
         cmd.append("--taint-intrafile")
     else:
@@ -352,7 +354,9 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
     if not tg:
         return []
     # --ignore-noqa: a PR's noqa comments must not hide a finding (only sast-ignore with a reason)
-    cmd = ["ruff", "check", "--isolated", "--no-cache", "--preview", "--ignore-noqa", "--select", "S",
+    # --no-respect-gitignore: a PR's .gitignore must not hide a committed file from a full scan
+    cmd = ["ruff", "check", "--isolated", "--no-cache", "--preview", "--ignore-noqa", "--no-respect-gitignore",
+           "--select", "S",
            "--output-format", "json", "--exit-zero"]
     for g in ctx.cfg["paths"]["exclude"]:
         cmd += ["--extend-exclude", g]
@@ -386,8 +390,10 @@ def run_zizmor(ctx: Ctx) -> list[Finding]:
         tg = [f for f in targets(ctx, (".yml", ".yaml"))
               if f.startswith(".github/workflows/") or Path(f).name in ("action.yml", "action.yaml")]
     else:
-        tracked = sh(["git", "ls-files", "-z", "--", ".github/workflows/*.yml", ".github/workflows/*.yaml",
-                      ":(glob)**/action.yml", ":(glob)**/action.yaml"], ctx.repo).stdout.split("\0")
+        specs = ["--", ".github/workflows/*.yml", ".github/workflows/*.yaml", ":(glob)**/action.yml", ":(glob)**/action.yaml"]
+        tracked = (sh(["git", "ls-files", "-z"] + specs, ctx.repo).stdout.split("\0")            # committed
+                   + sh(["git", "ls-files", "-z", "--others", "--exclude-standard"] + specs,       # new, local runs
+                        ctx.repo).stdout.split("\0"))
         tg = sorted({f for f in tracked if f and not glob_any(f, ctx.cfg["paths"]["exclude"])})
     if not tg:
         return []
@@ -517,7 +523,8 @@ def run_osv(ctx: Ctx) -> list[Finding]:
         return []
     # 0 = clean, 1 = vulns found, 128 = no packages found
     with tempfile.TemporaryDirectory() as td:
-        cmd = ["osv-scanner", "scan", "source", "-r", "--format", "json"]
+        # --no-ignore: a PR's .gitignore must not hide a committed lockfile
+        cmd = ["osv-scanner", "scan", "source", "-r", "--no-ignore", "--format", "json"]
         if ctx.base:   # PR scans: --config replaces every osv-scanner.toml in the tree (a PR's could hide vulns)
             conf = Path(td) / "osv-scanner.toml"
             conf.write_text(settings_file(ctx.repo, ctx.base, "osv-scanner.toml") or "")
