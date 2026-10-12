@@ -18,7 +18,9 @@ import sys
 import tarfile
 import tempfile
 import tomllib
+from collections import Counter
 from dataclasses import dataclass, field, asdict
+from datetime import date
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -79,6 +81,7 @@ LOCKFILES = {  # every manifest osv-scanner v2 scans (google.github.io/osv-scann
     "requirements.txt", "pdm.lock", "pylock.toml", "uv.lock", "renv.lock", "Gemfile.lock",
     "gems.locked", "Cargo.lock",
     "bom.json", "bom.xml",                       # CycloneDX SBOMs (google.github.io/osv-scanner/usage/scan-source)
+    "osv-scanner-custom.json",                   # OSV's own inventory format, auto-detected since v2.2.2
 }
 SBOM_SUFFIXES = (".spdx.json", ".spdx", ".spdx.yml", ".spdx.rdf", ".spdx.rdf.xml", ".cdx.json", ".cdx.xml")
 # only inside a comment: # (py/sh/yaml/tf/docker), // or /* (js/ts/tf), <!-- (html)
@@ -123,6 +126,7 @@ class Ctx:
     changed_files: list[str] = field(default_factory=list)
     runs: list[ToolRun] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    new_keys: set[tuple[str, str, str]] = field(default_factory=set)   # (tool, rule, path) found new by a scanner
 
 
 # ---------------------------------------------------------------- helpers
@@ -175,6 +179,7 @@ def load_config(text: str | None) -> dict:
     cfg = tomllib.loads((ROOT / "config" / "default.toml").read_text())
     if text is not None:
         uc = tomllib.loads(text)
+        check_settings(uc, cfg)
         defaults_excl = cfg["paths"]["exclude"]
         cfg = deep_merge(cfg, uc)
         # user excludes ADD to the defaults (never silently re-include node_modules etc.)
@@ -184,6 +189,34 @@ def load_config(text: str | None) -> dict:
     if not isinstance(block_on, list) or any(s not in SEV_ORDER for s in block_on):
         raise RuntimeError(f"policy.block_on must be a list of {', '.join(SEV_ORDER)}; got {block_on!r}")
     return cfg
+
+
+IGNORE_KEYS = {"rule": str, "path": str, "reason": str, "expires": (str, date)}
+
+
+def check_settings(uc: dict, defaults: dict) -> None:
+    """Reject a .sast-check.toml key or value type the defaults do not have. A typo ([tools] opengrepp,
+    scope = "ful") would otherwise be accepted on the PR and, once merged, break or weaken every later scan."""
+    for sec, val in uc.items():
+        if sec == "ignore":
+            if not isinstance(val, list):
+                raise RuntimeError("ignore must be an array of tables ([[ignore]])")
+            for ig in val:
+                bad = [k for k in ig if k not in IGNORE_KEYS] if isinstance(ig, dict) else ["(not a table)"]
+                bad += [k for k, t in IGNORE_KEYS.items() if k in ig and not isinstance(ig[k], t)] if not bad else []
+                if bad or not isinstance(ig.get("rule"), str) or not isinstance(ig.get("reason"), str):
+                    raise RuntimeError(f"[[ignore]] needs string rule and reason, and only {', '.join(IGNORE_KEYS)}; got {ig!r}"[:250])
+            continue
+        if sec not in defaults or not isinstance(val, dict):
+            raise RuntimeError(f"unknown settings section [{sec}]; valid: {', '.join([*defaults, 'ignore'])}")
+        for k, v in val.items():
+            d = defaults[sec].get(k)
+            if d is None:
+                raise RuntimeError(f"unknown setting {sec}.{k}; valid: {', '.join(defaults[sec])}")
+            if type(v) is not type(d) or (isinstance(v, list) and not all(isinstance(x, str) for x in v)):
+                raise RuntimeError(f"{sec}.{k} must be {type(d).__name__}{' of strings' if isinstance(d, list) else ''}; got {v!r}")
+    if uc.get("policy", {}).get("scope", "diff") not in ("diff", "full"):
+        raise RuntimeError(f"policy.scope must be \"diff\" or \"full\"; got {uc['policy']['scope']!r}")
 
 
 def glob_any(path: str, globs: list[str]) -> bool:
@@ -365,16 +398,20 @@ def link_dir_files(repo: Path, path: str) -> list[str]:
 # ---------------------------------------------------------------- scanners
 def targets(ctx: Ctx, exts: tuple[str, ...] | None = None, names: tuple[str, ...] = ()) -> list[str]:
     excl = ctx.cfg["paths"]["exclude"]
-    files = ctx.changed_files if ctx.mode == "diff" else None
-    if files is None:
-        return ["."]
+    head, files = [], ctx.changed_files
+    if ctx.mode != "diff":
+        # "." plus every in-repo symlink, named through the link: the scanners do not follow links, so code
+        # behind an unexcluded alias of an excluded path (src -> vendor/pkg) would otherwise go unscanned
+        head = ["."]
+        files = [f for link in repo_links(ctx.repo) if in_repo(ctx.repo, ctx.repo / link)
+                 for f in (link_dir_files(ctx.repo, link) or [link])]
     keep = []
     for f in files:
         if glob_any(f, excl) or not (ctx.repo / f).is_file():
             continue
         if exts is None or f.endswith(exts) or Path(f).name in names:
             keep.append(f)
-    return keep
+    return head + keep
 
 
 def run_opengrep(ctx: Ctx) -> list[Finding]:
@@ -793,7 +830,7 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
                     (work / f).parent.mkdir(parents=True, exist_ok=True)
                     (work / f).write_bytes(TRIVY_INLINE_RE.sub(rb"\1_ignore", fp.read_bytes()))
         work.mkdir(exist_ok=True)
-        cmd, cwd = ["trivy", "config", "--quiet", "--format", "json"], work
+        cmd, cwd, base_p = ["trivy", "config", "--quiet", "--format", "json"], work, None
         if ctx.base:   # PR scans: the base branch's trivy.yaml / .trivyignore, never the PR's
             conf, ign = Path(td) / "trivy.yaml", Path(td) / "trivyignore"
             conf.write_text(settings_file(ctx.repo, ctx.base, "trivy.yaml") or "")
@@ -811,9 +848,30 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
                         t.extract(m, cwd, filter="data")
             if arc.wait() != 0:
                 raise RuntimeError(f"git archive {ctx.base} failed")
+            if any(f.endswith((".tfvars", ".tfvars.json")) for f in ctx.changed_files):
+                base_p = sh(cmd + ["."], cwd)   # the base tree with its own vars, for the comparison below
+            # Terraform variable files are scan inputs, not policy: a vars file named in the config
+            # (misconfiguration.terraform.vars) must be the PR's version, or a changed value goes unseen
+            for f in git_z(ctx.repo, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]):
+                fp = ctx.repo / f
+                if f.endswith((".tfvars", ".tfvars.json")) and fp.is_file() and in_repo(ctx.repo, fp):
+                    (cwd / f).parent.mkdir(parents=True, exist_ok=True)
+                    (cwd / f).write_bytes(fp.read_bytes())
         p = sh(cmd + [str(work)], cwd)
+    out = trivy_findings(ctx, p.stdout)
+    if base_p is not None:
+        # a changed vars value changes resources whose lines did not change: a (rule, file) the PR has more
+        # of than the base tree with the base vars counts as new
+        had = Counter((f.rule, f.path) for f in trivy_findings(ctx, base_p.stdout))
+        now = Counter((f.rule, f.path) for f in out)
+        ctx.new_keys |= {("trivy", *k) for k, n in now.items() if n > had[k]}
+    return out
+
+
+def trivy_findings(ctx: Ctx, stdout: str) -> list[Finding]:
+    """Findings from `trivy config --format json` output (excluded paths dropped)."""
     out = []
-    for res in json.loads(p.stdout or "{}").get("Results", []) or []:
+    for res in json.loads(stdout or "{}").get("Results", []) or []:
         if glob_any(res["Target"], ctx.cfg["paths"]["exclude"]):   # excluded paths are never scanned
             continue
         for m in res.get("Misconfigurations", []) or []:
@@ -947,7 +1005,12 @@ def baseline_new(ctx: Ctx, findings: list[Finding], enabled: list[str]) -> set[i
 
 def aligned_lines(base_file: Path, head_file: Path) -> dict[int, int]:
     """1-based base line -> head line, for lines the two versions share (difflib alignment). Lines that
-    changed have no entry, so a finding on them can never be matched to an old one."""
+    changed have no entry, so a finding on them can never be matched to an old one.
+
+    A text that occurs more than once in either version (two identical `eval(v)` sinks) can be aligned to
+    the wrong copy (blocks reordered: the sink the PR fixed paired with the one it exposed, or with a new
+    copy). Its lines are kept only if both versions have it equally often and every base copy is aligned; the alignment is in order, so
+    copy i then pairs with copy i. Otherwise none of its lines match and their findings count as new."""
     try:
         a = base_file.read_text(errors="ignore").split("\n")
         b = head_file.read_text(errors="ignore").split("\n")
@@ -956,6 +1019,14 @@ def aligned_lines(base_file: Path, head_file: Path) -> dict[int, int]:
     out = {}
     for blk in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
         out.update({blk.a + k + 1: blk.b + k + 1 for k in range(blk.size)})
+    na, nb = Counter(" ".join(x.split()) for x in a), Counter(" ".join(x.split()) for x in b)
+    lines_of: dict[str, list[int]] = {}
+    for i, x in enumerate(a, 1):
+        lines_of.setdefault(" ".join(x.split()), []).append(i)
+    for t, ls in lines_of.items():
+        if (na[t] > 1 or nb[t] > 1) and (nb[t] != na[t] or any(i not in out for i in ls)):
+            for i in ls:
+                out.pop(i, None)
     return out
 
 
@@ -970,7 +1041,7 @@ def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] = froz
         if ctx.mode == "diff" and f.kind in ("code", "config"):
             changed = ctx.changed_lines.get(f.path, set())
             f.in_diff = (any(n in changed for n in range(f.line, max(f.end_line, f.line) + 1))
-                         or id(f) in new_by_base)
+                         or id(f) in new_by_base or (f.tool, f.rule, f.path) in ctx.new_keys)
         elif ctx.mode == "diff" and f.kind == "dependency":
             f.in_diff = f.path in ctx.changed_files
         f.suppressed = inline_suppression(ctx.repo, f) or config_suppression(ctx.cfg, f, today)
@@ -1047,6 +1118,62 @@ def to_sarif(findings: list[Finding]) -> dict:
     }
 
 
+MINIMAL_WORKFLOW = "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n"
+
+
+def proposed_settings_error(repo: Path, name: str) -> str:
+    """Why the PR's version of settings file `name` would break scans once merged ("" if fine). Each file
+    is read by the parser that will use it: ours, or the pinned scanner's (run on an empty input). A
+    scanner that is not installed cannot check its file; its scans are reported as skipped anyway."""
+    text = settings_file(repo, None, name)
+    if text is None or (name in ZIZMOR_CONFIGS and not text.strip()):   # removed, or empty = defaults
+        return ""
+    try:
+        if name == ".sast-check.toml":
+            load_config(text)
+            return ""
+        if name == ".gitleaks.toml" and tomllib.loads(text).get("extend", {}).get("path"):
+            return "[extend] path is not supported on PR scans"
+        with tempfile.TemporaryDirectory() as td:
+            conf, empty, wf = Path(td) / Path(name).name, Path(td) / "empty", Path(td) / "wf.yml"
+            conf.write_text(text)
+            empty.mkdir()
+            wf.write_text(MINIMAL_WORKFLOW)
+            check = {
+                ".gitleaks.toml": (["gitleaks", "dir", "--no-banner", "--exit-code", "0", "--config", str(conf), str(empty)], (0,)),
+                "osv-scanner.toml": (["osv-scanner", "scan", "source", "--format", "json", f"--config={conf}", "-r", str(empty)], (0, 1, 128)),
+                "trivy.yaml": (["trivy", "config", "--quiet", "--format", "json", "--config", str(conf), str(empty)], (0,)),
+                **{z: (["zizmor", "--offline", "--no-progress", "--format", "json", "--config", str(conf), "--", str(wf)],
+                       (0, 10, 11, 12, 13, 14)) for z in ZIZMOR_CONFIGS},
+            }.get(name)
+            if check and shutil.which(check[0][0]):
+                sh(check[0], Path(td), ok_codes=check[1], timeout=300)
+    except (RuntimeError, tomllib.TOMLDecodeError) as e:
+        return str(e)
+    return ""
+
+
+LFS_POINTER = b"version https://git-lfs.github.com/spec/"
+
+
+def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[str]:
+    """Changes whose content the scanners cannot see in this checkout: a submodule pointer (its code is
+    not checked out) and a Git LFS pointer file (the real content lives on the LFS server)."""
+    mb = sh(["git", "merge-base", base, "HEAD"], repo).stdout.strip()
+    # a gitlink is compared tree to tree: the working-tree diff skips a submodule that is not checked out
+    was = {e.split("\t", 1)[1]: e.split()[2] for e in git_z(repo, ["ls-tree", "-r", "-z", mb]) if e.startswith("160000 ")}
+    now = {e.split("\t", 1)[1]: e.split()[1] for e in git_z(repo, ["ls-files", "-z", "-s"]) if e.startswith("160000 ")}
+    out = [f"submodule `{p}`" for p, sha in sorted(now.items()) if was.get(p) != sha]
+    for f in changed:
+        try:
+            with open(repo / f, "rb") as fh:
+                if fh.read(len(LFS_POINTER)) == LFS_POINTER:
+                    out.append(f"Git LFS file `{f}`")
+        except OSError:
+            continue
+    return out
+
+
 # ---------------------------------------------------------------- main
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Run the SAST check and apply the block policy.")
@@ -1085,17 +1212,9 @@ def main(argv=None) -> int:
         for n in edited:   # git stores a link as its target path: once merged, the base copy would be junk
             if (repo / n).is_symlink():
                 ctx.runs.append(ToolRun("settings", "error", f"proposed {n} is a symlink; settings must be regular files"))
-        if not settings_error and ".sast-check.toml" in edited and not (repo / ".sast-check.toml").is_symlink():
-            try:
-                load_config(settings_file(repo, None, ".sast-check.toml"))
-            except (RuntimeError, tomllib.TOMLDecodeError) as e:
-                ctx.runs.append(ToolRun("settings", "error", f"proposed .sast-check.toml is invalid: {str(e)[:250]}"))
-        if not settings_error and ".gitleaks.toml" in edited and (gl := settings_file(repo, None, ".gitleaks.toml")):
-            try:
-                if tomllib.loads(gl).get("extend", {}).get("path"):
-                    raise RuntimeError("[extend] path is not supported on PR scans")
-            except (RuntimeError, tomllib.TOMLDecodeError) as e:
-                ctx.runs.append(ToolRun("settings", "error", f"proposed .gitleaks.toml is invalid: {str(e)[:250]}"))
+        for n in edited if not settings_error else []:
+            if not (repo / n).is_symlink() and (why := proposed_settings_error(repo, n)):
+                ctx.runs.append(ToolRun("settings", "error", f"proposed {n} is invalid: {why[:250]}"))
     enabled = a.only.split(",") if a.only else [k for k, v in cfg["tools"].items() if v]
     if settings_error:
         enabled = []                           # cannot trust the settings: report the error (fail closed)
@@ -1110,6 +1229,8 @@ def main(argv=None) -> int:
             ctx.runs.append(ToolRun("git-diff", "error", f"cannot diff against {a.base}: {str(e)[:300]}"))
             enabled = []                       # nothing can be scoped; report the error (fail closed)
         ctx.changed_files = sorted(ctx.changed_lines)
+        if not any(r.name == "git-diff" for r in ctx.runs) and (blind := unscanned_changes(repo, a.base, ctx.changed_files)):
+            ctx.notes.append("Not scanned, review by hand: " + ", ".join(blind) + ".")
     findings: list[Finding] = []
     for name in enabled:
         try:
@@ -1121,6 +1242,8 @@ def main(argv=None) -> int:
         except Exception as e:  # noqa: BLE001 - surface any scanner failure
             ctx.runs.append(ToolRun(name, "error", str(e)[:400]))
 
+    # one report per finding: a full scan passes "." and link paths, which a scanner may reach twice
+    findings = list({(f.tool, f.rule, f.path, f.line, f.end_line, f.message): f for f in findings}.values())
     fingerprint(repo, findings)
     new_by_base: set[int] = set()
     if mode == "diff" and a.base and enabled:

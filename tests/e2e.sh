@@ -299,6 +299,15 @@ if command -v trivy >/dev/null; then
   check "trivy: inline trivy:ignore cannot hide"           "$(q "int(any(f['rule']=='trivy.AWS-0124' for f in d['findings']))")" "1"
   check "trivy: inner-line change inside a resource is new" "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0124']")" "[True]"
   git checkout -q main
+  # Terraform vars named in the base trivy.yaml are scan inputs: the PR's value is the one scanned
+  git checkout -q -b tvv main
+  printf 'variable "cidr" {\n  type = string\n}\nresource "aws_security_group_rule" "r" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = [var.cidr]\n  security_group_id = "sg-1"\n}\n' > vsg.tf
+  printf 'cidr = "10.0.0.0/8"\n' > prod.tfvars && printf 'misconfiguration:\n  terraform:\n    vars: [prod.tfvars]\n' > trivy.yaml
+  git add vsg.tf prod.tfvars trivy.yaml && git commit -qm tvvbase
+  printf 'cidr = "0.0.0.0/0"\n' > prod.tfvars && git commit -qam tvv
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: a changed tfvars value is scanned as new"  "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='vsg.tf']")" "[True]"
+  git checkout -q main
 fi
 git checkout -q main
 
@@ -393,7 +402,7 @@ if command -v trivy >/dev/null; then
   git add sgv.tf prod.tfvars trivy.yaml abs.lnk && git commit -qm tvbase
   printf 'cidr = "10.0.0.0/8"\n' > prod.tfvars && git add prod.tfvars && git commit -qm tvpr
   gate --mode diff --base HEAD~1 --only trivy
-  check "trivy: files the base trivy.yaml names come from base" "$(q "int(any(f['rule']=='trivy.AWS-0107' for f in d['findings']))")" "1"
+  check "trivy: the PR's tfvars value is scanned (now safe)" "$(q "int(any(f['rule']=='trivy.AWS-0107' for f in d['findings']))")" "0"
   git checkout -q main
 fi
 
@@ -630,6 +639,63 @@ mkdir -p vendor && echo 'K14 = "AKIAIOSFODNN7ABCDEFG"' > vendor/key14.py && ln -
 git add vendor/key14.py src/key14.py && git commit -qm r14
 gate --mode full --base HEAD~1 --only gitleaks
 check "full: a link to an excluded secret file blocks"    "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/key14.py')")" "1"
+git checkout -q main
+
+# r15: proposed settings are checked by the parser that will read them (once merged, a broken one fails every PR)
+git checkout -q -b r15s main
+printf '[tools]\nopengrepp = true\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm badkey
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "unknown key in proposed .sast-check.toml fails"    "$code" "2"
+check "...and the error names the key"                    "$(q "any(r['name']=='settings' and 'opengrepp' in r['detail'] for r in d['runs'])")" "True"
+git checkout -q main
+if command -v zizmor >/dev/null; then
+  git checkout -q -b r15z main
+  mkdir -p .github && printf 'rules:\n  bogus: [\n' > .github/zizmor.yml && git add .github/zizmor.yml && git commit -qm badz
+  set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+  check "malformed proposed zizmor.yml fails"             "$code" "2"
+  check "...and the error names zizmor.yml"               "$(q "any(r['name']=='settings' and 'zizmor.yml' in r['detail'] for r in d['runs'])")" "True"
+  git checkout -q main
+fi
+if command -v osv-scanner >/dev/null; then
+  git checkout -q -b r15o main
+  printf 'IgnoredVulnz = 1\n' > osv-scanner.toml && git add osv-scanner.toml && git commit -qm bado
+  set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+  check "invalid proposed osv-scanner.toml fails"         "$code" "2"
+  git checkout -q main
+  # OSV's own inventory format is a dependency input like a lockfile
+  git checkout -q -b r15c main
+  printf '{"results":[{"source":{"path":"/x","type":"lockfile"},"packages":[{"package":{"name":"lodash","version":"4.17.15","ecosystem":"npm"}}]}]}\n' > osv-scanner-custom.json
+  git add osv-scanner-custom.json && git commit -qm custom
+  gate --mode diff --base HEAD~1 --only osv
+  check "osv-scanner-custom.json in a PR is scanned"      "$(q "int(any(f['path']=='osv-scanner-custom.json' and f['in_diff'] for f in d['findings']))")" "1"
+  git checkout -q main
+fi
+
+# r15: full scope scans code behind a directory alias of an excluded path (once, under the link's name)
+git checkout -q -b r15f main
+mkdir -p vendor/pkg15 && printf 'eval(input())\n' > vendor/pkg15/vuln.py && ln -s vendor/pkg15 src15
+git add vendor/pkg15 src15 && git commit -qm r15f
+gate --mode full --only ruff
+check "full: code behind a directory alias blocks once"  "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='src15/vuln.py')")" "1"
+git checkout -q main
+
+# r15: two identical blocks swap which one is sanitized; the aligner may pair the old sink with the new one
+git checkout -q -b r15d main
+blk() { printf "app.use((req, res) => {\n  let v = req.query.v;\n  %s\n  const p1 = 1;\n  const p2 = 2;\n  const p3 = 3;\n  res.send(String(eval(v)));\n});\n" "$1"; }
+{ blk 'const pad = 0;'; blk 'v = Number(v);'; } > src/dup.js && git add src/dup.js && git commit -qm dupbase
+{ blk 'v = Number(v);'; blk 'const pad = 0;'; } > src/dup.js && git commit -qam dupswap   # difflib pairs old sink 7 with new sink 15
+gate --mode diff --base HEAD~1 --only opengrep
+check "identical blocks swapped: the exposed sink blocks" "$(q "[f['line'] for f in d['findings'] if f['path']=='src/dup.js' and f['blocking']]")" "[15]"
+git checkout -q main
+
+# r15: changes the scanners cannot see are named in the report
+git checkout -q -b r15b main
+printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 12\n' 0 > src/big.py
+git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),libsub"
+git add src/big.py && git commit -qm blind
+gate --mode diff --base HEAD~1 --only ruff
+check "report names a changed LFS pointer"               "$(grep -c 'Git LFS file `src/big.py`' sast-results/report.md)" "1"
+check "report names a changed submodule"                 "$(grep -c 'submodule `libsub`' sast-results/report.md)" "1"
 git checkout -q main
 
 # clean PR passes

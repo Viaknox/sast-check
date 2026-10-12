@@ -89,7 +89,7 @@ Runs when a lockfile changes. Severity from CVSS (≥9 critical, ≥7 high, ≥4
 ## Optional — Trivy (Apache-2.0)
 
 `[tools] trivy = true` adds deep Docker/Terraform/K8s misconfiguration checks (install trivy yourself).
-On PRs it uses the base branch's `trivy.yaml` and `.trivyignore`; inline `trivy:ignore` / `tfsec:ignore` comments are not honored (use `sast-ignore` or `[[ignore]]`). Findings carry Trivy's full line range, so a change inside a resource counts. On PRs Trivy runs from a snapshot of the base tree, so files the base `trivy.yaml` points to (custom checks, data, tfvars) are the base's, not the PR's.
+On PRs it uses the base branch's `trivy.yaml` and `.trivyignore`; inline `trivy:ignore` / `tfsec:ignore` comments are not honored (use `sast-ignore` or `[[ignore]]`). Findings carry Trivy's full line range, so a change inside a resource counts. On PRs Trivy runs from a snapshot of the base tree, so files the base `trivy.yaml` points to (custom checks, data) are the base's, not the PR's. Terraform variable files (`*.tfvars`, `*.tfvars.json`) are scan inputs and come from the PR; when a PR changes one, a finding the base tree (with its own vars) does not have counts as new even though no `.tf` line changed. Helm values files named in `trivy.yaml` are still read from the base.
 
 ## Not in v1
 

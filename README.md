@@ -25,7 +25,7 @@ Each PR gets one sticky comment and a job summary. Fork PRs get the summary only
 
 ## Tune it — `.sast-check.toml` in your repo root
 
-Changes to this file take effect **after they are merged**. PRs are always checked with the base branch's settings. A PR that changes this file must still leave it valid, or the check fails (an invalid file would otherwise break every later PR).
+Changes to this file take effect **after they are merged**. PRs are always checked with the base branch's settings. A PR that changes this file must still leave it valid, or the check fails (an invalid file would otherwise break every later PR): unknown sections or keys (`[tools] opengrepp`), wrong value types and an unknown `scope` are errors. The other settings files a PR edits are checked by the scanner that reads them (zizmor, gitleaks, osv-scanner, Trivy), when it is installed.
 
 ```toml
 [policy]
@@ -79,15 +79,17 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **Runners:** Linux x64 only (the action stops with a clear error elsewhere).
 - **Languages:** JS/TS, Python, HTML (inline scripts and script sources), GitHub Actions, Dockerfiles, Kubernetes YAML, Terraform. Anything else is not scanned by custom rules.
 - **Secrets** (gitleaks) are always critical and block when they appear in the PR's commits, staged or untracked files.
-- **Dependencies** (osv-scanner) warn only by default; set `[deps] block = true` to let critical CVEs (CVSS ≥ 9) in changed lockfiles (including `*requirements*.txt`) or SBOMs (`bom.json`, `*.cdx.json`, `*.spdx.json`, ...) block.
+- **Dependencies** (osv-scanner) warn only by default; set `[deps] block = true` to let critical CVEs (CVSS ≥ 9) in changed lockfiles (including `*requirements*.txt`) or SBOMs (`bom.json`, `*.cdx.json`, `*.spdx.json`, ...) or OSV custom inventories (`osv-scanner-custom.json`) block.
 - **Prototype pollution** through `Array.prototype.reduce` merge helpers is not caught: Semgrep and Opengrep disagree on that pattern, so it was left out rather than ship an engine-specific rule.
 - **NoSQL injection** ignores callbacks passed to `.find()` / `.filter()`-style calls (e.g. `arr.find(x => x === req.body.id)`). Opengrep taints closures, so without this exclusion every array lookup on request data would be flagged. A real Mongo filter is an object, which is still checked.
 - **JWT decode** counts a `verify()` of the **same token** anywhere in the same function, or earlier in the same block (class methods included), as verification. Verifying one token and decoding another is still flagged. `sast.js.jwt-verify-error-swallowed` catches a `verify()` whose error is swallowed (`catch` without `throw`/`return`) or that uses a callback, followed by `decode()`; it covers `jwt.verify` / `jwt.decode` (default or namespace import), not the named-import form.
 - **Dependency settings:** on PRs, only the base branch's root `osv-scanner.toml` is used; per-directory `osv-scanner.toml` files are ignored.
 - **Inline markers** are found line by line: a quote earlier on the line (e.g. `msg: don't # sast-ignore[...]` in YAML) hides the marker, so the finding still blocks. Put the marker on its own line above instead. A line inside a multi-line string that starts with `# sast-ignore[...]` is read as a comment; every suppression is listed with its reason in the report, so reviewers see it.
 - **Moved files:** a renamed, copied or symlinked file counts as fully changed, so moving a file can surface its old findings as new.
-- **What counts as new (diff scope):** a finding on a changed line, or (Opengrep and Ruff) a finding that the base branch's version of the file does not have. The base version of every touched file is scanned with the same rules and a finding is old only if the base has the same finding on the line this line came from (the two versions are aligned line by line), so deleting a sanitizer several lines above an unchanged `eval()` still blocks. For zizmor and Trivy, a deletion counts when the finding's lines span the cut (e.g. the `aws_ami` block that lost `owners`).
+- **What counts as new (diff scope):** a finding on a changed line, or (Opengrep and Ruff) a finding that the base branch's version of the file does not have. The base version of every touched file is scanned with the same rules and a finding is old only if the base has the same finding on the line this line came from (the two versions are aligned line by line), so deleting a sanitizer several lines above an unchanged `eval()` still blocks. A line whose text occurs more than once in either version (two identical `eval(v)` sinks) is matched only when both versions have it equally often and every copy lines up; otherwise all its findings count as new, so touching a file with repeated flagged lines can surface them. For zizmor and Trivy, a deletion counts when the finding's lines span the cut (e.g. the `aws_ami` block that lost `owners`).
 - **gitleaks `[extend] path`:** on PR scans a base `.gitleaks.toml` may use `[extend] useDefault = true` but not `[extend] path` (gitleaks would read that file from the PR's checkout); the check reports a settings error. Copy the extended rules into `.gitleaks.toml`.
+- **Not scanned, named in the report:** a changed submodule pointer (its code is not checked out) and a changed Git LFS pointer file (the content is on the LFS server). Review those by hand.
+- **Full scope** scans `.` plus every in-repo symlink under the link's name, so code behind an alias of an excluded path is scanned.
 - **zizmor exceptions** go in `[[ignore]]` in `.sast-check.toml` (zizmor ignore rules and comments are not honored).
 
 ## Develop
