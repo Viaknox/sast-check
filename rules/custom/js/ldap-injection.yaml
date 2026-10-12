@@ -1,0 +1,57 @@
+rules:
+  - id: sast.js.ldap-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request-controlled data is used to build an LDAP search filter without escaping. An attacker can add filter clauses and read or bypass directory lookups. Escape the value with an LDAP filter escaper first.
+    metadata:
+      sast_severity: critical
+      confidence: high
+      cwe: "CWE-90"
+      category: security
+      fix: 'Escape the value with ldap-escape (ldapEscape.filter`(uid=${name})`) before placing it in a filter.'
+      references:
+        - https://cwe.mitre.org/data/definitions/90.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.headers
+      - pattern: req.cookies
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      - pattern: request.headers
+      - pattern: request.cookies
+      - pattern: ctx.query
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sanitizers:
+      - pattern: ldapEscape.filter(...)
+      - pattern: ldapEscape.filter`...`
+      - pattern: ldapEscape.dn(...)
+      - pattern: escapeFilter(...)
+      - pattern: escapeLdapFilter(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: |
+              $C.search($B, {..., filter: $X, ...}, ...)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $C.search($B, $OPTS, ...)
+          - pattern-not: $C.search($B, {...}, ...)
+          - focus-metavariable: $OPTS
+      - patterns:
+          - pattern: $AD.$M($X, ...)
+          - metavariable-regex:
+              metavariable: $AD
+              regex: '(?i)^(ad|activeDirectory|activeDir|directory|adClient)$'
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(find|findUser|findUsers|findGroup|findGroups|getGroupMembershipForUser|isUserMemberOf)$'
+          - focus-metavariable: $X

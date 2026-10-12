@@ -1,0 +1,23 @@
+rules:
+  - id: sast.web.malicious-cdn-domain
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      This code references a CDN domain that is known to serve, or to have served, malicious
+      code (for example polyfill.io, which started injecting malware into sites in the 2024
+      supply-chain incident). Remove the reference, self-host the files, or use a trusted
+      mirror such as cdnjs or Fastly's polyfill service.
+    metadata:
+      sast_severity: critical
+      confidence: high
+      cwe: "CWE-829"
+      category: security
+      fix: "Self-host the library, or switch to a trusted mirror (cdnjs.cloudflare.com, or the Fastly polyfill service) and pin it with Subresource Integrity."
+      references:
+        - https://www.censys.com/blog/july-2-polyfill-io-supply-chain-attack-digging-into-the-web-of-compromised-domains
+        - https://cwe.mitre.org/data/definitions/829.html
+    paths:
+      exclude:
+        - node_modules
+    pattern-regex: >-
+      (?i)(?<=[/."'`\s=(,])(?:[a-z0-9-]+\.)*(?:polyfill\.io|polyfill\.com|bsclink\.cn|bootcdn\.net|bootcss\.com|bootcss\.net|staticfile\.net|staticfile\.org)(?=[/"'`:\s?#),;<>\\]|$)

@@ -1,0 +1,27 @@
+rules:
+  - id: sast.js.vite-define-process-env
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      The whole process.env object is injected into the client bundle through define or
+      DefinePlugin. Every environment variable on the build machine, including secrets, becomes
+      readable in the shipped JavaScript. Define only the specific variables the browser needs.
+    metadata:
+      sast_severity: medium
+      confidence: high
+      cwe: "CWE-200"
+      category: security
+      fix: "Replace with individual keys, e.g. 'process.env.API_URL': JSON.stringify(process.env.API_URL)."
+      references:
+        - https://cwe.mitre.org/data/definitions/200.html
+        - https://vite.dev/config/shared-options.html#define
+        - https://webpack.js.org/plugins/define-plugin/
+    pattern-either:
+      - pattern: |
+          { ..., "process.env": process.env, ... }
+      - pattern: |
+          { ..., "process.env": JSON.stringify(process.env), ... }
+      - pattern: |
+          { ..., "process.env": { ...process.env }, ... }
+      - pattern: |
+          { ..., "process.env": JSON.stringify({ ...process.env }), ... }

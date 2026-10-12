@@ -1,0 +1,80 @@
+rules:
+  - id: sast.js.command-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request-controlled data reaches a child process call, either as the shell command line or as the command itself. An attacker can run arbitrary commands on the server. Call execFile or spawn with a fixed program and a separate argument array, without shell: true.
+    metadata:
+      sast_severity: high
+      confidence: high
+      cwe: "CWE-78"
+      category: security
+      fix: 'Avoid the shell: use execFile/spawn with a fixed command and an argument array, and validate arguments against an allow-list.'
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.headers
+      - pattern: req.cookies
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      - pattern: request.headers
+      - pattern: request.cookies
+      - pattern: ctx.query
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sanitizers:
+      - pattern: shellescape(...)
+      - pattern: shellEscape(...)
+      - pattern: escapeShell(...)
+      - pattern: $Q.quote(...)
+      - pattern: JSON.stringify(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $F($X, ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: '^(exec|execSync)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $CP.$F($X, ...)
+          - metavariable-regex:
+              metavariable: $CP
+              regex: '^(child_process|cp|childProcess|cproc|proc)$'
+          - metavariable-regex:
+              metavariable: $F
+              regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $F($X, ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: '^(spawn|spawnSync|execFile|execFileSync)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: |
+              $F($C, $ARGS, {..., shell: true, ...})
+          - metavariable-regex:
+              metavariable: $F
+              regex: '(^|\.)(spawn|spawnSync|execFile|execFileSync)$'
+          - focus-metavariable: $ARGS
+      - patterns:
+          - pattern: $F($SH, [..., "-c", $X, ...], ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: '(^|\.)(spawn|spawnSync|execFile|execFileSync)$'
+          - metavariable-regex:
+              metavariable: $SH
+              regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+          - focus-metavariable: $X

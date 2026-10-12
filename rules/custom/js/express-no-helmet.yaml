@@ -1,0 +1,39 @@
+rules:
+  - id: sast.js.express-no-helmet
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      An Express app is created and started here, but no helmet() call is visible in the same
+      scope. Without it the app sends no security headers (CSP, HSTS, X-Content-Type-Options and
+      so on). Add app.use(helmet()), unless a gateway or reverse proxy sets those headers for you.
+    metadata:
+      sast_severity: medium
+      confidence: low
+      cwe: "CWE-693"
+      category: security
+      fix: "npm i helmet, then app.use(helmet()) before your routes (or set the same headers at the proxy)."
+      references:
+        - https://cwe.mitre.org/data/definitions/693.html
+        - https://expressjs.com/en/advanced/best-practice-security.html
+    # File-wide in practice: a helmet(...) call anywhere in the file suppresses the finding.
+    patterns:
+      - pattern: $APP.listen(...)
+      - pattern-inside: |
+          $APP = express();
+          ...
+      - pattern-not-inside: |
+          ...
+          $A.use(helmet(...));
+          ...
+      - pattern-not-inside: |
+          ...
+          $A.use(helmet.$M(...));
+          ...
+      - pattern-not-inside: |
+          ...
+          $A.use(require("helmet")(...));
+          ...
+      - pattern-not-inside: |
+          ...
+          helmet(...);
+          ...

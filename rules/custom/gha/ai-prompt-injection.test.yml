@@ -1,0 +1,50 @@
+name: triage
+on: [issues, pull_request_target, issue_comment]
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: summarize issue
+        uses: actions/ai-inference@v1
+        with:
+          # ruleid: sast.gha.ai-prompt-injection
+          prompt: "Summarize this issue: ${{ github.event.issue.title }}"
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # ruleid: sast.gha.ai-prompt-injection
+          direct_prompt: ${{ github.event.pull_request.body }}
+      - uses: google-github-actions/run-gemini-cli@v0
+        with:
+          # ruleid: sast.gha.ai-prompt-injection
+          prompt: Reply to ${{ github.event.comment.body }}
+      - uses: openai/codex-action@v1
+        with:
+          # ruleid: sast.gha.ai-prompt-injection
+          prompt: "Fix branch ${{ github.head_ref }}"
+      - uses: some-org/llm-reviewer@v2
+        with:
+          # ruleid: sast.gha.ai-prompt-injection
+          prompt: "Check commit: ${{ github.event.commits[0].message }}"
+      # Safe look-alikes
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # ok: sast.gha.ai-prompt-injection
+          direct_prompt: "Review pull request number ${{ github.event.pull_request.number }}."
+      - uses: actions/ai-inference@v1
+        with:
+          # ok: sast.gha.ai-prompt-injection
+          prompt: "Summarize the repository README."
+          model: openai/gpt-4o
+      - uses: actions/ai-inference@v1
+        with:
+          # ok: sast.gha.ai-prompt-injection
+          prompt: "Summarize the text found in the ISSUE_TEXT environment variable."
+        env:
+          # ok: sast.gha.ai-prompt-injection
+          ISSUE_TEXT: ${{ github.event.issue.title }}
+      - name: echo title with a non-AI action
+        uses: actions/github-script@v7
+        with:
+          # ok: sast.gha.ai-prompt-injection
+          script: console.log("${{ github.event.issue.title }}")

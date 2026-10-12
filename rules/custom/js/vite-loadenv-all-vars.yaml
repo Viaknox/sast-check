@@ -1,0 +1,32 @@
+rules:
+  - id: sast.js.vite-loadenv-all-vars
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      loadEnv(mode, dir, '') reads every environment variable (not only VITE_ ones), and the
+      result is placed into Vite's define option. define is inlined into the browser bundle, so
+      secrets such as API keys and database URLs end up public. Define only the specific
+      variables the client needs, or keep the VITE_ prefix.
+    metadata:
+      sast_severity: critical
+      confidence: high
+      cwe: "CWE-200"
+      category: security
+      fix: "Pick individual safe keys, e.g. define: { __API_URL__: JSON.stringify(env.API_URL) }, or call loadEnv with the default VITE_ prefix."
+      references:
+        - https://cwe.mitre.org/data/definitions/200.html
+        - https://vite.dev/guide/env-and-mode
+    mode: taint
+    pattern-sources:
+      - pattern: loadEnv($MODE, $DIR, "")
+      - pattern: vite.loadEnv($MODE, $DIR, "")
+    pattern-sanitizers:
+      - pattern: $ENV.$KEY
+      - pattern: $ENV[...]
+      - pattern: Object.keys(...)
+      - pattern: pickPublic(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: |
+              { ..., define: $D, ... }
+          - focus-metavariable: $D

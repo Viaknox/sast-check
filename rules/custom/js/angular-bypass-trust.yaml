@@ -1,0 +1,27 @@
+rules:
+  - id: sast.js.angular-bypass-trust
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      DomSanitizer.bypassSecurityTrust* turns off Angular's built-in XSS protection for the
+      given value, and here the value is not a literal. If it can carry user or remote data,
+      attackers can inject script. Avoid the bypass, or validate and sanitize the value first.
+    metadata:
+      sast_severity: medium
+      confidence: medium
+      cwe: "CWE-79"
+      category: security
+      fix: "Let Angular sanitize bindings automatically; if a bypass is unavoidable, allowlist/validate the value and keep it out of user control."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://angular.dev/best-practices/security
+    patterns:
+      - pattern-either:
+          - pattern: $S.bypassSecurityTrustUrl($V)
+          - pattern: $S.bypassSecurityTrustHtml($V)
+          - pattern: $S.bypassSecurityTrustScript($V)
+          - pattern: $S.bypassSecurityTrustResourceUrl($V)
+          - pattern: $S.bypassSecurityTrustStyle($V)
+      - focus-metavariable: $V
+      - pattern-not: $S.$M("...")
+      - pattern-not: $S.$M($S2.sanitize(...))

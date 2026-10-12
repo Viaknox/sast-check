@@ -1,0 +1,51 @@
+rules:
+  - id: sast.terraform.aws-ami-no-owner
+    languages: [terraform]
+    severity: ERROR
+    message: >-
+      This aws_ami data source picks the newest matching image but never says who must own
+      it. Anyone can publish a public AMI with the same name, so Terraform may launch an
+      attacker's image in your account. Set owners (an account ID or "amazon" / "self"), or
+      filter on owner-id.
+    metadata:
+      sast_severity: critical
+      confidence: high
+      cwe: "CWE-829"
+      category: security
+      fix: "Add owners = [\"<account-id>\"] (or \"amazon\", \"self\") to the data \"aws_ami\" block."
+      references:
+        - https://cwe.mitre.org/data/definitions/829.html
+        - https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami
+    patterns:
+      - pattern: |
+          data "aws_ami" "$NAME" {
+            ...
+            most_recent = true
+            ...
+          }
+      - pattern-not: |
+          data "aws_ami" "$NAME" {
+            ...
+            owners = $OWNERS
+            ...
+          }
+      - pattern-not: |
+          data "aws_ami" "$NAME" {
+            ...
+            filter {
+              ...
+              name = "owner-id"
+              ...
+            }
+            ...
+          }
+      - pattern-not: |
+          data "aws_ami" "$NAME" {
+            ...
+            filter {
+              ...
+              name = "owner-alias"
+              ...
+            }
+            ...
+          }

@@ -1,0 +1,73 @@
+rules:
+  - id: sast.js.dom-xss-sink
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Data taken from the URL, referrer, window.name or a postMessage event flows into an HTML
+      sink (innerHTML, outerHTML, insertAdjacentHTML, document.write). An attacker who controls
+      that value can run script in your page. Use textContent, or sanitize with DOMPurify first.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-79"
+      category: security
+      fix: "Assign to textContent / createTextNode, or pass the value through DOMPurify.sanitize() before using an HTML sink."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://owasp.org/www-community/attacks/DOM_Based_XSS
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: location.hash
+              - pattern: location.search
+              - pattern: location.href
+              - pattern: location.pathname
+              - pattern: window.location.hash
+              - pattern: window.location.search
+              - pattern: window.location.href
+              - pattern: window.location.pathname
+              - pattern: document.location.hash
+              - pattern: document.location.search
+              - pattern: document.location.href
+              - pattern: document.URL
+              - pattern: document.documentURI
+              - pattern: document.referrer
+              - pattern: window.name
+              - pattern: new URLSearchParams(...).get(...)
+              - pattern: new URLSearchParams(...).getAll(...)
+          - pattern-not: new URLSearchParams("...").get(...)
+          - pattern-not: new URLSearchParams({...}).get(...)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $W.addEventListener("message", function($E) { ... })
+              - pattern-inside: |
+                  $W.addEventListener("message", ($E) => { ... })
+              - pattern-inside: |
+                  $W.onmessage = function($E) { ... }
+              - pattern-inside: |
+                  $W.onmessage = ($E) => { ... }
+          - pattern: $E.data
+    pattern-sanitizers:
+      - pattern: DOMPurify.sanitize(...)
+      - pattern: sanitizeHtml(...)
+      - pattern: encodeURIComponent(...)
+      - pattern: encodeURI(...)
+      - pattern: escapeHtml(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $EL.innerHTML = $X
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $EL.outerHTML = $X
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $EL.insertAdjacentHTML($POS, $X)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: document.write($X)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: document.writeln($X)
+          - focus-metavariable: $X

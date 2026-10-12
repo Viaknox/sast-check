@@ -1,0 +1,33 @@
+rules:
+  - id: sast.js.react-dangerous-html
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      dangerouslySetInnerHTML is given a value that is not a literal and is not passed through a
+      sanitizer. If any part of it comes from users or an API, it becomes an XSS hole. Render
+      the content as normal JSX text, or wrap it with DOMPurify.sanitize().
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-79"
+      category: security
+      fix: "Render as JSX children, or use dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://react.dev/reference/react-dom/components/common#dangerously-setting-the-inner-html
+    patterns:
+      - pattern: |
+          <$C ... dangerouslySetInnerHTML={{ __html: $X }} ... />
+      - focus-metavariable: $X
+      - pattern-not: |
+          <$C ... dangerouslySetInnerHTML={{ __html: "..." }} ... />
+      - pattern-not: |
+          <$C ... dangerouslySetInnerHTML={{ __html: `...` }} ... />
+      - pattern-not: |
+          <$C ... dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(...) }} ... />
+      - pattern-not: |
+          <$C ... dangerouslySetInnerHTML={{ __html: sanitizeHtml(...) }} ... />
+      - pattern-not: |
+          <$C ... dangerouslySetInnerHTML={{ __html: purify.sanitize(...) }} ... />
+      - pattern-not: |
+          <$C ... dangerouslySetInnerHTML={{ __html: xss(...) }} ... />

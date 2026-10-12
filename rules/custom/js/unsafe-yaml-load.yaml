@@ -1,0 +1,39 @@
+rules:
+  - id: sast.js.unsafe-yaml-load
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      js-yaml is configured with the full schema or with JavaScript type extensions, which can build functions and arbitrary objects from document text. Parsing untrusted YAML this way can lead to code execution. Use the default safe schema.
+    metadata:
+      sast_severity: critical
+      confidence: high
+      cwe: "CWE-502"
+      category: security
+      fix: 'Drop the schema option (js-yaml v4 defaults to a safe schema) or use yaml.DEFAULT_SCHEMA / CORE_SCHEMA.'
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+        - https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: |
+                      $FN($S, {..., schema: $SC, ...}, ...)
+                  - pattern: |
+                      $L.$FN($S, {..., schema: $SC, ...}, ...)
+                  - pattern: |
+                      $L.$FN($S, $O, {..., schema: $SC, ...}, ...)
+              - metavariable-regex:
+                  metavariable: $FN
+                  regex: '^(load|loadAll|safeLoad|safeLoadAll)$'
+              - metavariable-regex:
+                  metavariable: $SC
+                  regex: '^(.*\.)?(DEFAULT_)?FULL_SCHEMA$'
+          - patterns:
+              - pattern: $SCH.extend($ARG)
+              - metavariable-regex:
+                  metavariable: $SCH
+                  regex: '(?i).*schema$'
+              - metavariable-regex:
+                  metavariable: $ARG
+                  regex: '(?i).*(js-?yaml-?js-?types|jstypes|js_types|yamltypes).*'

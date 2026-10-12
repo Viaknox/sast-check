@@ -1,0 +1,61 @@
+rules:
+  - id: sast.python.ssrf
+    languages: [python]
+    severity: WARNING
+    message: >-
+      A value from the incoming Flask or Django request decides which URL the server fetches.
+      An attacker can aim it at internal services or cloud metadata endpoints. Check the host
+      against an allow-list, or build the URL from fixed parts and only vary a safe ID.
+    metadata:
+      sast_severity: medium
+      confidence: medium
+      cwe: "CWE-918"
+      category: security
+      fix: "Parse the URL and compare the host to an allow-list before fetching, or map a user-supplied key to a fixed URL."
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+        - https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$A
+              - pattern: flask.request.$A
+          - metavariable-regex:
+              metavariable: $A
+              regex: ^(args|form|json|values|data|cookies|headers|GET|POST|body|COOKIES|META)$
+      - pattern: request.get_json(...)
+      - pattern: flask.request.get_json(...)
+    pattern-sanitizers:
+      - pattern: int(...)
+      - pattern: float(...)
+      - pattern: uuid.UUID(...)
+      - patterns:
+          - pattern-regex: f["']https?://[^/{"']+/[^"']*["']
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$M($U, ...)
+              - pattern: requests.$M(..., url=$U, ...)
+              - pattern: httpx.$M($U, ...)
+              - pattern: httpx.$M(..., url=$U, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|post|put|delete|patch|head|options|stream)$
+          - focus-metavariable: $U
+      - patterns:
+          - pattern-either:
+              - pattern: urllib.request.urlopen($U, ...)
+              - pattern: urllib.request.Request($U, ...)
+              - pattern: urlopen($U, ...)
+              - patterns:
+                  - pattern-either:
+                      - pattern: $SESS.get($U, ...)
+                      - pattern: $SESS.post($U, ...)
+                      - pattern: $SESS.request($METHOD, $U, ...)
+                  - metavariable-regex:
+                      metavariable: $SESS
+                      regex: (?i)(session|client|sess)$
+              - pattern: requests.request($METHOD, $U, ...)
+              - pattern: httpx.request($METHOD, $U, ...)
+          - focus-metavariable: $U

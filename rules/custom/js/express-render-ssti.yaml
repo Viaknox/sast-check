@@ -1,0 +1,60 @@
+rules:
+  - id: sast.js.express-render-ssti
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request-controlled data chooses the template name for res.render, or the whole request query/body is passed as the render options. This can load unintended templates or set engine options such as layout paths, leading to file disclosure or code execution. Use a fixed template and copy only named fields.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-1336"
+      category: security
+      fix: 'Render a fixed template name (or one picked from an allow-list) and pass explicit fields as the data object.'
+      references:
+        - https://cwe.mitre.org/data/definitions/1336.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.headers
+      - pattern: req.cookies
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      - pattern: request.headers
+      - pattern: request.cookies
+      - pattern: ctx.query
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sanitizers:
+      - pattern: path.basename(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $R.render($X, ...)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(res|response|reply|ctx|resp)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $R.view($X, ...)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(reply|res|ctx)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $R.render($T, $O, ...)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(res|response|reply|ctx|resp)$'
+          - metavariable-regex:
+              metavariable: $O
+              regex: '^(req|request|ctx\.request)\.(query|body|params)$'
+          - focus-metavariable: $O

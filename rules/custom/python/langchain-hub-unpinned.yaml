@@ -1,0 +1,25 @@
+rules:
+  - id: sast.python.langchain-hub-unpinned
+    languages: [python]
+    severity: WARNING
+    message: >-
+      A LangChain Hub prompt is pulled by name only, so you get whatever the author last
+      published. If that prompt is edited or the account is taken over, your app silently runs
+      different instructions. Pin the prompt to a commit hash after a colon.
+    metadata:
+      sast_severity: medium
+      confidence: medium
+      cwe: "CWE-494"
+      category: security
+      fix: "Pull a fixed revision, e.g. hub.pull('owner/prompt:abc1234')."
+      references:
+        - https://cwe.mitre.org/data/definitions/494.html
+    patterns:
+      - pattern-either:
+          - pattern: hub.pull("$NAME", ...)
+          - pattern: langchain.hub.pull("$NAME", ...)
+          - pattern: langchain_classic.hub.pull("$NAME", ...)
+          - pattern: client.pull_prompt("$NAME", ...)
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: ^[^:]*$

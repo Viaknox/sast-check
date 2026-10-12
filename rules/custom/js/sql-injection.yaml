@@ -1,0 +1,65 @@
+rules:
+  - id: sast.js.sql-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request-controlled data is placed straight into a SQL string that is executed by a database call. An attacker can change the meaning of the query. Use bound parameters or placeholders, not string concatenation or template interpolation.
+    metadata:
+      sast_severity: high
+      confidence: high
+      cwe: "CWE-89"
+      category: security
+      fix: 'Use placeholders and pass values separately, e.g. query("SELECT * FROM t WHERE id = $1", [id]).'
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.headers
+      - pattern: req.cookies
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      - pattern: request.headers
+      - pattern: request.cookies
+      - pattern: ctx.query
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sanitizers:
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+      - pattern: $E.escape(...)
+      - pattern: escape(...)
+      - pattern: $E.escapeLiteral(...)
+      - pattern: $E.escapeId(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $DB.$M($X, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(query|execute|raw|whereRaw|havingRaw|orderByRaw|groupByRaw|selectRaw|joinRaw|\$queryRawUnsafe|\$executeRawUnsafe)$'
+          - pattern-not: $DB.$M({...}, ...)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: |
+              $DB.$M({..., text: $X, ...}, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(query|execute)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $DB.$M($X, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(run|get|all|exec|each|prepare)$'
+          - metavariable-regex:
+              metavariable: $DB
+              regex: '^(db|database|sqlite|sqliteDb|sqlite3|conn|connection)$'
+          - focus-metavariable: $X

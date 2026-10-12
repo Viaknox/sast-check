@@ -1,0 +1,60 @@
+rules:
+  - id: sast.python.path-traversal
+    languages: [python]
+    severity: WARNING
+    message: >-
+      A value from the incoming Flask or Django request is used as a file path. With "../" in
+      it, an attacker can read, overwrite or delete files outside the folder you meant. Reduce
+      the value to a plain file name first, or use send_from_directory with a fixed base.
+    metadata:
+      sast_severity: medium
+      confidence: medium
+      cwe: "CWE-22"
+      category: security
+      fix: "Use werkzeug.utils.secure_filename() or os.path.basename() on the input, and join it to a fixed base directory."
+      references:
+        - https://cwe.mitre.org/data/definitions/22.html
+        - https://owasp.org/www-community/attacks/Path_Traversal
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$A
+              - pattern: flask.request.$A
+          - metavariable-regex:
+              metavariable: $A
+              regex: ^(args|form|json|values|data|cookies|files|GET|POST|body|COOKIES)$
+      - pattern: request.get_json(...)
+      - pattern: flask.request.get_json(...)
+    pattern-sanitizers:
+      - pattern: secure_filename(...)
+      - pattern: werkzeug.utils.secure_filename(...)
+      - pattern: os.path.basename(...)
+      - pattern: basename(...)
+      - pattern: $P.name
+      - pattern: int(...)
+      - pattern: uuid.UUID(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open($P, ...)
+              - pattern: io.open($P, ...)
+              - pattern: pathlib.Path($P).read_text(...)
+              - pattern: pathlib.Path($P).read_bytes(...)
+              - pattern: pathlib.Path($P).open(...)
+              - pattern: Path($P).read_text(...)
+              - pattern: Path($P).read_bytes(...)
+              - pattern: Path($P).open(...)
+              - pattern: send_file($P, ...)
+              - pattern: flask.send_file($P, ...)
+              - pattern: shutil.copy($P, ...)
+              - pattern: shutil.copy2($P, ...)
+              - pattern: shutil.copyfile($P, ...)
+              - pattern: shutil.copytree($P, ...)
+              - pattern: shutil.move($P, ...)
+              - pattern: shutil.copy(..., $P)
+              - pattern: shutil.copy2(..., $P)
+              - pattern: shutil.copyfile(..., $P)
+              - pattern: os.remove($P)
+              - pattern: os.unlink($P)
+          - focus-metavariable: $P

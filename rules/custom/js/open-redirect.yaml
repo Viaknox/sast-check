@@ -1,0 +1,77 @@
+rules:
+  - id: sast.js.open-redirect
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request-controlled data decides where the response redirects the browser. Attackers can use your domain in phishing links that bounce victims to a malicious site. Accept only relative paths or allow-listed hosts.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-601"
+      category: security
+      fix: 'Redirect only to relative paths or to hosts on an allow-list, or map a short key to a fixed destination.'
+      references:
+        - https://cwe.mitre.org/data/definitions/601.html
+        - https://owasp.org/Top10/A01_2021-Broken_Access_Control/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.headers
+      - pattern: req.cookies
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      - pattern: request.headers
+      - pattern: request.cookies
+      - pattern: ctx.query
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $P + $X
+          - metavariable-regex:
+              metavariable: $P
+              regex: '^["''`]/[^/\\]'
+      - pattern: encodeURIComponent(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $R.redirect($X, ...)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(res|response|reply|ctx|resp|h|c|context)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $R.redirect($S, $X)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(res|response|reply|ctx|resp|h|c|context)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $R.location($X)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(res|response|reply|ctx|resp|h|c|context)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $R.$M("Location", $X)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(res|response|reply|ctx|resp|h|c|context)$'
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(setHeader|header|set|append)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: NextResponse.redirect($X, ...)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: Response.redirect($X, ...)
+          - focus-metavariable: $X

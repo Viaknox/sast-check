@@ -1,0 +1,563 @@
+#!/usr/bin/env python3
+"""sast-check: run several open-source scanners, merge findings, apply one policy.
+
+Stdlib only (Python 3.11+). Exit codes: 0 pass, 1 blocking findings, 2 scanner error.
+"""
+from __future__ import annotations
+
+import argparse
+import fnmatch
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import tomllib
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+SEV_ORDER = ["low", "medium", "high", "critical"]
+
+# Ruff S-rule severities (baseline from our coverage checklist; unlisted S codes -> low).
+RUFF_SEVERITY = {
+    "S301": "critical", "S302": "critical", "S307": "critical", "S506": "critical",
+    "S413": "high", "S102": "high", "S602": "high", "S201": "high", "S701": "high",
+    "S608": "high", "S507": "high", "S501": "high",
+    "S605": "medium", "S314": "medium", "S317": "medium", "S318": "medium", "S320": "medium",
+    "S306": "medium", "S321": "medium", "S202": "medium", "S610": "medium", "S611": "medium",
+    "S324": "medium", "S502": "medium", "S503": "medium", "S504": "medium", "S323": "medium",
+}
+RUFF_LOW_SIGNAL_IN_TESTS = {"S101", "S105", "S106", "S107", "S108", "S311", "S603", "S607"}
+ZIZMOR_OVERRIDE = {"known-vulnerable-actions": "critical"}
+
+# CWE on every rule (learner-agent contract). Mappings are ours; unmapped codes fall back to CWE-710.
+RUFF_CWE = {
+    "S101": "CWE-703", "S102": "CWE-94", "S103": "CWE-732", "S104": "CWE-605", "S105": "CWE-259",
+    "S106": "CWE-259", "S107": "CWE-259", "S108": "CWE-377", "S110": "CWE-703", "S112": "CWE-703",
+    "S113": "CWE-400", "S201": "CWE-94", "S202": "CWE-22", "S301": "CWE-502", "S302": "CWE-502",
+    "S303": "CWE-327", "S304": "CWE-327", "S305": "CWE-327", "S306": "CWE-377", "S307": "CWE-95",
+    "S308": "CWE-79", "S310": "CWE-22", "S311": "CWE-330", "S312": "CWE-319", "S313": "CWE-611",
+    "S314": "CWE-611", "S315": "CWE-611", "S316": "CWE-611", "S317": "CWE-611", "S318": "CWE-611",
+    "S319": "CWE-611", "S320": "CWE-611", "S321": "CWE-319", "S323": "CWE-295", "S324": "CWE-327",
+    "S401": "CWE-319", "S402": "CWE-319", "S403": "CWE-502", "S404": "CWE-78", "S405": "CWE-611",
+    "S406": "CWE-611", "S407": "CWE-611", "S408": "CWE-611", "S409": "CWE-611", "S410": "CWE-611",
+    "S411": "CWE-611", "S412": "CWE-807", "S413": "CWE-327", "S415": "CWE-319", "S501": "CWE-295",
+    "S502": "CWE-327", "S503": "CWE-327", "S504": "CWE-327", "S505": "CWE-326", "S506": "CWE-502",
+    "S507": "CWE-295", "S508": "CWE-319", "S509": "CWE-326", "S601": "CWE-78", "S602": "CWE-78",
+    "S603": "CWE-78", "S604": "CWE-78", "S605": "CWE-78", "S606": "CWE-78", "S607": "CWE-78",
+    "S608": "CWE-89", "S609": "CWE-155", "S610": "CWE-89", "S611": "CWE-89", "S612": "CWE-94",
+    "S701": "CWE-79", "S702": "CWE-79", "S704": "CWE-79",
+}
+ZIZMOR_CWE = {
+    "template-injection": "CWE-94", "github-env": "CWE-94", "insecure-commands": "CWE-77",
+    "unpinned-uses": "CWE-829", "unpinned-images": "CWE-829", "unpinned-tools": "CWE-829",
+    "impostor-commit": "CWE-829", "ref-confusion": "CWE-829", "typosquat-uses": "CWE-829",
+    "stale-action-refs": "CWE-829", "adhoc-packages": "CWE-829", "forbidden-uses": "CWE-829",
+    "dependabot-execution": "CWE-829", "dependabot-cooldown": "CWE-829",
+    "known-vulnerable-actions": "CWE-1395", "archived-uses": "CWE-1104",
+    "dangerous-triggers": "CWE-863", "bot-conditions": "CWE-290",
+    "excessive-permissions": "CWE-250", "undocumented-permissions": "CWE-250",
+    "overprovisioned-secrets": "CWE-250", "secrets-inherit": "CWE-250", "secrets-outside-env": "CWE-250",
+    "self-hosted-runner": "CWE-250", "github-app": "CWE-250",
+    "artipacked": "CWE-522", "use-trusted-publishing": "CWE-522",
+    "hardcoded-container-credentials": "CWE-798", "unredacted-secrets": "CWE-532",
+    "cache-poisoning": "CWE-349", "insecure-url-scheme": "CWE-319", "concurrency-limits": "CWE-400",
+    "unsound-condition": "CWE-697", "unsound-contains": "CWE-697", "unsound-ternary": "CWE-697",
+}
+LOCKFILES = {
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "npm-shrinkwrap.json",
+    "requirements.txt", "poetry.lock", "Pipfile.lock", "uv.lock", "pdm.lock",
+    "go.sum", "Cargo.lock", "Gemfile.lock", "composer.lock",
+}
+IGNORE_RE = re.compile(r"sast-ignore\[(?P<rule>[^\]]+)\]\s*:?\s*(?P<reason>.*)")
+
+
+@dataclass
+class Finding:
+    tool: str
+    rule: str
+    severity: str
+    confidence: str
+    path: str
+    line: int
+    message: str
+    fix: str = ""
+    cwe: str = ""
+    url: str = ""
+    kind: str = "code"          # code | secret | dependency | config
+    fingerprint: str = ""       # hash(rule ID + normalized code snippet); survives line moves
+    in_diff: bool = True
+    suppressed: str = ""        # reason, if suppressed
+    blocking: bool = False
+
+
+@dataclass
+class ToolRun:
+    name: str
+    status: str                 # ran | skipped | error
+    detail: str = ""
+    count: int = 0
+
+
+@dataclass
+class Ctx:
+    repo: Path
+    cfg: dict
+    mode: str
+    base: str | None
+    changed_lines: dict[str, set[int]] = field(default_factory=dict)
+    changed_files: list[str] = field(default_factory=list)
+    runs: list[ToolRun] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------- helpers
+def sh(cmd: list[str], cwd: Path, ok_codes=(0,), env=None) -> subprocess.CompletedProcess:
+    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
+    if p.returncode not in ok_codes:
+        raise RuntimeError(f"{cmd[0]} exited {p.returncode}: {(p.stderr or p.stdout)[-800:]}")
+    return p
+
+
+def deep_merge(a: dict, b: dict) -> dict:
+    out = dict(a)
+    for k, v in b.items():
+        out[k] = deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def load_config(repo: Path) -> dict:
+    cfg = tomllib.loads((ROOT / "config" / "default.toml").read_text())
+    user = repo / ".sast-check.toml"
+    if user.exists():
+        uc = tomllib.loads(user.read_text())
+        defaults_excl = cfg["paths"]["exclude"]
+        cfg = deep_merge(cfg, uc)
+        # user excludes ADD to the defaults (never silently re-include node_modules etc.)
+        cfg["paths"]["exclude"] = sorted(set(defaults_excl) | set(cfg["paths"]["exclude"]))
+    return cfg
+
+
+def glob_any(path: str, globs: list[str]) -> bool:
+    return any(fnmatch.fnmatch(path, g) or fnmatch.fnmatch("/" + path, "*/" + g.lstrip("*/")) for g in globs)
+
+
+def rel(repo: Path, p: str) -> str:
+    try:
+        return str(Path(p).resolve().relative_to(repo.resolve()))
+    except ValueError:
+        return p.lstrip("./")
+
+
+def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
+    """Map repo-relative file -> added/modified line numbers (merge-base vs working tree)."""
+    out = sh(["git", "diff", "-U0", "--no-color", "--diff-filter=ACMR", "--merge-base", base], repo).stdout
+    files: dict[str, set[int]] = {}
+    cur = None
+    for ln in out.splitlines():
+        if ln.startswith("+++ "):
+            cur = None if ln[4:] == "/dev/null" else ln[6:] if ln.startswith("+++ b/") else ln[4:]
+            if cur:
+                files.setdefault(cur, set())
+        elif ln.startswith("@@") and cur:
+            m = re.search(r"\+(\d+)(?:,(\d+))?", ln)
+            start, count = int(m.group(1)), int(m.group(2) or 1)
+            files[cur].update(range(start, start + count))
+    # untracked new files (local runs) count as fully changed
+    untracked = sh(["git", "ls-files", "--others", "--exclude-standard"], repo).stdout.split()
+    for f in untracked:
+        try:
+            n = sum(1 for _ in open(repo / f, errors="ignore"))
+        except OSError:
+            continue
+        files[f] = set(range(1, n + 1))
+    return files
+
+
+# ---------------------------------------------------------------- scanners
+def targets(ctx: Ctx, exts: tuple[str, ...] | None = None, names: tuple[str, ...] = ()) -> list[str]:
+    excl = ctx.cfg["paths"]["exclude"]
+    files = ctx.changed_files if ctx.mode == "diff" else None
+    if files is None:
+        return ["."]
+    keep = []
+    for f in files:
+        if glob_any(f, excl) or not (ctx.repo / f).is_file():
+            continue
+        if exts is None or f.endswith(exts) or Path(f).name in names:
+            keep.append(f)
+    return keep
+
+
+def run_opengrep(ctx: Ctx) -> list[Finding]:
+    engine = shutil.which("opengrep") or shutil.which("semgrep")
+    if not engine:
+        raise FileNotFoundError("opengrep (or semgrep) not installed")
+    rules = ROOT / "dist" / "rules.yaml"
+    if not rules.exists():
+        sh([sys.executable, str(HERE / "build_rules.py")], ROOT)
+    tg = targets(ctx)
+    if not tg:
+        return []
+    cmd = [engine, "scan", "--config", str(rules), "--json", "--quiet", "--disable-version-check"]
+    if Path(engine).name == "opengrep":
+        cmd.append("--taint-intrafile")
+    else:
+        cmd += ["--metrics=off"]
+    for g in ctx.cfg["paths"]["exclude"]:
+        cmd += ["--exclude", g]
+    p = sh(cmd + tg, ctx.repo, ok_codes=(0, 1))
+    data = json.loads(p.stdout or "{}")
+    errs = [e for e in data.get("errors", []) if e.get("level") == "error" and "Syntax error" not in str(e.get("type"))]
+    if errs:
+        raise RuntimeError(f"{len(errs)} engine errors: {str(errs[0])[:300]}")
+    out = []
+    for r in data.get("results", []):
+        md = r["extra"].get("metadata", {})
+        rid = r["check_id"]
+        rid = rid[rid.find("sast."):] if "sast." in rid else rid
+        out.append(Finding(
+            tool="opengrep", rule=rid, severity=md.get("sast_severity", "medium"),
+            confidence=md.get("confidence", "medium"), path=rel(ctx.repo, r["path"]),
+            line=r["start"]["line"], message=" ".join(r["extra"]["message"].split()),
+            fix=md.get("fix", ""), cwe=str(md.get("cwe", "")),
+            url=(md.get("references") or [""])[0],
+        ))
+    return out
+
+
+def run_ruff(ctx: Ctx) -> list[Finding]:
+    if not shutil.which("ruff"):
+        raise FileNotFoundError("ruff not installed")
+    tg = targets(ctx, (".py",))
+    if not tg:
+        return []
+    cmd = ["ruff", "check", "--isolated", "--no-cache", "--preview", "--select", "S",
+           "--output-format", "json", "--exit-zero"]
+    for g in ctx.cfg["paths"]["exclude"]:
+        cmd += ["--extend-exclude", g]
+    data = json.loads(sh(cmd + tg, ctx.repo).stdout or "[]")
+    out = []
+    for r in data:
+        code = r["code"]
+        path = rel(ctx.repo, r["filename"])
+        if code in RUFF_LOW_SIGNAL_IN_TESTS and glob_any(path, ctx.cfg["paths"]["tests"]):
+            continue
+        out.append(Finding(
+            tool="ruff", rule=f"ruff.{code}", severity=RUFF_SEVERITY.get(code, "low"),
+            confidence="medium", path=path, line=r["location"]["row"],
+            message=r["message"], url=r.get("url") or "", cwe=RUFF_CWE.get(code, "CWE-710"),
+        ))
+    return out
+
+
+def run_zizmor(ctx: Ctx) -> list[Finding]:
+    if not shutil.which("zizmor"):
+        raise FileNotFoundError("zizmor not installed")
+    if ctx.mode == "diff":
+        tg = [f for f in targets(ctx, (".yml", ".yaml"))
+              if f.startswith(".github/workflows/") or Path(f).name in ("action.yml", "action.yaml")]
+    else:
+        tg = [".github/workflows"] if (ctx.repo / ".github/workflows").is_dir() else []
+    if not tg:
+        return []
+    online = bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
+    cmd = ["zizmor", "--format", "json", "--no-progress"] + ([] if online else ["--offline"])
+    # zizmor exit codes 10-14 mean "findings present"
+    ok = (0, 10, 11, 12, 13, 14)
+    try:
+        p = sh(cmd + tg, ctx.repo, ok_codes=ok)
+    except RuntimeError as e:
+        if not online:
+            raise
+        # GitHub API unavailable/unauthorized: keep the offline audits rather than lose all of them
+        p = sh(["zizmor", "--format", "json", "--no-progress", "--offline"] + tg, ctx.repo, ok_codes=ok)
+        why = next((l.strip() for l in str(e).splitlines() if re.search(r"status|unauthorized|timed? ?out|dns", l, re.I)),
+                   "GitHub API error")
+        ctx.runs.append(ToolRun("zizmor-online", "skipped", "online audits unavailable (" + why[:160] + ")"))
+    out = []
+    for r in json.loads(p.stdout or "[]"):
+        if r.get("ignored"):
+            continue
+        det = r["determinations"]
+        loc = next((l for l in r["locations"] if l["symbolic"].get("kind") == "Primary"), r["locations"][0])
+        sev = ZIZMOR_OVERRIDE.get(r["ident"], det["severity"].lower().replace("informational", "low").replace("unknown", "low"))
+        path = loc["symbolic"]["key"].get("Local", {}).get("verbatim_path") or loc["symbolic"]["key"].get("Local", {}).get("given_path", "")
+        out.append(Finding(
+            tool="zizmor", rule=f"zizmor.{r['ident']}", severity=sev,
+            confidence=det["confidence"].lower().replace("unknown", "low"),
+            path=rel(ctx.repo, path), line=loc["concrete"]["location"]["start_point"]["row"] + 1,
+            message=f"{r['desc']}: {loc['symbolic'].get('annotation', '')}".strip(": "),
+            url=r.get("url", ""), kind="config", cwe=ZIZMOR_CWE.get(r["ident"], "CWE-710"),
+        ))
+    return out
+
+
+def run_gitleaks(ctx: Ctx) -> list[Finding]:
+    if not shutil.which("gitleaks"):
+        raise FileNotFoundError("gitleaks not installed")
+    reports = []
+    with tempfile.TemporaryDirectory() as td:
+        runs = []
+        if ctx.mode == "diff":
+            runs.append(["gitleaks", "git", f"--log-opts={ctx.base}..HEAD"])
+            runs.append(["gitleaks", "git", "--pre-commit"])          # uncommitted (local runs)
+        else:
+            runs.append(["gitleaks", "dir", "."])
+        for i, cmd in enumerate(runs):
+            rp = Path(td) / f"g{i}.json"
+            sh(cmd + ["--redact", "--no-banner", "--exit-code", "0", "--report-format", "json",
+                      "--report-path", str(rp)], ctx.repo)
+            if rp.exists() and rp.stat().st_size:
+                reports += json.loads(rp.read_text())
+    out, seen = [], set()
+    for r in reports:
+        key = (r["File"], r["StartLine"], r["RuleID"])
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(Finding(
+            tool="gitleaks", rule=f"secret.{r['RuleID']}", severity="critical", confidence="high",
+            path=r["File"], line=r["StartLine"], kind="secret", cwe="CWE-798",
+            message=f"Possible secret committed ({r['Description']}). Value redacted.",
+            fix="Revoke/rotate the credential first, then remove it from the code and git history.",
+        ))
+    return out
+
+
+def run_osv(ctx: Ctx) -> list[Finding]:
+    if not shutil.which("osv-scanner"):
+        raise FileNotFoundError("osv-scanner not installed")
+    if ctx.mode == "diff" and not any(Path(f).name in LOCKFILES for f in ctx.changed_files):
+        return []
+    # 0 = clean, 1 = vulns found, 128 = no packages found
+    p = sh(["osv-scanner", "scan", "source", "-r", "--format", "json", "."], ctx.repo, ok_codes=(0, 1, 128))
+    data = json.loads(p.stdout or "{}")
+    out = []
+    for res in data.get("results", []):
+        src = rel(ctx.repo, res["source"]["path"])
+        if ctx.mode == "diff" and src not in ctx.changed_files:
+            continue
+        for pkg in res.get("packages", []):
+            info = pkg["package"]
+            for grp in pkg.get("groups", []):
+                try:
+                    score = float(grp.get("max_severity") or 0)
+                except ValueError:
+                    score = 0.0
+                sev = "critical" if score >= 9 else "high" if score >= 7 else "medium" if score >= 4 else "low"
+                ids = grp["ids"]
+                out.append(Finding(
+                    tool="osv-scanner", rule=f"dep.{ids[0]}", severity=sev, confidence="high",
+                    path=src, line=1, kind="dependency", cwe="CWE-1395",
+                    message=f"{info['name']}@{info.get('version', '?')} has known vulnerability {', '.join(ids[:3])}",
+                    fix="Upgrade to a fixed version (see advisory).", url=f"https://osv.dev/vulnerability/{ids[0]}",
+                ))
+    return out
+
+
+def run_trivy(ctx: Ctx) -> list[Finding]:
+    if not shutil.which("trivy"):
+        raise FileNotFoundError("trivy not installed")
+    p = sh(["trivy", "config", "--quiet", "--format", "json", "."], ctx.repo)
+    out = []
+    for res in json.loads(p.stdout or "{}").get("Results", []) or []:
+        for m in res.get("Misconfigurations", []) or []:
+            out.append(Finding(
+                tool="trivy", rule=f"trivy.{m['ID']}", severity=m["Severity"].lower().replace("unknown", "low"),
+                confidence="medium", path=res["Target"],
+                line=(m.get("CauseMetadata") or {}).get("StartLine") or 1, kind="config", cwe="CWE-710",
+                message=m["Title"], fix=m.get("Resolution", ""), url=m.get("PrimaryURL", ""),
+            ))
+    return out
+
+
+SCANNERS = {
+    "opengrep": run_opengrep, "ruff": run_ruff, "zizmor": run_zizmor,
+    "gitleaks": run_gitleaks, "osv": run_osv, "trivy": run_trivy,
+}
+
+
+# ---------------------------------------------------------------- policy
+def inline_suppression(repo: Path, f: Finding) -> str:
+    try:
+        lines = (repo / f.path).read_text(errors="ignore").splitlines()
+    except OSError:
+        return ""
+    for idx in (f.line - 1, f.line - 2):          # same line or the line above
+        if 0 <= idx < len(lines):
+            m = IGNORE_RE.search(lines[idx])
+            if m and m.group("rule").strip() in (f.rule, "*") and m.group("reason").strip():
+                return "inline: " + m.group("reason").strip()
+    return ""
+
+
+def config_suppression(cfg: dict, f: Finding, today: str) -> str:
+    for ig in cfg.get("ignore", []):
+        if ig.get("rule") not in (f.rule, "*"):
+            continue
+        if ig.get("path") and not glob_any(f.path, [ig["path"]]):
+            continue
+        if not ig.get("reason"):
+            continue
+        if ig.get("expires") and str(ig["expires"]) < today:
+            continue
+        return "config: " + ig["reason"]
+    return ""
+
+
+def fingerprint(repo: Path, findings: list[Finding]) -> None:
+    """Learner contract: identity = sha256(rule ID + normalized code snippet), never the line number.
+    Normalized = the flagged source line with all whitespace runs collapsed and trimmed.
+    Secrets: the snippet would contain the secret, so we use rule ID + file path instead.
+    Dependencies: rule ID (advisory) + package@version from the message."""
+    import hashlib
+    cache: dict[str, list[str]] = {}
+    for f in findings:
+        if f.kind == "secret":
+            snippet = f.path
+        elif f.kind == "dependency":
+            snippet = f.message
+        else:
+            if f.path not in cache:
+                try:
+                    cache[f.path] = (repo / f.path).read_text(errors="ignore").splitlines()
+                except OSError:
+                    cache[f.path] = []
+            lines = cache[f.path]
+            snippet = " ".join(lines[f.line - 1].split()) if 0 < f.line <= len(lines) else ""
+        f.fingerprint = hashlib.sha256(f"{f.rule}\n{snippet}".encode()).hexdigest()
+
+
+def apply_policy(ctx: Ctx, findings: list[Finding]) -> None:
+    from datetime import date
+    today = date.today().isoformat()
+    pol = ctx.cfg["policy"]
+    block_on = set(pol["block_on"])
+    for f in findings:
+        if ctx.mode == "diff" and f.kind in ("code", "config"):
+            f.in_diff = f.line in ctx.changed_lines.get(f.path, set())
+        elif ctx.mode == "diff" and f.kind == "dependency":
+            f.in_diff = f.path in ctx.changed_files
+        f.suppressed = inline_suppression(ctx.repo, f) or config_suppression(ctx.cfg, f, today)
+        f.blocking = (
+            f.severity in block_on and f.in_diff and not f.suppressed
+            and (f.confidence != "low" or pol.get("low_confidence_blocks", False))
+            and (f.kind != "dependency" or ctx.cfg["deps"].get("block", False))
+        )
+
+
+# ---------------------------------------------------------------- report
+def report_md(ctx: Ctx, findings: list[Finding], verdict: str) -> str:
+    active = [f for f in findings if not f.suppressed]
+    blocking = [f for f in active if f.blocking]
+    new = [f for f in active if f.in_diff and not f.blocking]
+    old = [f for f in active if not f.in_diff]
+    icon = {"pass": "✅", "fail": "❌", "error": "⚠️"}[verdict]
+    head = {"pass": "No blocking security issues", "fail": f"{len(blocking)} blocking security issue(s)",
+            "error": "A scanner failed — result incomplete"}[verdict]
+    L = [f"## {icon} SAST check: {head}", ""]
+    counts = {s: sum(1 for f in active if f.in_diff and f.severity == s) for s in reversed(SEV_ORDER)}
+    L += ["| Critical | High | Medium | Low | Pre-existing | Suppressed |", "|---|---|---|---|---|---|",
+          f"| {counts['critical']} | {counts['high']} | {counts['medium']} | {counts['low']} | {len(old)} | "
+          f"{len(findings) - len(active)} |", ""]
+
+    def row(f: Finding) -> str:
+        fix = f" — **Fix:** {f.fix}" if f.fix else ""
+        link = f" ([ref]({f.url}))" if f.url else ""
+        return f"- **{f.severity.upper()}** `{f.path}:{f.line}` `{f.rule}` — {f.message}{fix}{link}"
+
+    if blocking:
+        L += ["### Must fix before merge", *[row(f) for f in sorted(blocking, key=lambda x: (x.path, x.line))], ""]
+    if new:
+        new.sort(key=lambda x: (-SEV_ORDER.index(x.severity), x.path, x.line))
+        L += [f"<details><summary>Warnings in this change ({len(new)})</summary>", "",
+              *[row(f) for f in new[:100]], "" if len(new) <= 100 else f"\n…and {len(new) - 100} more", "</details>", ""]
+    if old and ctx.mode == "diff":
+        L += [f"<sub>{len(old)} pre-existing finding(s) outside changed lines are not shown. "
+              "Run with `--mode full` to see them.</sub>", ""]
+    tools = ", ".join(f"{r.name} {'✓' if r.status == 'ran' else '⏭' if r.status == 'skipped' else '✗'}" for r in ctx.runs)
+    L += [f"<sub>Scanners: {tools}. Block policy: {', '.join(ctx.cfg['policy']['block_on'])} "
+          f"(scope: {ctx.mode}). Suppress with `sast-ignore[rule-id]: reason` on or above the line.</sub>"]
+    for r in ctx.runs:
+        if r.status != "ran":
+            L.append(f"<sub>• {r.name} {r.status}: {r.detail}</sub>")
+    return "\n".join(L) + "\n"
+
+
+def to_sarif(findings: list[Finding]) -> dict:
+    lvl = {"critical": "error", "high": "error", "medium": "warning", "low": "note"}
+    return {
+        "version": "2.1.0", "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [{
+            "tool": {"driver": {"name": "sast-check", "rules": [
+                {"id": r, "shortDescription": {"text": r},
+                 "properties": {"tags": ["security", cwe], "cwe": cwe}}
+                for r, cwe in sorted({(f.rule, f.cwe or "CWE-710") for f in findings})]}},
+            "results": [{
+                "ruleId": f.rule, "level": lvl[f.severity], "message": {"text": f.message},
+                "locations": [{"physicalLocation": {"artifactLocation": {"uri": f.path},
+                                                    "region": {"startLine": max(f.line, 1)}}}],
+                "partialFingerprints": {"sastCheck/v1": f.fingerprint},
+                **({"suppressions": [{"kind": "inSource", "justification": f.suppressed}]} if f.suppressed else {}),
+            } for f in findings],
+        }],
+    }
+
+
+# ---------------------------------------------------------------- main
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description="Run the SAST check and apply the block policy.")
+    ap.add_argument("--repo", default=".", help="repository root (default: .)")
+    ap.add_argument("--mode", choices=["diff", "full"], help="override policy.scope")
+    ap.add_argument("--base", help="base ref for diff mode, e.g. origin/main")
+    ap.add_argument("--out", default="sast-results", help="output directory")
+    ap.add_argument("--only", help="comma-separated scanners to run (overrides config)")
+    a = ap.parse_args(argv)
+
+    repo = Path(a.repo).resolve()
+    cfg = load_config(repo)
+    mode = a.mode or cfg["policy"]["scope"]
+    if mode == "diff" and not a.base:
+        print("diff mode needs --base (e.g. origin/main); falling back to full scan", file=sys.stderr)
+        mode = "full"
+    ctx = Ctx(repo=repo, cfg=cfg, mode=mode, base=a.base)
+    if mode == "diff":
+        ctx.changed_lines = changed_lines(repo, a.base)
+        ctx.changed_files = sorted(ctx.changed_lines)
+
+    enabled = a.only.split(",") if a.only else [k for k, v in cfg["tools"].items() if v]
+    findings: list[Finding] = []
+    for name in enabled:
+        try:
+            res = SCANNERS[name](ctx)
+            findings += res
+            ctx.runs.append(ToolRun(name, "ran", count=len(res)))
+        except FileNotFoundError as e:
+            ctx.runs.append(ToolRun(name, "skipped", str(e)))
+        except Exception as e:  # noqa: BLE001 - surface any scanner failure
+            ctx.runs.append(ToolRun(name, "error", str(e)[:400]))
+
+    fingerprint(repo, findings)
+    apply_policy(ctx, findings)
+    errored = any(r.status == "error" for r in ctx.runs) and cfg["policy"].get("fail_on_tool_error", True)
+    verdict = "error" if errored else "fail" if any(f.blocking for f in findings) else "pass"
+
+    out = Path(a.out)
+    if not out.is_absolute():
+        out = repo / out
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "findings.json").write_text(json.dumps(
+        {"verdict": verdict, "mode": mode, "runs": [asdict(r) for r in ctx.runs],
+         "findings": [asdict(f) for f in findings]}, indent=1))
+    (out / "report.md").write_text(report_md(ctx, findings, verdict))
+    (out / "results.sarif").write_text(json.dumps(to_sarif(findings)))
+    print((out / "report.md").read_text())
+    return {"pass": 0, "fail": 1, "error": 2}[verdict]
+
+
+if __name__ == "__main__":
+    sys.exit(main())

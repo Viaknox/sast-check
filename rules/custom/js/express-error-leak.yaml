@@ -1,0 +1,46 @@
+rules:
+- id: sast.js.express-error-leak
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: An error object, its stack or its message is written straight into the HTTP response. Stack traces and internal messages reveal file paths, queries and library versions that help an attacker. Log details on the server and return a generic message. (Fastify's reply.send(err) is not flagged because Fastify serializes errors without the stack.)
+  metadata:
+    sast_severity: high
+    confidence: medium
+    cwe: CWE-209
+    category: security
+    fix: 'Log the error on the server and send a generic message such as { error: "Internal error" } to the client.'
+    references:
+    - https://cwe.mitre.org/data/definitions/209.html
+    - https://owasp.org/Top10/A05_2021-Security_Misconfiguration/
+  patterns:
+  - pattern-either:
+    - pattern: $R.$M($E)
+    - pattern: $R.$M($E.stack)
+    - pattern: $R.$M($E.message)
+    - pattern: '$R.$M({..., $K: $E, ...})
+
+        '
+    - pattern: '$R.$M({..., $K: $E.stack, ...})
+
+        '
+    - pattern: '$R.$M({..., $K: $E.message, ...})
+
+        '
+  - pattern-not: reply.send($E)
+  - pattern-not: reply.$C(...).send($E)
+  - metavariable-regex:
+      metavariable: $R
+      regex: ^(res|response|reply|resp)(\.(status|type|code|set|header|contentType)\([^()]*\))*$
+  - metavariable-regex:
+      metavariable: $M
+      regex: ^(send|json|jsonp|end|write)$
+  - pattern-either:
+    - pattern-inside: try { ... } catch ($E) { ... }
+    - pattern-inside: function ($E, $RQ, $RS, $NX) { ... }
+    - pattern-inside: function $F($E, $RQ, $RS, $NX) { ... }
+    - pattern-inside: ($E, $RQ, $RS, $NX) => { ... }
+    - pattern-inside: async ($E, $RQ, $RS, $NX) => { ... }
+    - pattern-inside: $P.catch(($E) => ...)
+    - pattern-inside: $P.catch(function ($E) { ... })

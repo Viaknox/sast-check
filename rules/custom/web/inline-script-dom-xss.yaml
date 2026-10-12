@@ -1,0 +1,28 @@
+rules:
+  - id: sast.web.inline-script-dom-xss
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      An inline script writes URL-derived data (location, document.URL, document.referrer,
+      window.name) straight into the page via document.write or innerHTML. Anyone who can craft
+      a link can inject script. Use textContent or sanitize the value first.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-79"
+      category: security
+      fix: "Use element.textContent for plain text, or run the value through DOMPurify.sanitize() before an HTML sink."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://owasp.org/www-community/attacks/DOM_Based_XSS
+    paths:
+      include:
+        - "*.html"
+        - "*.htm"
+    patterns:
+      - pattern-either:
+          - pattern-regex: >-
+              document\s*\.\s*write(ln)?\s*\([^;\n]*\b(location\s*\.\s*(hash|search|href|pathname)|document\s*\.\s*(URL|documentURI|referrer)|window\s*\.\s*name)\b
+          - pattern-regex: >-
+              \.\s*(innerHTML|outerHTML)\s*(\+)?=[^;\n=]*\b(location\s*\.\s*(hash|search|href|pathname)|document\s*\.\s*(URL|documentURI|referrer)|window\s*\.\s*name)\b
+      - pattern-not-regex: (DOMPurify|sanitize|escapeHtml|encodeURIComponent)\s*[.(]

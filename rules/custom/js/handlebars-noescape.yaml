@@ -1,0 +1,22 @@
+rules:
+  - id: sast.js.handlebars-noescape
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Handlebars is compiled with noEscape: true, so every {{ value }} is printed as raw HTML.
+      Any user-controlled data in the template becomes an XSS hole. Remove the option and keep
+      escaping on.
+    metadata:
+      sast_severity: high
+      confidence: high
+      cwe: "CWE-79"
+      category: security
+      fix: "Drop noEscape (default is false) and mark only specific, sanitized values as safe."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://handlebarsjs.com/api-reference/compilation.html
+    pattern-either:
+      - pattern: |
+          $H.compile($T, { ..., noEscape: true, ... })
+      - pattern: |
+          $H.precompile($T, { ..., noEscape: true, ... })

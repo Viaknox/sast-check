@@ -1,0 +1,113 @@
+rules:
+- id: sast.js.timing-unsafe-compare
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: A secret-looking value (password, token, key, signature, digest) is compared with a normal equality operator against data that comes from a request. The comparison stops at the first differing character, which can leak the secret through response timing. Compare with crypto.timingSafeEqual on equal-length buffers.
+  metadata:
+    sast_severity: medium
+    confidence: medium
+    cwe: CWE-208
+    category: security
+    fix: Hash both values to equal length and compare with crypto.timingSafeEqual.
+    references:
+    - https://cwe.mitre.org/data/definitions/208.html
+    - https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+  pattern-either:
+  - patterns:
+    - &id001
+      pattern-either: &id004
+      - pattern: $A === $B
+      - pattern: $A == $B
+      - pattern: $A !== $B
+      - pattern: $A != $B
+    - &id002
+      metavariable-regex:
+        metavariable: $A
+        regex: (?is)^(?![\'"`\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|token|api[_-]?key|signature|hmac|digest))
+    - &id003
+      metavariable-regex:
+        metavariable: $B
+        regex: (?s)^(?!(null|undefined|""|''|``|true|false|-?\d+(\.\d+)?)$)
+    - metavariable-regex:
+        metavariable: $B
+        regex: (?is).*\b(req|request|ctx|headers?|query|body|params?|input|provided\w*|supplied\w*|given\w*|candidate\w*|incoming\w*|received\w*|submitted\w*)\b
+  - patterns:
+    - *id001
+    - *id002
+    - *id003
+    - &id008
+      pattern-inside: function $F(..., $REQ, ...) { ... }
+    - &id009
+      metavariable-regex:
+        metavariable: $REQ
+        regex: ^(req|request|ctx)$
+  - patterns:
+    - *id001
+    - *id002
+    - *id003
+    - &id010
+      pattern-inside: (..., $REQ, ...) => { ... }
+    - &id011
+      metavariable-regex:
+        metavariable: $REQ
+        regex: ^(req|request|ctx)$
+  - patterns:
+    - *id001
+    - *id002
+    - *id003
+    - &id012
+      pattern-inside: async (..., $REQ, ...) => { ... }
+    - &id013
+      metavariable-regex:
+        metavariable: $REQ
+        regex: ^(req|request|ctx)$
+  - patterns:
+    - *id001
+    - *id002
+    - *id003
+    - &id014
+      pattern-inside: async function $F(..., $REQ, ...) { ... }
+    - &id015
+      metavariable-regex:
+        metavariable: $REQ
+        regex: ^(req|request|ctx)$
+  - patterns:
+    - &id005
+      pattern-either: *id004
+    - &id006
+      metavariable-regex:
+        metavariable: $B
+        regex: (?is)^(?![\'"`\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|token|api[_-]?key|signature|hmac|digest))
+    - &id007
+      metavariable-regex:
+        metavariable: $A
+        regex: (?s)^(?!(null|undefined|""|''|``|true|false|-?\d+(\.\d+)?)$)
+    - metavariable-regex:
+        metavariable: $A
+        regex: (?is).*\b(req|request|ctx|headers?|query|body|params?|input|provided\w*|supplied\w*|given\w*|candidate\w*|incoming\w*|received\w*|submitted\w*)\b
+  - patterns:
+    - *id005
+    - *id006
+    - *id007
+    - *id008
+    - *id009
+  - patterns:
+    - *id005
+    - *id006
+    - *id007
+    - *id010
+    - *id011
+  - patterns:
+    - *id005
+    - *id006
+    - *id007
+    - *id012
+    - *id013
+  - patterns:
+    - *id005
+    - *id006
+    - *id007
+    - *id014
+    - *id015

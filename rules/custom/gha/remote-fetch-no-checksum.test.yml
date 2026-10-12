@@ -1,0 +1,54 @@
+name: fetch
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # ruleid: sast.gha.remote-fetch-no-checksum
+      - run: curl -fsSL https://example.com/install.sh | sh
+      # ruleid: sast.gha.remote-fetch-no-checksum
+      - run: curl -sSL https://example.com/get.sh | sudo bash
+      # ruleid: sast.gha.remote-fetch-no-checksum
+      - run: wget -O- https://example.com/setup.sh | bash
+      - name: block form installer
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          echo "installing"
+          curl -fsSL https://example.com/install.sh | bash -s -- --yes
+      - name: unverified archive
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tar.gz https://example.com/tool-1.2.3.tar.gz
+          tar xzf tool.tar.gz
+          sudo mv tool /usr/local/bin/
+      - name: unverified wget
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          wget https://example.com/tool.zip
+          unzip tool.zip
+      - name: verified archive
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tar.gz https://example.com/tool-1.2.3.tar.gz
+          echo "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  tool.tar.gz" | sha256sum -c -
+          tar xzf tool.tar.gz
+      - name: verified with shasum
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          wget https://example.com/tool.zip
+          shasum -a 256 -c tool.zip.sha256
+      - name: signature checked
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLO https://example.com/tool.tgz
+          curl -fsSLO https://example.com/tool.tgz.sig
+          cosign verify-blob --signature tool.tgz.sig tool.tgz
+      - name: plain API call
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: curl -s https://api.example.com/status
+      - name: health check discarding body
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: curl -s -o /dev/null -w "%{http_code}" https://example.com/health
+      - name: no downloads at all
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: npm ci && npm test

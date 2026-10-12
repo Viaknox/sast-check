@@ -1,0 +1,72 @@
+rules:
+  - id: sast.js.code-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request-controlled text reaches a JavaScript code evaluator (eval, new Function, the vm module or a string timer). An attacker can run arbitrary code in your process. Parse data with JSON.parse or dispatch on an allow-list instead.
+    metadata:
+      sast_severity: critical
+      confidence: high
+      cwe: "CWE-95"
+      category: security
+      fix: 'Never evaluate request data as code; parse it with JSON.parse or map it to a fixed set of allowed operations.'
+      references:
+        - https://cwe.mitre.org/data/definitions/95.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.headers
+      - pattern: req.cookies
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      - pattern: request.headers
+      - pattern: request.cookies
+      - pattern: ctx.query
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sanitizers:
+      - pattern: JSON.parse(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: eval($X)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: new Function(..., $X)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $VM.$M($X, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction)$'
+          - metavariable-regex:
+              metavariable: $VM
+              regex: '^(vm|node_vm)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: runInNewContext($X, ...)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: runInThisContext($X, ...)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: new vm.Script($X, ...)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: new Script($X, ...)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $T($X, ...)
+          - metavariable-regex:
+              metavariable: $T
+              regex: '^(setTimeout|setInterval|window\.setTimeout|window\.setInterval|globalThis\.setTimeout|globalThis\.setInterval)$'
+          - focus-metavariable: $X

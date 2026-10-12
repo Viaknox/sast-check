@@ -1,0 +1,28 @@
+rules:
+  - id: sast.python.jwt-unverified
+    languages: [python]
+    severity: ERROR
+    message: >-
+      This JWT is decoded without checking its signature or with the "none" algorithm allowed,
+      so anyone can forge a token and the claims cannot be trusted. Always pass a key and a
+      fixed list of real algorithms, and leave signature verification on.
+    metadata:
+      sast_severity: high
+      confidence: high
+      cwe: "CWE-347"
+      category: security
+      fix: "Call jwt.decode(token, key, algorithms=['RS256']) with no verify_signature override and never allow 'none'."
+      references:
+        - https://cwe.mitre.org/data/definitions/347.html
+        - https://owasp.org/www-project-top-ten/
+    pattern-either:
+      - pattern: |
+          jwt.decode(..., options={..., "verify_signature": False, ...}, ...)
+      - pattern: |
+          jwt.decode(..., verify=False, ...)
+      - pattern: |
+          jwt.decode(..., algorithms=[..., "none", ...], ...)
+      - pattern: |
+          jwt.decode(..., algorithms=[..., "None", ...], ...)
+      - pattern: |
+          jwt.decode(..., algorithms=[..., "NONE", ...], ...)

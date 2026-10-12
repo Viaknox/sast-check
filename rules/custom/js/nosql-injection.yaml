@@ -1,0 +1,71 @@
+rules:
+  - id: sast.js.nosql-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A value taken from the request body or query string is used unchecked inside a MongoDB query filter. A client can send an object such as {"$ne": null} instead of a string and change the query. Cast the value to a primitive or sanitize it first.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-943"
+      category: security
+      fix: 'Cast request values to the expected primitive (String(x), Number(x)) or sanitize the object with mongo-sanitize before building the filter.'
+      references:
+        - https://cwe.mitre.org/data/definitions/943.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: ctx.query
+      - pattern: ctx.request.body
+    pattern-sanitizers:
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+      - pattern: String(...)
+      - pattern: Boolean(...)
+      - pattern: |
+          `${$X}`
+      - pattern: sanitize(...)
+      - pattern: mongoSanitize(...)
+      - pattern: $S.sanitize(...)
+      - pattern: $S.toString()
+      - pattern: $S.trim()
+      - pattern: $S.toLowerCase()
+      - pattern: $S.toUpperCase()
+      - patterns:
+          - pattern: $SCH.$P(...)
+          - metavariable-regex:
+              metavariable: $SCH
+              regex: '(?i)(.*schema.*|z|.*validator.*)'
+          - metavariable-regex:
+              metavariable: $P
+              regex: '^(parse|validate|validateSync|safeParse|escape)$'
+    pattern-sinks:
+      - patterns:
+          - pattern: |
+              $M.$FN({..., $K: $X, ...}, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: '^(find|findOne|findOneAndUpdate|findOneAndDelete|findOneAndReplace|updateOne|updateMany|deleteOne|deleteMany|countDocuments|where|exists|replaceOne)$'
+          - metavariable-regex:
+              metavariable: $X
+              regex: '^[^{]'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $M.$FN($Q, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: '^(find|findOne|findOneAndUpdate|findOneAndDelete|findOneAndReplace|updateOne|updateMany|deleteOne|deleteMany|countDocuments|where|exists|replaceOne)$'
+          - pattern-not: $M.$FN({...}, ...)
+          - focus-metavariable: $Q
+      - patterns:
+          - pattern: |
+              {..., $K: $X, ...}
+          - metavariable-regex:
+              metavariable: $K
+              regex: '^["'']?\$where["'']?$'
+          - focus-metavariable: $X

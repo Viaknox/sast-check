@@ -1,0 +1,56 @@
+const vm = require('vm');
+const express = require('express');
+const app = express();
+
+app.get('/calc', (req, res) => {
+  // ruleid: sast.js.code-eval
+  const r = eval(req.query.expr);
+  res.send(String(r));
+});
+
+app.post('/fn', (req, res) => {
+  const body = req.body.code;
+  // ruleid: sast.js.code-eval
+  const f = new Function('a', body);
+  res.json(f(1));
+});
+
+app.post('/vm', (req, res) => {
+  // ruleid: sast.js.code-eval
+  res.json(vm.runInNewContext(req.body.script, {}));
+});
+
+app.get('/vm2', (req, res) => {
+  const src = req.query.src;
+  // ruleid: sast.js.code-eval
+  const script = new vm.Script(src);
+  res.json(script.runInThisContext());
+});
+
+app.get('/timer', (req, res) => {
+  // ruleid: sast.js.code-eval
+  setTimeout(req.query.cb, 10);
+  // ruleid: sast.js.code-eval
+  setInterval('tick(' + req.query.n + ')', 1000);
+  res.end();
+});
+
+app.get('/safe', (req, res) => {
+  // ok: sast.js.code-eval
+  setTimeout(() => console.log(req.query.x), 10);
+  // ok: sast.js.code-eval
+  setTimeout(function () { work(req.query.id); }, 100);
+  // ok: sast.js.code-eval
+  setTimeout(done, Number(req.query.delay));
+  // ok: sast.js.code-eval
+  const data = JSON.parse(req.body.payload);
+  // ok: sast.js.code-eval
+  const total = eval('1 + 1');
+  // ok: sast.js.code-eval
+  const add = new Function('a', 'b', 'return a + b');
+  // ok: sast.js.code-eval
+  const out = vm.runInNewContext('2 * 21', {});
+  // ok: sast.js.code-eval
+  setTimeout('tick()', 1000);
+  res.json({ data, total, add: add(1, 2), out });
+});

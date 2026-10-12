@@ -1,0 +1,25 @@
+rules:
+  - id: sast.js.nunjucks-autoescape-off
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Nunjucks is configured with autoescape: false, so every {{ value }} is output as raw HTML.
+      Any user data in a template then becomes an XSS hole. Leave autoescape on (the default).
+    metadata:
+      sast_severity: high
+      confidence: high
+      cwe: "CWE-79"
+      category: security
+      fix: "Remove autoescape: false, or set it to true."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://mozilla.github.io/nunjucks/api.html#configure
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $N.configure(..., { ..., autoescape: false, ... })
+          - pattern: |
+              new $N.Environment(..., { ..., autoescape: false, ... })
+      - metavariable-regex:
+          metavariable: $N
+          regex: ^(nunjucks|nj|njk|nunjucksLib)$

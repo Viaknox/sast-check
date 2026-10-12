@@ -1,0 +1,66 @@
+rules:
+  - id: sast.js.puppeteer-ssrf
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request-controlled data is handed to a headless browser page (goto, setContent or evaluate). The browser can then fetch internal URLs, read local files or run attacker script with server-side network access. Restrict navigation to an allow-list and keep untrusted data out of page content and scripts.
+    metadata:
+      sast_severity: critical
+      confidence: medium
+      cwe: "CWE-918"
+      category: security
+      fix: 'Only navigate to URLs from an allow-list of hosts, and never feed request data into setContent or evaluate.'
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+        - https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.headers
+      - pattern: req.cookies
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      - pattern: request.headers
+      - pattern: request.cookies
+      - pattern: ctx.query
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $P + $X
+          - metavariable-regex:
+              metavariable: $P
+              regex: '^["''`]https?://[^/]+/'
+      - pattern: encodeURIComponent(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $PAGE.$M($X, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(goto|setContent|evaluate|evaluateOnNewDocument|waitForFunction)$'
+          - metavariable-regex:
+              metavariable: $PAGE
+              regex: '(?i).*(page|tab|frame|context|browser).*'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: (await $B.newPage()).$M($X, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(goto|setContent|evaluate)$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: |
+              $PAGE.addScriptTag({..., $K: $X, ...})
+          - metavariable-regex:
+              metavariable: $K
+              regex: '^(url|content)$'
+          - focus-metavariable: $X
