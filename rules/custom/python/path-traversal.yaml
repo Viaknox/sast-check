@@ -31,7 +31,20 @@ rules:
       - pattern: werkzeug.utils.secure_filename(...)
       - pattern: os.path.basename(...)
       - pattern: basename(...)
-      - pattern: $P.name
+      # .name is only a safe basename on a pathlib object; any other object's .name is not
+      - patterns:
+          - pattern: $C(...).name
+          - metavariable-regex:
+              metavariable: $C
+              regex: '^(pathlib\.)?(Path|PurePath|PurePosixPath|PureWindowsPath)$'
+      - patterns:
+          - pattern: $P.name
+          - pattern-inside: |
+              $P = $C(...)
+              ...
+          - metavariable-regex:
+              metavariable: $C
+              regex: '^(pathlib\.)?(Path|PurePath|PurePosixPath|PureWindowsPath)$'
       - pattern: int(...)
       - pattern: uuid.UUID(...)
     pattern-sinks:

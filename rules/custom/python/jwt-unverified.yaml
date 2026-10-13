@@ -26,3 +26,14 @@ rules:
           jwt.decode(..., algorithms=[..., "None", ...], ...)
       - pattern: |
           jwt.decode(..., algorithms=[..., "NONE", ...], ...)
+      # options passed through a variable assigned earlier in the same function
+      - patterns:
+          - pattern: jwt.decode(..., options=$O, ...)
+          - pattern-inside: |
+              $O = {..., "verify_signature": False, ...}
+              ...
+      - patterns:
+          - pattern: jwt.decode(..., options=$O, ...)
+          - pattern-inside: |
+              $O = dict(..., verify_signature=False, ...)
+              ...

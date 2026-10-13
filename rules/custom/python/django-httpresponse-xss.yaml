@@ -26,13 +26,49 @@ rules:
               - pattern: request.headers
               - pattern: request.body
               - pattern: request.FILES
+      # a view's request parameter can have any name: the first parameter of a function
+      # (or the one after self in a method) whose Django-only request attributes are read
+      - patterns:
+          - pattern: $R.$A
+          - metavariable-regex:
+              metavariable: $A
+              regex: '^(GET|POST|COOKIES|META|FILES)$'
+          - pattern-either:
+              - pattern-inside: |
+                  def $F($R, ...): ...
+              - pattern-inside: |
+                  def $F(self, $R, ...): ...
+      # body and headers are common attribute names elsewhere, so they only count for
+      # functions that carry a Django view decorator
+      - patterns:
+          - pattern: $R.$A
+          - metavariable-regex:
+              metavariable: $A
+              regex: '^(body|headers)$'
+          - pattern-inside: |
+              @$D
+              def $F($R, ...): ...
+          - metavariable-regex:
+              metavariable: $D
+              regex: '(^|\.)(require_(GET|POST|safe|http_methods)|csrf_exempt|csrf_protect|ensure_csrf_cookie|login_required|permission_required|user_passes_test|api_view|never_cache|cache_page)$'
     pattern-sanitizers:
       - pattern: django.utils.html.escape(...)
       - pattern: escape(...)
       - pattern: conditional_escape(...)
       - pattern: django.utils.html.conditional_escape(...)
-      - pattern: format_html(...)
-      - pattern: django.utils.html.format_html(...)
+      # format_html is only safe with a fixed format string: a literal or a constant bound to one
+      - patterns:
+          - pattern: $FH("...", ...)
+          - metavariable-regex:
+              metavariable: $FH
+              regex: '^(django\.utils\.html\.)?format_html$'
+      # Template autoescapes variables; only a literal template source counts
+      - pattern: Template("...").render(...)
+      - patterns:
+          - pattern: $T.render(...)
+          - pattern-inside: |
+              $T = Template("...")
+              ...
       - pattern: int(...)
       - pattern: float(...)
       - pattern: bool(...)
@@ -42,8 +78,12 @@ rules:
               - pattern: HttpResponse($X, ...)
               - pattern: HttpResponse(..., content=$X, ...)
               - pattern: django.http.HttpResponse($X, ...)
-          - pattern-not: HttpResponse(..., content_type="application/json", ...)
-          - pattern-not: HttpResponse(..., content_type="text/plain", ...)
+          - pattern-not:
+              patterns:
+                - pattern: HttpResponse(..., content_type=$CT, ...)
+                - metavariable-regex:
+                    metavariable: $CT
+                    regex: '^f?["'']((text/plain)|(application/json))'
           - focus-metavariable: $X
       # body-carrying HttpResponse subclasses (same text/html default)
       - patterns:
@@ -51,8 +91,12 @@ rules:
           - metavariable-regex:
               metavariable: $C
               regex: '^(django\.http\.)?HttpResponse(BadRequest|NotFound|Forbidden|ServerError|Gone|NotAllowed)$'
-          - pattern-not: $C(..., content_type="application/json", ...)
-          - pattern-not: $C(..., content_type="text/plain", ...)
+          - pattern-not:
+              patterns:
+                - pattern: $C(..., content_type=$CT, ...)
+                - metavariable-regex:
+                    metavariable: $CT
+                    regex: '^f?["'']((text/plain)|(application/json))'
           - focus-metavariable: $X
       # marking request data as safe HTML disables escaping wherever it is later rendered
       - patterns:
