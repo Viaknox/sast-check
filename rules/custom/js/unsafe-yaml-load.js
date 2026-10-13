@@ -45,10 +45,25 @@ function namedPlain(text) {
   return loadAll(text, { schema: jsYamlNs.FULL_SCHEMA });
 }
 
+function namedPlainThirdArg(text) {
+  // ruleid: sast.js.unsafe-yaml-load
+  return loadAll(text, null, { schema: jsYamlNs.FULL_SCHEMA });
+}
+
 import { safeLoad as parseYaml } from 'js-yaml';
 function namedAlias(text) {
   // ruleid: sast.js.unsafe-yaml-load
   return parseYaml(text, { schema: jsYamlNs.DEFAULT_FULL_SCHEMA });
+}
+
+function namedAliasThirdArg(text) {
+  // ruleid: sast.js.unsafe-yaml-load
+  return parseYaml(text, null, { schema: jsYamlNs.DEFAULT_FULL_SCHEMA });
+}
+
+function namedAliasThirdArgSafe(text) {
+  // ok: sast.js.unsafe-yaml-load
+  return parseYaml(text, null, { schema: jsYamlNs.CORE_SCHEMA });
 }
 
 import * as jsYamlNs from 'js-yaml';

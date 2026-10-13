@@ -39,15 +39,21 @@ rules:
                   - pattern: |
                       require("js-yaml").$FN($S, $O, {..., schema: $SC, ...}, ...)
                   - patterns:
-                      - pattern: |
-                          $FN($S, {..., schema: $SC, ...}, ...)
+                      - pattern-either:
+                          - pattern: |
+                              $FN($S, {..., schema: $SC, ...}, ...)
+                          - pattern: |
+                              $FN($S, $O, {..., schema: $SC, ...}, ...)
                       - pattern-inside: |
                           import { $FN } from "js-yaml";
                           ...
                   # the engine reads const { load: $K } = require("js-yaml") as the same import
                   - patterns:
-                      - pattern: |
-                          $K($S, {..., schema: $SC, ...}, ...)
+                      - pattern-either:
+                          - pattern: |
+                              $K($S, {..., schema: $SC, ...}, ...)
+                          - pattern: |
+                              $K($S, $O, {..., schema: $SC, ...}, ...)
                       - pattern-inside: |
                           import { $FN as $K } from "js-yaml";
                           ...
