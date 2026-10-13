@@ -80,7 +80,7 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 
 - **Runners:** Linux x64 only (the action stops with a clear error elsewhere).
 - **Languages:** JS/TS, Python, HTML (inline scripts and script sources), GitHub Actions, Dockerfiles, Kubernetes YAML, Terraform. Anything else is not scanned by custom rules.
-- **Secrets** (gitleaks) are always critical and block when they appear in the PR's commits, staged or untracked files.
+- **Secrets** (gitleaks) are always critical and block when they appear in the PR's commits, staged files, or untracked files that are not git-ignored (a git-ignored file such as `.env` cannot be committed, so local runs leave it alone).
 - **Dependencies** (osv-scanner) warn only by default; set `[deps] block = true` to let critical CVEs (CVSS ≥ 9) in changed lockfiles (including `*requirements*.txt`) or SBOMs (`bom.json`, `*.cdx.json`, `*.spdx.json`, ...) or OSV custom inventories (`osv-scanner-custom.json`) block.
 - **Prototype pollution** through `Array.prototype.reduce` merge helpers is not caught: Semgrep and Opengrep disagree on that pattern, so it was left out rather than ship an engine-specific rule.
 - **NoSQL injection** ignores callbacks passed to `.find()` / `.filter()`-style calls (e.g. `arr.find(x => x === req.body.id)`). Opengrep taints closures, so without this exclusion every array lookup on request data would be flagged. A real Mongo filter is an object, which is still checked.
