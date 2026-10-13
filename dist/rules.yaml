@@ -83,7 +83,7 @@ rules:
     - https://nvd.nist.gov/vuln/detail/CVE-2025-30066
     - https://nvd.nist.gov/vuln/detail/CVE-2025-30154
     - https://cwe.mitre.org/data/definitions/829.html
-  pattern-regex: (?m)^(?:[ \t]*(?:-[ \t]+)?|[ \t]*(?:-[ \t]+)*(?:["']?[\w.-]+["']?:[ \t]+)?[\[{](?:(?:[^#\n"']|"[^"\n]*"|'[^'\n]*')*?[{,])?[ \t]*)["']?uses["']?[ \t]*:[ \t]*(?:&[^\s,\[\]{}]+[ \t]+)?(?:!!str[ \t]+)?["']?(?i:tj-actions/changed-files|tj-actions/eslint-changed-files|reviewdog/action-[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?@(?![0-9a-fA-F]{40}["']?[ \t]*(?:#.*$|$|[,}\]]))[^\s"'#,}\]]+
+  pattern-regex: (?m)^(?:[ \t]*(?:-[ \t]+)?|[ \t]*(?:-[ \t]+)*(?:["']?[\w.-]+["']?:[ \t]+)?[\[{](?:(?:[^#\n"']|"[^"\n]*"|'[^'\n]*')*?[{,])?[ \t]*)["']?uses["']?[ \t]*:[ \t]*(?:(?:&[^\s,\[\]{}]+[ \t]+)?(?:!!str[ \t]+)?|!!str[ \t]+&[^\s,\[\]{}]+[ \t]+)["']?(?i:tj-actions/changed-files|tj-actions/eslint-changed-files|reviewdog/action-[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?@(?![0-9a-fA-F]{40}["']?[ \t]*(?:#.*$|$|[,}\]]))[^\s"'#,}\]]+
   paths:
     include:
     - .github/workflows/*.yml
@@ -683,7 +683,28 @@ rules:
         <%- $X %>
 
         '
+    - pattern-not-inside: '$X = "...";
+
+        ...
+
+        <%- $X -%>
+
+        '
     - pattern-not-inside: '$X = ''...'';
+
+        ...
+
+        <%- $X %>
+
+        '
+    - pattern-not-inside: '$X = ''...'';
+
+        ...
+
+        <%- $X -%>
+
+        '
+    - pattern-not-inside: '$X = include(''...'');
 
         ...
 
@@ -694,7 +715,7 @@ rules:
 
         ...
 
-        <%- $X %>
+        <%- $X -%>
 
         '
     - pattern-not-inside: '$X = include("...");
@@ -704,9 +725,18 @@ rules:
         <%- $X %>
 
         '
+    - pattern-not-inside: '$X = include("...");
+
+        ...
+
+        <%- $X -%>
+
+        '
   - patterns:
-    - pattern: <%- $X %>
-    - pattern-regex: (?s)<%\s*(?:(?:var|let|const)\s+)?([A-Za-z_$][\w$]*)\s*=(?!=)(?!\s*(?:['"]|include\s*\(\s*['"]))[^;]*;\s*%>(?:(?!<%\s*(?:(?:var|let|const)\s+)?\1\s*=(?!=)).)*<%-\s*\1\s*-?%>
+    - pattern-either:
+      - pattern: <%- $X %>
+      - pattern: <%- $X -%>
+    - pattern-regex: (?s)<%\s*(?:(?:var|let|const)\s+)?([A-Za-z_$][\w$]*)\s*=(?!=)(?!\s*(?:'[^'\n]*'|"[^"\n]*")\s*;\s*%>)(?!\s*include\s*\(\s*(?:'[^'\n]*'|"[^"\n]*")\s*(?:,\s*\{[^{}]*\}\s*)?\)\s*;\s*%>)[^;]*;\s*%>(?:(?!<%\s*(?:(?:var|let|const)\s+)?\1\s*=(?!=)).)*<%-\s*\1\s*-?%>
 - id: sast.js.electron-node-integration
   languages:
   - javascript
