@@ -65,6 +65,9 @@ def mutants(doc: dict) -> list[tuple[str, str, dict]]:
             for i, x in enumerate(node):
                 walk(x, steps + [i], ri, rid, seen)
 
+    # YAML anchors/aliases load as one shared object: a JSON round trip gives every occurrence its own copy,
+    # so a mutant deletes one occurrence only (not every place the anchor is reused)
+    doc = json.loads(json.dumps(doc))
     for ri, r in enumerate(doc["rules"]):
         walk(r, [], ri, r["id"], {})
     out = []
@@ -150,6 +153,10 @@ def main() -> int:
         print(f"{r['rule']:45} {c['killed']:6} {c['survived']:5} {c['invalid']:5} {score:>6}"
               + (f"  ERROR {r['error'][:80]}" if r.get("error") else ""))
     allm = [m for r in results for m in r["mutants"]]
+    # a rule with a single scalar pattern has no list element to delete: say so, never imply it was mutation-tested
+    for r in results:
+        if not r.get("error") and not r["mutants"]:
+            print(f"NOT MUTATION-TESTED {r['rule']}: no list of pattern elements to delete (its fixture still runs in rules_test)")
     k, s = sum(m["status"] == "killed" for m in allm), sum(m["status"] == "survived" for m in allm)
     print(f"TOTAL killed {k} survived {s} score {100 * k / max(1, k + s):.0f}%")
     if a.json:

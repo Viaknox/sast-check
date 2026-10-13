@@ -3507,6 +3507,46 @@
   "element": "pattern: location.hash",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4": {
+  "element": "pattern: $A !== $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4#10": {
+  "element": "pattern: $A !== $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4#2": {
+  "element": "pattern: $A !== $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4#3": {
+  "element": "pattern: $A !== $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4#4": {
+  "element": "pattern: $A !== $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4#5": {
+  "element": "pattern: $A !== $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4#6": {
+  "element": "pattern: $A !== $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4#7": {
+  "element": "pattern: $A !== $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4#8": {
+  "element": "pattern: $A !== $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4#9": {
+  "element": "pattern: $A !== $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
  "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -3546,6 +3586,86 @@
  "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e#9": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7": {
+  "element": "pattern: $A == $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7#10": {
+  "element": "pattern: $A == $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7#2": {
+  "element": "pattern: $A == $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7#3": {
+  "element": "pattern: $A == $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7#4": {
+  "element": "pattern: $A == $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7#5": {
+  "element": "pattern: $A == $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7#6": {
+  "element": "pattern: $A == $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7#7": {
+  "element": "pattern: $A == $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7#8": {
+  "element": "pattern: $A == $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7#9": {
+  "element": "pattern: $A == $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b": {
+  "element": "pattern: $A === $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b#10": {
+  "element": "pattern: $A === $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b#2": {
+  "element": "pattern: $A === $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b#3": {
+  "element": "pattern: $A === $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b#4": {
+  "element": "pattern: $A === $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b#5": {
+  "element": "pattern: $A === $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b#6": {
+  "element": "pattern: $A === $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b#7": {
+  "element": "pattern: $A === $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b#8": {
+  "element": "pattern: $A === $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
+ },
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b#9": {
+  "element": "pattern: $A === $B",
+  "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
  "sast.js.timing-unsafe-compare:.pattern-either.patterns:0e18a4cc": {
   "element": "pattern-inside: async function $F(..., $REQ, ...) { ... }",
