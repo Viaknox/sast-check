@@ -5,7 +5,8 @@ set -uo pipefail
 report="$1"
 marker="<!-- sast-check -->"
 [ -s "$report" ] || { echo "no report to post"; exit 0; }
-body="$(printf '%s\n%s' "$marker" "$(head -c 60000 "$report")")"
+# cut at 60000 characters, not bytes: a byte cut can split a UTF-8 character and the API rejects the body
+body="$(printf '%s\n%s' "$marker" "$(python3 -I -c 'import sys; sys.stdout.write(open(sys.argv[1], encoding="utf-8", errors="replace").read()[:60000])' "$report")")"
 
 # Anyone can post a comment carrying the marker, so try every candidate (only our own is editable)
 # and fall back to a new comment only when none of them is ours.

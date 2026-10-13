@@ -973,6 +973,16 @@ check "untracked secret behind a dir link blocks"        "$(q "sum(f['blocking']
 rm -f vendor/v24/key.py
 git checkout -q main
 
+# r26: the PR comment is cut by characters, so a multi-byte character at the cut stays valid UTF-8
+mkdir -p "$T/ghstub" && cat > "$T/ghstub/gh" <<EOF
+#!/bin/sh
+for a in "\$@"; do case "\$a" in body=*) printf '%s' "\${a#body=}" > "$T/posted-body";; esac; done
+EOF
+chmod +x "$T/ghstub/gh"
+python3 -c "import sys; open(sys.argv[1], 'w', encoding='utf-8').write('a' * 59999 + 'é' + 'tail')" "$T/big-report.md"
+PATH="$T/ghstub:$PATH" REPO=o/r PR=1 bash "$HERE/scripts/comment.sh" "$T/big-report.md" >/dev/null
+check "PR comment body is valid UTF-8 at the cut"        "$(python3 -c "import sys; b=open(sys.argv[1],'rb').read(); b.decode('utf-8'); print(b.endswith('é'.encode()))" "$T/posted-body" 2>&1)" "True"
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks
