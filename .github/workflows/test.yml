@@ -65,6 +65,18 @@ jobs:
         run: python tests/rules_test.py --engine "$(command -v semgrep)"
       - name: Rule tests (opengrep - the CI engine)
         run: python tests/rules_test.py --engine "$RUNNER_TEMP/opengrep/opengrep"
+      - name: Rule mutation check (changed rules)
+        # every pattern element of a changed rule must be exercised by its fixture, unless the baseline
+        # (tests/mutation-baseline.json) lists it with a reason; see docs/rule-quality.md
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' > "$RUNNER_TEMP/changed.txt"
+          python tools/rule_mutation.py --engine "$RUNNER_TEMP/opengrep/opengrep" \
+            --changed-files "$RUNNER_TEMP/changed.txt" --check tests/mutation-baseline.json
       - name: End-to-end
         env:
           E2E_REQUIRE: zizmor osv-scanner   # CI must not silently skip these scanners' checks

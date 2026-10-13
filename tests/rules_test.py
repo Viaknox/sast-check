@@ -40,6 +40,48 @@ def expected(fx: Path, rid: str) -> tuple[set[int], set[int]]:
     return want, ok
 
 
+def rule_failures(engine: str, rule: Path, text: str | None = None) -> tuple[int, list[str]]:
+    """Run one rule file on its fixture. Returns (number of rule ids, failure messages).
+    `text` replaces the rule file's content (used by tools/rule_mutation.py); the fixture stays the same."""
+    import yaml  # noqa: PLC0415 - dev dependency
+    text = rule.read_text() if text is None else text
+    rids = [r["id"] for r in yaml.safe_load(text)["rules"]]
+    fx = fixture_for(rule)
+    if not fx:
+        return len(rids), [f"{rule.relative_to(ROOT)}: no fixture"]
+    is_og = Path(engine).name == "opengrep"
+    cmd = [engine, "scan", "--json", "--quiet", "--scan-unknown-extensions"]
+    cmd += ["--taint-intrafile"] if is_og else ["--metrics=off", "--disable-version-check"]
+    # a rule limited to workflow files is tested on a copy of its fixture at such a path
+    include = [p for r in yaml.safe_load(text)["rules"] for p in r.get("paths", {}).get("include", [])]
+    with tempfile.TemporaryDirectory() as td:
+        conf = Path(td) / "rule.yaml"
+        conf.write_text(text)
+        cwd, target = None, str(fx)
+        if any(p.startswith(".github/workflows/") for p in include):
+            (Path(td) / ".github" / "workflows").mkdir(parents=True)
+            shutil.copyfile(fx, Path(td) / ".github" / "workflows" / fx.name)
+            cwd, target = td, f".github/workflows/{fx.name}"
+        out = json.loads(subprocess.run(cmd + ["--config", str(conf), target], cwd=cwd, capture_output=True,
+                                        text=True).stdout or "{}")
+    # a rule the engine cannot parse is silently skipped -> treat it as a failure
+    rule_errs = [e for e in out.get("errors", []) if "Syntax error" not in str(e.get("type"))
+                 and "PartialParsing" not in str(e.get("type"))]
+    if rule_errs:
+        return len(rids), [f"{rule.relative_to(ROOT)}: engine error: {str(rule_errs[0].get('message'))[:200]}"] * len(rids)
+    fails = []
+    for rid in rids:
+        got = {r["start"]["line"] for r in out.get("results", []) if r["check_id"].endswith(rid)}
+        want, ok = expected(fx, rid)
+        # exact: every annotated ruleid line must match, and nothing else may match
+        missed, wrong = want - got, got - want
+        if len(want) < 3 or len(ok) < 3:   # docs/RULE_SPEC.md: >=3 true positives, >=3 safe look-alikes
+            fails.append(f"{rid}: fixture needs >=3 ruleid: and >=3 ok: annotations (has {len(want)}/{len(ok)})")
+        elif missed or wrong:
+            fails.append(f"{rid}: missed lines {sorted(missed)} unexpected lines {sorted(wrong)}")
+    return len(rids), fails
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--engine", default=shutil.which("opengrep") or shutil.which("semgrep"))
@@ -47,49 +89,15 @@ def main() -> int:
     if not a.engine:
         print("no engine installed", file=sys.stderr)
         return 2
-    is_og = Path(a.engine).name == "opengrep"
     failures = total = 0
     for rule in sorted((ROOT / "rules" / "custom").glob("*/*.yaml")):
         if rule.name.endswith(".test.yaml"):
             continue
-        fx = fixture_for(rule)
-        import yaml  # noqa: PLC0415 - dev dependency
-        rids = [r["id"] for r in yaml.safe_load(rule.read_text())["rules"]]
-        if not fx:
-            print(f"FAIL {rule.relative_to(ROOT)}: no fixture")
-            failures += 1
-            continue
-        cmd = [a.engine, "scan", "--config", str(rule), "--json", "--quiet", "--scan-unknown-extensions"]
-        cmd += ["--taint-intrafile"] if is_og else ["--metrics=off", "--disable-version-check"]
-        # a rule limited to workflow files is tested on a copy of its fixture at such a path
-        include = [p for r in yaml.safe_load(rule.read_text())["rules"] for p in r.get("paths", {}).get("include", [])]
-        with tempfile.TemporaryDirectory() as td:
-            cwd, target = None, str(fx)
-            if any(p.startswith(".github/workflows/") for p in include):
-                (Path(td) / ".github" / "workflows").mkdir(parents=True)
-                shutil.copyfile(fx, Path(td) / ".github" / "workflows" / fx.name)
-                cwd, target = td, f".github/workflows/{fx.name}"
-            out = json.loads(subprocess.run(cmd + [target], cwd=cwd, capture_output=True, text=True).stdout or "{}")
-        # a rule the engine cannot parse is silently skipped -> treat it as a failure
-        rule_errs = [e for e in out.get("errors", []) if "Syntax error" not in str(e.get("type"))
-                     and "PartialParsing" not in str(e.get("type"))]
-        if rule_errs:
-            failures += len(rids)
-            total += len(rids)
-            print(f"FAIL {rule.relative_to(ROOT)}: engine error: {str(rule_errs[0].get('message'))[:200]}")
-            continue
-        for rid in rids:
-            total += 1
-            got = {r["start"]["line"] for r in out.get("results", []) if r["check_id"].endswith(rid)}
-            want, ok = expected(fx, rid)
-            # exact: every annotated ruleid line must match, and nothing else may match
-            missed, wrong = want - got, got - want
-            if len(want) < 3 or len(ok) < 3:   # docs/RULE_SPEC.md: >=3 true positives, >=3 safe look-alikes
-                failures += 1
-                print(f"FAIL {rid}: fixture needs >=3 ruleid: and >=3 ok: annotations (has {len(want)}/{len(ok)})")
-            elif missed or wrong:
-                failures += 1
-                print(f"FAIL {rid}: missed lines {sorted(missed)} unexpected lines {sorted(wrong)}")
+        n, fails = rule_failures(a.engine, rule)
+        total += n
+        failures += len(fails)
+        for f in fails:
+            print(f"FAIL {f}")
     print(f"{total - failures}/{total} rules passed with {Path(a.engine).name}")
     return 1 if failures else 0
 
