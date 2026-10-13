@@ -17,6 +17,7 @@ Usage:
   tools/rule_mutation.py --changed-since origin/main   # rules whose yaml or fixture changed
   tools/rule_mutation.py --changed-files files.txt     # same, from a list of changed paths (CI)
   tools/rule_mutation.py --json out.json      # full results
+  tools/rule_mutation.py --report docs/mutation-report.json   # the committed summary (full run)
   tools/rule_mutation.py --check tests/mutation-baseline.json   # CI: fail on any survivor not in the baseline
   tools/rule_mutation.py --write-baseline tests/mutation-baseline.json
 """
@@ -28,7 +29,9 @@ import os
 import shutil
 import subprocess
 import sys
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -42,36 +45,50 @@ LIST_KEYS = ("pattern-either", "patterns", "pattern-sources", "pattern-sinks", "
              "pattern-propagators")
 
 
+def h8(x) -> str:
+    """Short content hash of a YAML node."""
+    return hashlib.sha1(yaml.safe_dump(x, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:8]
+
+
 def mutants(doc: dict) -> list[tuple[str, str, dict]]:
     """(mutant id, the deleted element as yaml, mutated document) for every single-element deletion.
 
     The id is <rule id>:<keys from the rule root to the list>:<hash of the element>, with no list positions, so
-    adding or reordering sibling branches elsewhere in the rule never renames a mutant. Identical elements
-    under the same keys get #2, #3... in document order."""
-    sites = []   # (rule index, steps to the dict holding the list, key, element index, id)
-
-    def walk(node, steps, ri, rid, seen):
-        if isinstance(node, dict):
-            for k, v in node.items():
-                if k in LIST_KEYS and isinstance(v, list):
-                    for i, elem in enumerate(v):
-                        h = hashlib.sha1(yaml.safe_dump(elem, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:8]
-                        keys = "".join(f".{x}" for x in steps if isinstance(x, str))
-                        base = f"{rid}:{keys}.{k}:{h}"
-                        seen[base] = seen.get(base, 0) + 1
-                        sites.append((ri, steps, k, i, base if seen[base] == 1 else f"{base}#{seen[base]}"))
-                walk(v, steps + [k], ri, rid, seen)
-        elif isinstance(node, list):
-            for i, x in enumerate(node):
-                walk(x, steps + [i], ri, rid, seen)
-
+    adding or reordering sibling branches elsewhere in the rule never renames a mutant. Identical elements under
+    the same keys (a pattern repeated in several branches) are told apart by the hash of the branch that holds
+    them (@<hash>), and only identical elements in identical branches fall back to #2, #3... in document order."""
     # YAML anchors/aliases load as one shared object: a JSON round trip gives every occurrence its own copy,
     # so a mutant deletes one occurrence only (not every place the anchor is reused)
     doc = json.loads(json.dumps(doc))
+    sites = []   # (rule index, steps to the dict holding the list, key, element index, base id, parent hash)
+
+    def walk(node, steps, ri, rid, parent):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k in LIST_KEYS and isinstance(v, list):
+                    keys = "".join(f".{x}" for x in steps if isinstance(x, str))
+                    for i, elem in enumerate(v):
+                        sites.append((ri, steps, k, i, f"{rid}:{keys}.{k}:{h8(elem)}", parent))
+                    for i, elem in enumerate(v):
+                        walk(elem, steps + [k, i], ri, rid, h8(elem))
+                else:
+                    walk(v, steps + [k], ri, rid, parent)
+        elif isinstance(node, list):
+            for i, x in enumerate(node):
+                walk(x, steps + [i], ri, rid, parent)
+
     for ri, r in enumerate(doc["rules"]):
-        walk(r, [], ri, r["id"], {})
+        walk(r, [], ri, r["id"], "")
+    count = Counter(base for *_, base, _ in sites)
+    seen: Counter = Counter()
     out = []
-    for ri, steps, key, idx, mid in sites:
+    for ri, steps, key, idx, base, parent in sites:
+        mid = base
+        if count[base] > 1:
+            mid = f"{base}@{parent}" if parent else base
+            seen[mid] += 1
+            if seen[mid] > 1:
+                mid = f"{mid}#{seen[mid]}"
         m = copy.deepcopy(doc)
         holder = m["rules"][ri]
         for st in steps:
@@ -119,6 +136,19 @@ def baseline_reason(entry) -> str:
     return why.strip() if isinstance(why, str) and why.strip() and not why.strip().upper().startswith("TODO") else ""
 
 
+def summary(results: list[dict], engine: str) -> dict:
+    """The committed report (docs/mutation-report.json): per-rule counts and scores, no rule text."""
+    ver = subprocess.run([engine, "--version"], capture_output=True, text=True, timeout=60).stdout.strip()
+    rules = {}
+    for r in results:
+        c = {s: sum(m["status"] == s for m in r["mutants"]) for s in ("killed", "survived", "invalid")}
+        tot = c["killed"] + c["survived"]
+        rules[r["rule"]] = {**c, "score": round(c["killed"] / tot, 2) if tot else None}
+    k, s = sum(v["killed"] for v in rules.values()), sum(v["survived"] for v in rules.values())
+    return {"date": date.today().isoformat(), "engine": f"{Path(engine).name} {ver}".strip(),
+            "total": {"killed": k, "survived": s, "score": round(k / max(1, k + s), 2)}, "rules": rules}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--engine", default=shutil.which("opengrep") or shutil.which("semgrep"))
@@ -126,6 +156,7 @@ def main() -> int:
     ap.add_argument("--changed-since", help="only rules whose yaml or fixture changed since this git ref")
     ap.add_argument("--changed-files", help="only rules whose yaml or fixture is listed in this file (one path per line)")
     ap.add_argument("--json", help="write full results here")
+    ap.add_argument("--report", help="write the committed per-rule summary here (full runs only)")
     ap.add_argument("--check", help="baseline file: fail if a survivor is not listed in it")
     ap.add_argument("--write-baseline", help="write current survivors as the new baseline")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 2)
@@ -161,6 +192,11 @@ def main() -> int:
     print(f"TOTAL killed {k} survived {s} score {100 * k / max(1, k + s):.0f}%")
     if a.json:
         Path(a.json).write_text(json.dumps(results, indent=1))
+    if a.report and not errors:
+        if a.rules or a.changed_since or a.changed_files:
+            print("--report needs a full run (no --rules / --changed-*)", file=sys.stderr)
+            return 2
+        Path(a.report).write_text(json.dumps(summary(results, a.engine), indent=1) + "\n")
     survivors = {m["id"]: m["element"] for m in allm if m["status"] == "survived"}
     if errors:   # an incomplete run must not rewrite the baseline or pass the check
         for r in errors:
@@ -180,7 +216,13 @@ def main() -> int:
         for i in new:
             what = "is listed without a reason" if i in base else "no fixture line depends on this element"
             print(f"NEW SURVIVOR {i}: {what}:\n  {survivors[i][:200]}")
-        return 1 if new else 0
+        # a waiver for a rule that ran must still be needed: once a fixture kills the mutant (or the element is
+        # gone), the entry has to be removed, or later losing that fixture line would pass silently
+        ran = {x["id"] for r in results for x in yaml.safe_load((RULES / r["rule"]).read_text())["rules"]}
+        stale = sorted(i for i in base if i.split(":", 1)[0] in ran and i not in survivors)
+        for i in stale:
+            print(f"STALE BASELINE {i}: no longer survives; remove it from {a.check}")
+        return 1 if new or stale else 0
     return 0
 
 

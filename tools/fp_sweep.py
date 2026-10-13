@@ -8,7 +8,8 @@ Each finding is labelled later (by a reviewer or a triage agent) as:
   tp_test - the rule is right, but only in test/example/docs code (a path-handling signal, not a rule bug)
   unclear - needs a closer look
 Per-rule noise = fp / (fp + tp + tp_test). Raw findings (paths, lines, snippets) stay in --work and are never committed;
-the committed report (--report) has only rule, repository, counts and labels (per rule and per repository).
+the committed report (--report) has only per-rule counts; repositories are named only for false positives (a rule
+bug), never for correct findings, and tp is reported only inside a combined "correct" count.
 The report is refused unless the labels match --work/findings.json one to one.
 
 Usage:
@@ -81,52 +82,75 @@ def scan(work: Path, repo: str, d: Path, sha: str, digest: str) -> list[dict]:
         except OSError:
             snippet = ""
         found.append({"repo": repo, "sha": sha, "rules": digest, "rule": f["rule"], "path": f["path"], "line": f["line"],
+                      "end_line": f.get("end_line"),
                       "severity": f["severity"], "message": f["message"], "context": snippet})
     return found
 
 
 def key(x: dict) -> tuple:
-    """Identity of a finding or a label."""
+    """Location of a finding or a label (several findings can share one)."""
     return x["repo"], x["rule"], x["path"], x["line"]
 
 
+def finding_id(x: dict) -> str:
+    """Full identity of a finding: location plus end line and message (sast.py keeps findings apart by both)."""
+    ident = json.dumps([*key(x), x.get("end_line"), x.get("message")])
+    return hashlib.sha1(ident.encode(), usedforsecurity=False).hexdigest()[:12]
+
+
 def report(work: Path, labels: list[dict], corpus: list[dict]) -> dict:
-    """Aggregate labels into per-rule (and per-repository) counts. Labels must match the current findings in
-    --work one to one, so a partial, duplicated or stale label file never yields a plausible score."""
+    """Aggregate labels into per-rule counts. Labels must match the current findings one to one (by `id`, or by
+    location when exactly one finding is there), so a partial, duplicated or stale label file never yields a
+    plausible score. The report names repositories only for false positives (a rule bug): a correct finding is
+    never attributed to a repository, so a third-party weakness cannot be located from the committed report."""
     allf = json.loads((work / "findings.json").read_text())
     # only findings from the pinned commit and the current rule bundle count; older ones stay for triage
     pinned, digest = {c["repo"]: c["sha"] for c in corpus}, rules_digest()
     findings = [x for x in allf if pinned.get(x["repo"]) == x.get("sha") and x.get("rules") == digest]
     sc = work / "scanned.json"
     scanned = json.loads(sc.read_text()) if sc.exists() else {}
+    scanned = scanned if isinstance(scanned, dict) else {}   # an older list-format file records no SHA: ignored
     current = {x["repo"] for x in findings} | {r for r, v in scanned.items() if v == [pinned.get(r), digest]}
-    fk = Counter(map(key, findings))
-    stale = {key(x) for x in allf} - set(fk)   # labels for stale findings are kept in the file but not counted
-    labels = [x for x in labels if x["repo"] in current and key(x) not in stale]
-    lk = Counter(map(key, labels))
-    problems = []
-    if bad := sorted({x["label"] for x in labels} - set(LABELS)):
+    by_id = {finding_id(x): x for x in findings}
+    at: dict[tuple, list[str]] = {}
+    for i, x in by_id.items():
+        at.setdefault(key(x), []).append(i)
+    stale_loc = {key(x) for x in allf} - set(at)   # labels for stale findings stay in the file but do not count
+    problems, labelled = [], Counter()
+    if bad := sorted({x.get("label") for x in labels} - set(LABELS), key=str):
         problems.append(f"unknown labels {bad} (allowed: {', '.join(LABELS)})")
-    if dup := [k for k, n in lk.items() if n != fk.get(k, n)]:   # two findings on one line need two labels
-        problems.append(f"{len(dup)} findings labelled a different number of times than found, e.g. {dup[0]}")
-    if missing := [k for k in fk if k not in lk]:
-        problems.append(f"{len(missing)} findings have no label, e.g. {missing[0]}")
-    if stale := [k for k in lk if k not in fk]:
-        problems.append(f"{len(stale)} labels match no current finding, e.g. {stale[0]}")
+    for x in labels:
+        if x["repo"] not in current or (not x.get("id") and key(x) in stale_loc):
+            continue
+        ids = [x["id"]] if x.get("id") else at.get(key(x), [])
+        if len(ids) != 1 or ids[0] not in by_id:
+            problems.append(f"label {key(x)} matches {'no' if not ids or ids[0] not in by_id else 'more than one'} "
+                            "current finding (give it the finding's id)")
+            continue
+        labelled[ids[0]] += 1
+    if dup := [i for i, n in labelled.items() if n > 1]:
+        problems.append(f"{len(dup)} findings labelled more than once, e.g. {key(by_id[dup[0]])}")
+    if missing := [i for i in by_id if i not in labelled]:
+        problems.append(f"{len(missing)} findings have no label, e.g. {key(by_id[missing[0]])}")
     if problems:
-        raise ValueError("labels do not match --work/findings.json: " + "; ".join(problems))
+        raise ValueError("labels do not match --work/findings.json: " + "; ".join(problems[:5]))
     per: dict[str, dict] = {}
     for x in labels:
-        r = per.setdefault(x["rule"], {"counts": Counter(), "repos": {}})
+        if x["repo"] not in current or (not x.get("id") and key(x) in stale_loc):
+            continue
+        r = per.setdefault(x["rule"], {"counts": Counter(), "fp_repos": Counter()})
         r["counts"][x["label"]] += 1
-        r["repos"].setdefault(x["repo"], Counter())[x["label"]] += 1
+        if x["label"] == "fp":
+            r["fp_repos"][x["repo"]] += 1
     out = {"rules_bundle": digest, "corpus": [{"repo": c["repo"], "sha": c["sha"]} for c in corpus if c["repo"] in current],
            "stale_findings_excluded": len(allf) - len(findings), "rules": {}}
     for rule, r in sorted(per.items()):
         c = r["counts"]
-        judged = c["fp"] + c["tp"] + c["tp_test"]   # a correct match in test code is still correct
-        out["rules"][rule] = {**c, "noise": round(c["fp"] / judged, 2) if judged else None,
-                              "repos": {repo: dict(n) for repo, n in sorted(r["repos"].items())}}
+        correct = c["tp"] + c["tp_test"]   # a correct match in test code is still correct; tp is never shown alone
+        judged = c["fp"] + correct
+        out["rules"][rule] = {"fp": c["fp"], "correct": correct, "unclear": c["unclear"],
+                              "noise": round(c["fp"] / judged, 2) if judged else None,
+                              "fp_by_repo": dict(sorted(r["fp_repos"].items()))}
     return out
 
 
@@ -149,6 +173,9 @@ def main() -> int:
         if a.report:
             Path(a.report).write_text(json.dumps(rep, indent=1) + "\n")
         return 0
+    if unknown := sorted(set(a.repos or []) - {c["repo"] for c in corpus}):   # a typo must not "succeed" with 0 scans
+        print(f"not in tools/fp-corpus.json: {', '.join(unknown)}", file=sys.stderr)
+        return 2
     if not shutil.which("opengrep"):   # sast.py would fall back to semgrep: scores must come from the CI engine
         print("opengrep is required for a sweep (the CI engine); install it first", file=sys.stderr)
         return 2
@@ -162,6 +189,8 @@ def main() -> int:
         try:
             d = checkout(work, c["repo"], c["sha"])
             f = scan(work, c["repo"], d, c["sha"], digest)
+            for x in f:
+                x["id"] = finding_id(x)   # label by this id when one line has several findings
             print(f"{c['repo']:50} {len(f):5} findings", flush=True)
             allf += f
         except (RuntimeError, subprocess.TimeoutExpired, OSError, json.JSONDecodeError) as e:
@@ -175,8 +204,8 @@ def main() -> int:
             if x["repo"] in names and ((a.repos and x["repo"] not in a.repos) or x["repo"] in failed)]
     prev.write_text(json.dumps(keep + allf, indent=1))
     sc = work / "scanned.json"   # repo -> [sha, rules] of its last completed scan (a repo with 0 findings counts)
-    scanned = {r: v for r, v in (json.loads(sc.read_text()) if sc.exists() else {}).items()
-               if r in names and isinstance(v, list)}
+    prev_sc = json.loads(sc.read_text()) if sc.exists() else {}
+    scanned = {r: v for r, v in (prev_sc if isinstance(prev_sc, dict) else {}).items() if r in names and isinstance(v, list)}
     scanned |= {c["repo"]: [c["sha"], digest] for c in corpus
                 if (not a.repos or c["repo"] in a.repos) and c["repo"] not in failed}
     sc.write_text(json.dumps(dict(sorted(scanned.items())), indent=1))
