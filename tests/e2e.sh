@@ -957,6 +957,11 @@ printf '[[ignore]]\nrule = "*"\nreason = "   "\n' > .sast-check.toml && git add 
 set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
 check "blank [[ignore]] reason is a settings error"      "$code" "2"
 git checkout -q main
+git checkout -q -b r25e main
+printf '[[ignore]]\nrule = "*"\nreason = "temp"\nexpires = "never"\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm badexpiry
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "malformed [[ignore]] expires is a settings error" "$code" "2"
+git checkout -q main
 
 # r24: a new untracked secret in an excluded dir, exposed through an existing dir link, blocks (local runs)
 git checkout -q -b r24u main

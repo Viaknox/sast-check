@@ -202,6 +202,17 @@ def load_config(text: str | None) -> dict:
     return cfg
 
 
+def iso_date(v: str) -> bool:
+    """True for a real calendar date written YYYY-MM-DD."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+        return False
+    try:
+        date.fromisoformat(v)
+    except ValueError:
+        return False
+    return True
+
+
 IGNORE_KEYS: dict[str, type | tuple[type, ...]] = {"rule": str, "path": str, "reason": str, "expires": (str, date)}
 
 
@@ -218,6 +229,9 @@ def check_settings(uc: dict, defaults: dict) -> None:
                 if (bad or not isinstance(ig.get("rule"), str) or not isinstance(ig.get("reason"), str)
                         or not ig["reason"].strip()):   # a blank reason is no reason
                     raise RuntimeError(f"[[ignore]] needs string rule and reason, and only {', '.join(IGNORE_KEYS)}; got {ig!r}"[:250])
+                if "expires" in ig and not isinstance(ig["expires"], date) and not iso_date(ig["expires"]):
+                    # a typo ("never", "") must not keep a suppression alive forever
+                    raise RuntimeError(f"[[ignore]] expires must be a YYYY-MM-DD date; got {ig['expires']!r}"[:250])
             continue
         if sec not in defaults or not isinstance(val, dict):
             raise RuntimeError(f"unknown settings section [{sec}]; valid: {', '.join([*defaults, 'ignore'])}")
@@ -1117,7 +1131,7 @@ def config_suppression(cfg: dict, f: Finding, today: str) -> str:
             continue
         if not str(ig.get("reason") or "").strip():
             continue
-        if ig.get("expires") and str(ig["expires"]) < today:
+        if "expires" in ig and str(ig["expires"]) < today:   # validated YYYY-MM-DD: string order is date order
             continue
         return "config: " + ig["reason"]
     return ""
