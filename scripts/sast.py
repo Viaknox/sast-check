@@ -1421,7 +1421,12 @@ def main(argv=None) -> int:
         bad_type = [n for n in SETTINGS_FILES if (repo / n).is_symlink() or ((repo / n).exists() and not (repo / n).is_file())]
         for n in bad_type:
             ctx.runs.append(ToolRun("settings", "error", f"proposed {n} is a symlink or directory; settings must be regular files"))
-        for n in edited if not settings_error else []:
+        # zizmor reads only the first config it finds: when any candidate changes, check the one that will be
+        # in effect after merge (deleting .github/zizmor.yml can promote a shadowed, invalid zizmor.yml)
+        check = [n for n in edited if n not in ZIZMOR_CONFIGS]
+        if any(n in ZIZMOR_CONFIGS for n in edited):
+            check += [next((z for z in ZIZMOR_CONFIGS if (repo / z).exists() or (repo / z).is_symlink()), "")][:1]
+        for n in [c for c in check if c] if not settings_error else []:
             if n not in bad_type and (why := proposed_settings_error(repo, n)):
                 ctx.runs.append(ToolRun("settings", "error", f"proposed {n} is invalid: {why[:250]}"))
     enabled = a.only.split(",") if a.only else [k for k, v in cfg["tools"].items() if v]

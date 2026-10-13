@@ -689,6 +689,14 @@ if command -v zizmor >/dev/null; then
   check "malformed proposed zizmor.yml fails"             "$code" "2"
   check "...and the error names zizmor.yml"               "$(q "any(r['name']=='settings' and 'zizmor.yml' in r['detail'] for r in d['runs'])")" "True"
   git checkout -q main
+  # deleting the active .github/zizmor.yml promotes a shadowed, invalid zizmor.yml: that one is checked
+  git checkout -q -b r23z main
+  mkdir -p .github && printf 'rules: {}\n' > .github/zizmor.yml && printf 'rules:\n  bogus: [\n' > zizmor.yml
+  git add .github/zizmor.yml zizmor.yml && git commit -qm zbase
+  git rm -q .github/zizmor.yml && git commit -qm zdel
+  set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+  check "deleting a zizmor config that shadows an invalid one fails" "$code" "2"
+  git checkout -q main
 fi
 if command -v osv-scanner >/dev/null; then
   git checkout -q -b r15o main
