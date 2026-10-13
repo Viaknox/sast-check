@@ -16,10 +16,17 @@ rules:
         - https://cwe.mitre.org/data/definitions/319.html
     patterns:
       - pattern-either:
-          - pattern: requests.$M("$URL", ...)
-          - pattern: requests.$M(..., url="$URL", ...)
-          - pattern: httpx.$M("$URL", ...)
-          - pattern: httpx.$M(..., url="$URL", ...)
+          # only the calls that actually send a request; httpx.URL(), httpx.Request() and the
+          # like merely parse or build, so they are not matched
+          - patterns:
+              - pattern-either:
+                  - pattern: requests.$M("$URL", ...)
+                  - pattern: requests.$M(..., url="$URL", ...)
+                  - pattern: httpx.$M("$URL", ...)
+                  - pattern: httpx.$M(..., url="$URL", ...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: '^(get|post|put|patch|delete|head|options|request|stream)$'
           - pattern: urllib.request.urlopen("$URL", ...)
           - pattern: urllib.request.Request("$URL", ...)
           - pattern: urlopen("$URL", ...)
