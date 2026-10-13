@@ -55,3 +55,33 @@ function t7() {
   // ruleid: sast.js.dom-xss-sink
   el.innerHTML = "<img src='" + encodeURIComponent(location.hash) + "'>";
 }
+
+const FIXED_QUERY = "tab=home&view=list";
+function ok6() {
+  const tab = new URLSearchParams(FIXED_QUERY).get("tab");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = tab;
+}
+function ok7() {
+  const defaults = "page=1";
+  const page = new URLSearchParams(defaults).getAll("page");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = page;
+}
+function ok8() {
+  const tags = new URLSearchParams({ tag: "a" }).getAll("tag");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = tags;
+}
+function t8(raw) {
+  const p = new URLSearchParams(raw).get("tab");
+  // ruleid: sast.js.dom-xss-sink
+  el.innerHTML = p;
+}
+function t9() {
+  let q = "tab=home";
+  q = location.search;
+  const p = new URLSearchParams(q).get("tab");
+  // ruleid: sast.js.dom-xss-sink
+  el.innerHTML = p;
+}

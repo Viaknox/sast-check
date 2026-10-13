@@ -28,5 +28,31 @@
   <div><%- sanitize(user.bio) %></div>
   <!-- ok: sast.js.ejs-unescaped -->
   <% items.forEach(function (i) { %><li><%= i %></li><% }) %>
+
+  <% var logo = '<b>Acme</b>'; %>
+  <% const tagline = "Fast <i>safe</i>"; %>
+  <% let nav = include('partials/nav'); %>
+  <% const foot = include("partials/foot"); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- logo %></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- tagline %></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%-nav%></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- foot %></div>
+
+  <% var greeting = "Hi " + user.name; %>
+  <% var fromQuery = req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- greeting %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- fromQuery %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- logo + user.bio %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%-notDeclared%></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- unknownName -%></div>
 </body>
 </html>

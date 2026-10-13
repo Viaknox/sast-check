@@ -18,6 +18,31 @@ rules:
     paths:
       include:
         - "*.ejs"
-    # sanitizer only counts as a call at the start of the expression, never as part of an identifier
-    pattern-regex: >-
-      (?i)<%-(?!\s*include\s*\()(?!\s*body\s*-?%>)(?!\s*(?:'[^']*'|"[^"]*")\s*-?%>)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()\s*[^\s%][^%]*%>
+    pattern-either:
+      # expressions: a sanitizer only counts as a call at the start of the expression, never as part of an identifier
+      - pattern-regex: >-
+          (?i)<%-(?!\s*include\s*\()(?!\s*[\w$]+\s*-?%>)(?!\s*(?:'[^']*'|"[^"]*")\s*-?%>)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()\s*[^\s%][^%]*%>
+      # a bare name is fine when this template itself set it, ending in a semicolon, from a string literal or from include() of a literal path
+      - patterns:
+          - pattern-either:
+              - pattern: <%- $X %>
+              - pattern: <%- $X -%>
+          - metavariable-regex:
+              metavariable: $X
+              regex: (?i)^(?!body$)[a-z_$][\w$]*$
+          - pattern-not-inside: |
+              $X = "...";
+              ...
+              <%- $X %>
+          - pattern-not-inside: |
+              $X = '...';
+              ...
+              <%- $X %>
+          - pattern-not-inside: |
+              $X = include('...');
+              ...
+              <%- $X %>
+          - pattern-not-inside: |
+              $X = include("...");
+              ...
+              <%- $X %>
