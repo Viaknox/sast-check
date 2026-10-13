@@ -152,3 +152,27 @@ rules:
                   import { $F } from "node:child_process";
                   ...
           - focus-metavariable: $X
+      # called under another name after an aliased import: import { exec as run } from "child_process"
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern: $K($X, ...)
+              - patterns:
+                  - pattern: |
+                      $K($C, $X, {..., shell: true, ...})
+              - patterns:
+                  - pattern: $K($SH, [..., "-c", $X, ...], ...)
+                  - metavariable-regex:
+                      metavariable: $SH
+                      regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+          - pattern-either:
+              - pattern-inside: |
+                  import { $O as $K } from "child_process";
+                  ...
+              - pattern-inside: |
+                  import { $O as $K } from "node:child_process";
+                  ...
+          - metavariable-regex:
+              metavariable: $O
+              regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
+          - focus-metavariable: $X
