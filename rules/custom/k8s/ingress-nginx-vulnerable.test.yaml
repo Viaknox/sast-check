@@ -41,6 +41,31 @@ spec:
         - image: nginx:1.10.1
           name: k
 ---
+# Image fields only: comments, deny-lists and prose that name an old build are not deployments
+policy:
+  # ok: sast.k8s.ingress-nginx-vulnerable
+  # upgraded away from registry.k8s.io/ingress-nginx/controller:v1.9.4 last quarter
+  deniedImages:
+    # ok: sast.k8s.ingress-nginx-vulnerable
+    - registry.k8s.io/ingress-nginx/controller:v1.10.1
+    # ok: sast.k8s.ingress-nginx-vulnerable
+    - "k8s.gcr.io/ingress-nginx/controller:v0.49.3"
+  # ok: sast.k8s.ingress-nginx-vulnerable
+  blocked: ["registry.k8s.io/ingress-nginx/controller:v1.11.4"]
+  # ok: sast.k8s.ingress-nginx-vulnerable
+  note: "never run quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.49.3 again"
+---
+spec:
+  containers:
+    # ruleid: sast.k8s.ingress-nginx-vulnerable
+    - { name: a, image: registry.k8s.io/ingress-nginx/controller:v1.9.4 }
+    # ruleid: sast.k8s.ingress-nginx-vulnerable
+    - "image": "registry.k8s.io/ingress-nginx/controller:v1.11.0"
+    # ruleid: sast.k8s.ingress-nginx-vulnerable
+    - image: "{{ .Values.registry }}/ingress-nginx/controller:v1.10.2"
+    # ok: sast.k8s.ingress-nginx-vulnerable
+    - { name: b, image: registry.k8s.io/ingress-nginx/controller:v1.12.1 }
+---
 # Helm values with separate keys
 controller:
   image:
@@ -151,3 +176,9 @@ spec:
       # ok: sast.k8s.ingress-nginx-vulnerable
       chart: cert-manager
       version: "1.10.0"
+---
+dependencies:
+  # ruleid: sast.k8s.ingress-nginx-vulnerable
+  - version: 4.10.0
+    repository: https://kubernetes.github.io/ingress-nginx
+    name: ingress-nginx
