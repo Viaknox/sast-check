@@ -14,8 +14,9 @@ fixture with `tests/rules_test.py`:
 | survived | the fixture still passes: no test exercises that element | add a fixture line that needs it, or justify it in the baseline |
 | invalid | the engine rejects the mutated rule | nothing (not scored) |
 
-Score = killed / (killed + survived). Mutant ids are `<rule id>:<path>:<hash of the element>`, so they stay
-stable when other parts of the rule change.
+Score = killed / (killed + survived). Mutant ids are `<rule id>:<keys to the list>:<hash of the element>` with no
+list positions, so they stay stable when other parts of the rule change or branches are added or reordered.
+A run where the engine crashes, times out or prints no JSON is an error (exit 2), never a kill or a pass.
 
 **How to kill a survivor.** Deleting a source or sink survives when no `ruleid:` line reaches the sink through
 that element alone (often because a broader pattern also matches). Add a `ruleid:` line that only that element
@@ -24,7 +25,8 @@ Add an `ok:` line that the rule would flag without it.
 
 **CI.** On every pull request, changed rules are mutated, and a survivor not listed in
 `tests/mutation-baseline.json` fails the check. The baseline records the survivors that existed when the tool
-was introduced, each with a `why`. Shrink it over time; a new entry needs a reason a reviewer accepts (for
+was introduced, each with a `why`. An entry counts only with a written `why`: `{}`, a blank reason or a `TODO` from
+`--write-baseline` fails the check. A partial `--write-baseline` (`--rules`, `--changed-*`) rewrites only the rules it ran. Shrink it over time; a new entry needs a reason a reviewer accepts (for
 example, two equivalent patterns kept for readability).
 
 ```

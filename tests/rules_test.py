@@ -15,6 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ANN = re.compile(r"(ruleid|ok):\s*([\w.\-]+)")
+ENGINE_FAILED = "engine failed"   # the scan did not complete (crash, timeout, no JSON): never a pass or a kill
+ENGINE_TIMEOUT = 600
 
 
 def fixture_for(rule: Path) -> Path | None:
@@ -62,8 +64,13 @@ def rule_failures(engine: str, rule: Path, text: str | None = None) -> tuple[int
             (Path(td) / ".github" / "workflows").mkdir(parents=True)
             shutil.copyfile(fx, Path(td) / ".github" / "workflows" / fx.name)
             cwd, target = td, f".github/workflows/{fx.name}"
-        out = json.loads(subprocess.run(cmd + ["--config", str(conf), target], cwd=cwd, capture_output=True,
-                                        text=True).stdout or "{}")
+        try:
+            r = subprocess.run(cmd + ["--config", str(conf), target], cwd=cwd, capture_output=True, text=True,
+                               timeout=ENGINE_TIMEOUT)
+            out = json.loads(r.stdout)
+        except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+            msg = "timed out" if isinstance(e, subprocess.TimeoutExpired) else f"exit {r.returncode}, no JSON output"
+            return len(rids), [f"{rule.relative_to(ROOT)}: {ENGINE_FAILED}: {msg}"] * len(rids)
     # a rule the engine cannot parse is silently skipped -> treat it as a failure
     rule_errs = [e for e in out.get("errors", []) if "Syntax error" not in str(e.get("type"))
                  and "PartialParsing" not in str(e.get("type"))]

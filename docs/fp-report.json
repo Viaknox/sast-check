@@ -88,93 +88,247 @@
  "rules": {
   "sast.docker.remote-fetch-no-checksum": {
    "tp_test": 6,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "kubernetes/ingress-nginx": {
+     "tp_test": 6
+    }
+   }
   },
   "sast.gha.remote-fetch-no-checksum": {
    "tp": 3,
    "fp": 3,
-   "noise": 0.5
+   "noise": 0.5,
+   "repos": {
+    "argoproj/argo-helm": {
+     "tp": 1
+    },
+    "fastify/fastify": {
+     "tp": 1
+    },
+    "kubernetes/ingress-nginx": {
+     "fp": 3,
+     "tp": 1
+    }
+   }
   },
   "sast.js.ejs-unescaped": {
    "fp": 8,
-   "noise": 1.0
+   "noise": 1.0,
+   "repos": {
+    "expressjs/express": {
+     "fp": 1
+    },
+    "mde/ejs": {
+     "fp": 7
+    }
+   }
   },
   "sast.js.express-error-leak": {
    "tp_test": 6,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "expressjs/express": {
+     "tp_test": 2
+    },
+    "nestjs/nest": {
+     "tp_test": 4
+    }
+   }
   },
   "sast.js.express-no-helmet": {
    "tp_test": 19,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "expressjs/express": {
+     "tp_test": 17
+    },
+    "mde/ejs": {
+     "tp_test": 1
+    },
+    "nestjs/nest": {
+     "tp_test": 1
+    }
+   }
   },
   "sast.js.grpc-insecure": {
    "tp_test": 3,
    "tp": 2,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "nestjs/nest": {
+     "tp_test": 3,
+     "tp": 2
+    }
+   }
   },
   "sast.js.handlebars-noescape": {
    "tp_test": 2,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "handlebars-lang/handlebars.js": {
+     "tp_test": 2
+    }
+   }
   },
   "sast.js.location-xss": {
    "fp": 1,
-   "noise": 1.0
+   "noise": 1.0,
+   "repos": {
+    "sveltejs/kit": {
+     "fp": 1
+    }
+   }
   },
   "sast.js.open-redirect": {
    "tp_test": 7,
    "fp": 3,
-   "noise": 0.3
+   "noise": 0.3,
+   "repos": {
+    "expressjs/express": {
+     "tp_test": 5
+    },
+    "fastify/fastify": {
+     "tp_test": 1
+    },
+    "jquery/jquery": {
+     "tp_test": 1
+    },
+    "sveltejs/kit": {
+     "fp": 3
+    }
+   }
   },
   "sast.js.path-traversal": {
    "fp": 4,
-   "noise": 1.0
+   "noise": 1.0,
+   "repos": {
+    "jquery/jquery": {
+     "fp": 2
+    },
+    "sveltejs/kit": {
+     "fp": 2
+    }
+   }
   },
   "sast.js.react-dangerous-html": {
    "fp": 3,
-   "noise": 1.0
+   "noise": 1.0,
+   "repos": {
+    "puppeteer/puppeteer": {
+     "fp": 3
+    }
+   }
   },
   "sast.js.ssrf": {
    "unclear": 1,
    "tp_test": 4,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "sveltejs/kit": {
+     "unclear": 1,
+     "tp_test": 4
+    }
+   }
   },
   "sast.js.template-safe-filter": {
    "fp": 16,
-   "noise": 1.0
+   "noise": 1.0,
+   "repos": {
+    "django/django": {
+     "fp": 16
+    }
+   }
   },
   "sast.js.timing-unsafe-compare": {
    "tp_test": 3,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "socketio/socket.io": {
+     "tp_test": 3
+    }
+   }
   },
   "sast.js.tls-reject-unauthorized-off": {
    "tp_test": 16,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "fastify/fastify": {
+     "tp_test": 8
+    },
+    "hapijs/hapi": {
+     "tp_test": 5
+    },
+    "nestjs/nest": {
+     "tp_test": 1
+    },
+    "puppeteer/puppeteer": {
+     "tp_test": 1
+    },
+    "socketio/socket.io": {
+     "tp_test": 1
+    }
+   }
   },
   "sast.js.websocket-cleartext": {
    "tp_test": 2,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "socketio/socket.io": {
+     "tp_test": 2
+    }
+   }
   },
   "sast.k8s.ingress-nginx-vulnerable": {
    "tp_test": 5,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "kubernetes/ingress-nginx": {
+     "tp_test": 5
+    }
+   }
   },
   "sast.python.django-httpresponse-xss": {
    "tp_test": 12,
    "fp": 9,
-   "noise": 0.43
+   "noise": 0.43,
+   "repos": {
+    "django/django": {
+     "tp_test": 12,
+     "fp": 9
+    }
+   }
   },
   "sast.python.httpx-verify-false": {
    "tp_test": 1,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "encode/httpx": {
+     "tp_test": 1
+    }
+   }
   },
   "sast.python.requests-cleartext": {
    "tp_test": 2,
    "fp": 19,
-   "noise": 0.9
+   "noise": 0.9,
+   "repos": {
+    "encode/httpx": {
+     "fp": 19
+    },
+    "psf/requests": {
+     "tp_test": 2
+    }
+   }
   },
   "sast.python.ssrf": {
    "tp_test": 3,
-   "noise": 0.0
+   "noise": 0.0,
+   "repos": {
+    "django/django": {
+     "tp_test": 3
+    }
+   }
   }
  }
 }

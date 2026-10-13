@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read   # the mutation check lists the PR's changed files
 
 jobs:
   test:
@@ -70,6 +71,8 @@ jobs:
         run: python tests/rules_test.py --engine "$(command -v semgrep)"
       - name: Rule tests (opengrep - the CI engine)
         run: python tests/rules_test.py --engine "$RUNNER_TEMP/opengrep/opengrep"
+      - name: Rule-quality tool tests
+        run: python tests/tools_test.py
       - name: Rule mutation check (changed rules)
         # every pattern element of a changed rule must be exercised by its fixture, unless the baseline
         # (tests/mutation-baseline.json) lists it with a reason; see docs/rule-quality.md
