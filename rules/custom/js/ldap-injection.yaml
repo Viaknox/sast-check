@@ -165,6 +165,28 @@ rules:
                   - pattern-inside: |
                       $C = new $K(...);
                       ...
+      # fallback for a client built in another module (const ldapClient = require("./ldap-client"), this.ldap, a parameter):
+      # the receiver's own name must say ldap. Names like client, conn or directory prove nothing and are not trusted.
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern-either:
+                      - pattern: |
+                          $C.search($B, {..., filter: $X, ...}, ...)
+                      # a property receiver (this.ldap) is only matched when its last name is spelled out
+                      - pattern: |
+                          $O.$C.search($B, {..., filter: $X, ...}, ...)
+                  - focus-metavariable: $X
+              - patterns:
+                  - pattern-either:
+                      - pattern: $C.search($B, $OPTS, ...)
+                      - pattern: $O.$C.search($B, $OPTS, ...)
+                  - pattern-not: $C.search($B, {...}, ...)
+                  - pattern-not: $O.$C.search($B, {...}, ...)
+                  - focus-metavariable: $OPTS
+          - metavariable-regex:
+              metavariable: $C
+              regex: '(?i)ldap'
       - patterns:
           - pattern: $AD.$M($X, ...)
           - metavariable-regex:
