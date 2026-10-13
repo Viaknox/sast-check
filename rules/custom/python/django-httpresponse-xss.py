@@ -250,3 +250,19 @@ def bad_html_content_type(request):
 def bad_subclass_html_content_type(request):
     # ruleid: sast.python.django-httpresponse-xss
     return HttpResponseNotFound(request.GET["x"], content_type="text/html")
+
+
+# a helper that receives the request in another position: only the request.* sources reach it
+def bad_helper_get(user, request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse("<p>" + request.GET["q"] + "</p>")
+
+
+def bad_helper_post(user, request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(request.POST["comment"])
+
+
+def bad_helper_cookies(user, request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse("hi " + request.COOKIES["name"])

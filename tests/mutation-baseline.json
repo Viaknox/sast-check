@@ -39,39 +39,15 @@
   "element": "pattern: Number(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks.patterns:23df5354": {
-  "element": "metavariable-regex:\n  metavariable: $M\n  regex: ^(runInNewContext|runInThisContext|runInContext|compileFunction)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.code-eval:.pattern-sinks.patterns:4a0fbec2": {
-  "element": "metavariable-regex:\n  metavariable: $VM\n  regex: ^(vm|node_vm)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ "sast.js.code-eval:.pattern-sinks.patterns.pattern-either.patterns.pattern-either:73011568": {
+  "element": "pattern-inside: 'import { Script } from \"node:vm\";\n\n  ...\n\n  '",
+  "why": "Kept for engine robustness: both engines currently normalise 'node:vm' to 'vm', so the 'vm' and 'node:vm' import alternatives match each other's imports and either one alone passes the fixture"
  },
  "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@243a28f5": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@4c5a75a1": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@7e988f25": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@8f82eafc": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@a2405152": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@ad5bccbf": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@bcb800ff": {
+ "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@b19bec59": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -79,23 +55,15 @@
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks:3b9d80d1": {
-  "element": "patterns:\n- pattern: runInNewContext($X, ...)\n- focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.code-eval:.pattern-sinks:532a988e": {
-  "element": "patterns:\n- pattern: runInThisContext($X, ...)\n- focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.code-eval:.pattern-sinks:5d6d6e85": {
-  "element": "patterns:\n- pattern: new Script($X, ...)\n- focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:1ed53c88": {
+  "element": "pattern-inside: 'const $F = function ($REQ, ...) { ... }\n\n  ...\n\n  $APP.$M(..., $F)\n\n  '",
+  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
  },
  "sast.js.code-eval:.pattern-sources.patterns.pattern-either:2632839e": {
   "element": "pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sources.patterns.pattern-either:27e5a237": {
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:27e5a237@90e8c000": {
   "element": "pattern: $REQ.headers",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -107,27 +75,31 @@
   "element": "pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sources.patterns.pattern-either:44a38875": {
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:44a38875@90e8c000": {
   "element": "pattern: $REQ.params",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sources.patterns.pattern-either:477e628d": {
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:477e628d@90e8c000": {
   "element": "pattern: $REQ.path",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sources.patterns.pattern-either:4a379293": {
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:4a2c6b50": {
+  "element": "pattern-inside: 'const $F = ($REQ, ...) => { ... }\n\n  ...\n\n  $APP.$M(..., $F)\n\n  '",
+  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+ },
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:4a379293@90e8c000": {
   "element": "pattern: $REQ.cookies",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sources.patterns.pattern-either:82474323": {
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:82474323@90e8c000": {
   "element": "pattern: $REQ.url",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sources.patterns.pattern-either:8ebe51a9": {
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:8ebe51a9@90e8c000": {
   "element": "pattern: $REQ.originalUrl",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sources.patterns.pattern-either:bde59779": {
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:bde59779@90e8c000": {
   "element": "pattern: $REQ.header(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -135,11 +107,15 @@
   "element": "pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sources.patterns.pattern-either:e7cab215": {
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:e01a1da3": {
+  "element": "pattern-inside: 'const $F = async ($REQ, ...) => { ... }\n\n  ...\n\n  $APP.$M(..., $F)\n\n  '",
+  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+ },
+ "sast.js.code-eval:.pattern-sources.patterns.pattern-either:e7cab215@90e8c000": {
   "element": "pattern: $REQ.get(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sources.patterns:d84b506f": {
+ "sast.js.code-eval:.pattern-sources.patterns:d84b506f@235bfc2d": {
   "element": "metavariable-regex:\n  metavariable: $M\n  regex: ^(get|post|put|patch|delete|all|use|head|options)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -269,42 +245,6 @@
  },
  "sast.js.command-injection:.pattern-sanitizers:dcb8cb3b": {
   "element": "pattern: shellescape(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.command-injection:.pattern-sinks.patterns:2e60dfff": {
-  "element": "metavariable-regex:\n  metavariable: $SH\n  regex: ^[\"'](/bin/|/usr/bin/)?(ba|z|da)?sh[\"']$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.command-injection:.pattern-sinks.patterns:492890bc": {
-  "element": "focus-metavariable: $ARGS",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.command-injection:.pattern-sinks.patterns:59514ec2@c6c32d90": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.command-injection:.pattern-sinks.patterns:59514ec2@f67fdedc": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.command-injection:.pattern-sinks.patterns:c57625ca@287ee721": {
-  "element": "metavariable-regex:\n  metavariable: $F\n  regex: (^|\\.)(spawn|spawnSync|execFile|execFileSync)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.command-injection:.pattern-sinks.patterns:c57625ca@c6c32d90": {
-  "element": "metavariable-regex:\n  metavariable: $F\n  regex: (^|\\.)(spawn|spawnSync|execFile|execFileSync)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.command-injection:.pattern-sinks.patterns:cf725dbc": {
-  "element": "metavariable-regex:\n  metavariable: $F\n  regex: ^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.command-injection:.pattern-sinks:26560a80": {
-  "element": "patterns:\n- pattern: $F($X, ...)\n- metavariable-regex:\n    metavariable: $F\n    regex: ^(spawn|spawnSync|execFile|execFileSync)$\n- focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.command-injection:.pattern-sinks:8b08b34d": {
-  "element": "patterns:\n- pattern: $F($X, ...)\n- metavariable-regex:\n    metavariable: $F\n    regex: ^(exec|execSync)$\n- focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.command-injection:.pattern-sources.patterns.pattern-either:25d5d929": {
@@ -543,10 +483,6 @@
   "element": "pattern: location.search",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.dom-xss-sink:.pattern-sources.patterns.pattern-either:b273ec26": {
-  "element": "pattern: new URLSearchParams(...).get(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.js.dom-xss-sink:.pattern-sources.patterns.pattern-either:bc7aed34": {
   "element": "pattern: document.documentURI",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -583,74 +519,6 @@
   "element": "pattern-either:\n- pattern-inside: '$W.addEventListener(\"message\", function($E) { ... })\n\n    '\n- pattern-inside: '$W.addEventListener(\"message\", ($E) => { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.dom-xss-sink:.pattern-sources.patterns:baa16424": {
-  "element": "pattern-not: new URLSearchParams(\"...\").get(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either.patterns:044f9fab": {
-  "element": "pattern: '$V = { ..., sandbox: false, ... }\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either.patterns:8545f20e": {
-  "element": "pattern: '$V = { ..., webSecurity: false, ... }\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either.patterns:9ca76b99": {
-  "element": "pattern: '$V = { ..., contextIsolation: false, ... }\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either.patterns:9f5c0599": {
-  "element": "pattern: '$V = { ..., nodeIntegration: true, ... }\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@304672fb": {
-  "element": "pattern-inside: '$V = { ... };\n\n  ...\n\n  <... new $W({ ..., webPreferences: $V, ... }) ...>;\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@4fe15347": {
-  "element": "pattern-inside: '$V = { ... };\n\n  ...\n\n  <... new $W({ ..., webPreferences: $V, ... }) ...>;\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@b1c9a22a": {
-  "element": "pattern-inside: '$V = { ... };\n\n  ...\n\n  <... new $W({ ..., webPreferences: $V, ... }) ...>;\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@cde71d98": {
-  "element": "pattern-inside: '$V = { ... };\n\n  ...\n\n  <... new $W({ ..., webPreferences: $V, ... }) ...>;\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either.patterns:e6fd2346": {
-  "element": "pattern: '$V = { ..., nodeIntegrationInWorker: true, ... }\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either:3644559b": {
-  "element": "pattern: 'webPreferences = { ..., sandbox: false, ... }\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either:657dcf9b": {
-  "element": "pattern: 'webPreferences = { ..., contextIsolation: false, ... }\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either:7096da80": {
-  "element": "pattern: 'webPreferences = { ..., nodeIntegrationInWorker: true, ... }\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either:9d665a08": {
-  "element": "pattern: 'webPreferences = { ..., webSecurity: false, ... }\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either:c78a8bec": {
-  "element": "patterns:\n- pattern: '$V = { ..., nodeIntegrationInWorker: true, ... }\n\n    '\n- pattern-inside: '$V = { ... };\n\n    ...\n\n    <... new $W({ ..., webPreferences: ",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either:cee75913": {
-  "element": "pattern: 'webPreferences = { ..., nodeIntegration: true, ... }\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.electron-node-integration:.pattern-either:fdf2b516": {
-  "element": "patterns:\n- pattern: '$V = { ..., webSecurity: false, ... }\n\n    '\n- pattern-inside: '$V = { ... };\n\n    ...\n\n    <... new $W({ ..., webPreferences: $V, ... }) ",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.js.express-error-leak:.patterns.pattern-either.patterns.pattern-either:11673430": {
   "element": "pattern-inside: function $F($E, $RQ, $RS, $NX) { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -671,40 +539,12 @@
   "element": "pattern-inside: ($E, $RQ, $RS, $NX) => { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.express-error-leak:.patterns.pattern-either:188bd12e": {
-  "element": "pattern: $R.$M($E.message)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.js.express-error-leak:.patterns.pattern-either:22642d67": {
   "element": "pattern-inside: $P.catch(function ($E) { ... })",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.express-error-leak:.patterns.pattern-either:9e28f629": {
-  "element": "pattern: '$R.$M({..., $K: $E.stack, ...})\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.express-error-leak:.patterns.pattern-either:b22c303f": {
-  "element": "pattern: '$R.$M({..., $K: $E.message, ...})\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.express-error-leak:.patterns.pattern-either:df042a57": {
-  "element": "pattern: '$R.$M({..., $K: $E, ...})\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.js.express-error-leak:.patterns.pattern-either:f4562aef": {
   "element": "pattern-inside: $P.catch(($E) => ...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.express-error-leak:.patterns:075f22f3": {
-  "element": "metavariable-regex:\n  metavariable: $M\n  regex: ^(send|json|jsonp|end|write)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.express-error-leak:.patterns:842b723f": {
-  "element": "pattern-not: reply.$C(...).send($E)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.express-error-leak:.patterns:e0ed67aa": {
-  "element": "metavariable-regex:\n  metavariable: $R\n  regex: ^(res|response|reply|resp)(\\.(status|type|code|set|header|contentType)\\([^()]*\\))*$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.express-no-helmet:.patterns:06cdbc77": {
@@ -1439,26 +1279,6 @@
   "element": "pattern-either:\n- pattern-inside: 'const $J = require(\"jsonwebtoken\");\n\n    ...\n\n    '\n- pattern-inside: 'import $J from \"jsonwebtoken\";\n\n    ...\n\n    '\n- patte",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.ldap-dn-injection:.pattern-sanitizers:3605e1d1": {
-  "element": "pattern: ldapEscape.dn`...`",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-dn-injection:.pattern-sinks.patterns:0b35f1d6": {
-  "element": "metavariable-regex:\n  metavariable: $M\n  regex: ^(bind|modify|del|compare|add)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-dn-injection:.pattern-sinks.patterns:28dc55e1": {
-  "element": "focus-metavariable: $DN",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-dn-injection:.pattern-sinks.patterns:e1423444@0d003fa2": {
-  "element": "metavariable-regex:\n  metavariable: $C\n  regex: (?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-dn-injection:.pattern-sinks.patterns:e1423444@f1b99ce1": {
-  "element": "metavariable-regex:\n  metavariable: $C\n  regex: (?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.js.ldap-dn-injection:.pattern-sources.pattern-either:010cc1c7": {
   "element": "pattern: ctx.query",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -1637,42 +1457,6 @@
  },
  "sast.js.ldap-dn-injection:.pattern-sources:7dfd65bc": {
   "element": "pattern-either:\n- pattern: req.query\n- pattern: req.body\n- pattern: req.params\n- pattern: req.headers\n- pattern: req.cookies\n- pattern: req.url\n- pattern: req.o",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-injection:.pattern-sanitizers:1c313483": {
-  "element": "pattern: ldapEscape.filter`...`",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-injection:.pattern-sanitizers:2d71f8a5": {
-  "element": "pattern: escapeFilter(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-injection:.pattern-sanitizers:942a63c6": {
-  "element": "pattern: escapeLdapFilter(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-injection:.pattern-sanitizers:b120ee35": {
-  "element": "pattern: ldapEscape.filter(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-injection:.pattern-sinks.patterns:59514ec2@61e04ff8": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-injection:.pattern-sinks.patterns:59514ec2@9c955aa5": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-injection:.pattern-sinks.patterns:8519ca11": {
-  "element": "focus-metavariable: $OPTS",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-injection:.pattern-sinks.patterns:a0872979": {
-  "element": "metavariable-regex:\n  metavariable: $M\n  regex: ^(find|findUser|findUsers|findGroup|findGroups|getGroupMembershipForUser|isUserMemberOf)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.ldap-injection:.pattern-sinks.patterns:d3aa33f0": {
-  "element": "pattern-not: $C.search($B, {...}, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.ldap-injection:.pattern-sources.pattern-either:010cc1c7": {
@@ -1879,14 +1663,6 @@
   "element": "pattern: sanitizeURL(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.location-xss:.pattern-sinks.patterns.pattern-either:0b9bfb65": {
-  "element": "pattern: location.replace($X)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.location-xss:.pattern-sinks.patterns.pattern-either:20ccaaf7": {
-  "element": "pattern: window.location.href = $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.js.location-xss:.pattern-sinks.patterns.pattern-either:32aa6a65": {
   "element": "pattern: open($X)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -1901,10 +1677,6 @@
  },
  "sast.js.location-xss:.pattern-sinks.patterns.pattern-either:619d76d5": {
   "element": "pattern: document.location.replace($X)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.location-xss:.pattern-sinks.patterns.pattern-either:ace965fd": {
-  "element": "pattern: location = $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.location-xss:.pattern-sinks.patterns.pattern-either:c0d63808": {
@@ -1923,17 +1695,29 @@
   "element": "pattern: window.open($X, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.location-xss:.pattern-sinks.patterns:59514ec2@40417305": {
+ "sast.js.location-xss:.pattern-sinks.patterns:0424060e": {
+  "element": "pattern-not-inside: 'function (..., location, ...) { ... }\n\n  '",
+  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+ },
+ "sast.js.location-xss:.pattern-sinks.patterns:59514ec2@1f894a47": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.location-xss:.pattern-sinks.patterns:59514ec2@e48ce32c": {
+ "sast.js.location-xss:.pattern-sinks.patterns:59514ec2@ce0aae8c": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.location-xss:.pattern-sinks.patterns:5ccad97e": {
   "element": "pattern-not: $L = `/...`",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ },
+ "sast.js.location-xss:.pattern-sinks.patterns:7802098e": {
+  "element": "pattern-not-inside: '(..., location, ...) => $B\n\n  '",
+  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+ },
+ "sast.js.location-xss:.pattern-sinks.patterns:b621e5cf": {
+  "element": "pattern-not-inside: '({ ..., location, ... }) => { ... }\n\n  '",
+  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
  },
  "sast.js.location-xss:.pattern-sinks.patterns:c0bf623c": {
   "element": "pattern-not: $F(`/...`, ...)",
@@ -1949,10 +1733,6 @@
  },
  "sast.js.location-xss:.pattern-sources.pattern-either:86d0a56b": {
   "element": "pattern: window.location.hash",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.location-xss:.pattern-sources.pattern-either:9ce2c385": {
-  "element": "pattern: location.search",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.location-xss:.pattern-sources.pattern-either:b273ec26": {
@@ -1979,13 +1759,25 @@
   "element": "pattern-inside: '$W.addEventListener(\"message\", function($E) { ... })\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
+ "sast.js.location-xss:.pattern-sources.patterns:0424060e": {
+  "element": "pattern-not-inside: 'function (..., location, ...) { ... }\n\n  '",
+  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+ },
  "sast.js.location-xss:.pattern-sources.patterns:6d268449": {
   "element": "pattern: $E.data",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
+ "sast.js.location-xss:.pattern-sources.patterns:7802098e": {
+  "element": "pattern-not-inside: '(..., location, ...) => $B\n\n  '",
+  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+ },
  "sast.js.location-xss:.pattern-sources.patterns:7d24bdd1": {
   "element": "pattern-either:\n- pattern-inside: '$W.addEventListener(\"message\", function($E) { ... })\n\n    '\n- pattern-inside: '$W.addEventListener(\"message\", ($E) => { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ },
+ "sast.js.location-xss:.pattern-sources.patterns:b621e5cf": {
+  "element": "pattern-not-inside: '({ ..., location, ... }) => { ... }\n\n  '",
+  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
  },
  "sast.js.nosql-injection:.pattern-sanitizers:8b8dbf98": {
   "element": "pattern: parseInt(...)",
@@ -2791,36 +2583,20 @@
   "element": "pattern: Number(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either:a366a1ad": {
-  "element": "pattern: (await $B.newPage()).$M($X, ...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either:bca83e0b": {
-  "element": "pattern: (await $B.newPage()).goto($X, ...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@5990003e": {
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@0f0714df": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@5b0bfa2f": {
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@18975931": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@b0a50193": {
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@b17c1ce7": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:9a7f6d43": {
   "element": "metavariable-regex:\n  metavariable: $K\n  regex: ^(url|content)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:e98275da": {
-  "element": "metavariable-regex:\n  metavariable: $PAGE\n  regex: (?i).*(page|tab|frame|context|browser|newPage).*",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.puppeteer-ssrf:.pattern-sinks:64ff8204": {
-  "element": "patterns:\n- pattern: '$PAGE.addScriptTag({..., $K: $X, ...})\n\n    '\n- metavariable-regex:\n    metavariable: $K\n    regex: ^(url|content)$\n- focus-metavariable: ",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.puppeteer-ssrf:.pattern-sources.pattern-either:010cc1c7": {
@@ -3911,14 +3687,6 @@
   "element": "pattern: process.env[\"NODE_TLS_REJECT_UNAUTHORIZED\"] = \"0\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.unsafe-yaml-load:.patterns.pattern-either.patterns.pattern-either:8ab46452": {
-  "element": "pattern: '$FN($S, {..., schema: $SC, ...}, ...)\n\n  '",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.unsafe-yaml-load:.patterns.pattern-either.patterns:46ef45a6": {
-  "element": "metavariable-regex:\n  metavariable: $FN\n  regex: ^(load|loadAll|safeLoad|safeLoadAll)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.js.unsafe-yaml-load:.patterns.pattern-either.patterns:50dbde81": {
   "element": "metavariable-regex:\n  metavariable: $SCH\n  regex: (?i).*schema$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -3947,20 +3715,8 @@
   "element": "pattern: io(\"=~/^ws:\\/\\/(?!(localhost|127\\.0\\.0\\.1|\\[::1\\]|0\\.0\\.0\\.0)([:\\/]|$))/i\",\n  ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.k8s.ingress-nginx-vulnerable:.pattern-either:c18ac398": {
-  "element": "pattern-regex: (?m)^[ \\t]*(?:-[ \\t]+)?(?:version|targetRevision):[ \\t]*[\\\"']?v?(?:[0-3]\\.\\d+\\.\\d+|4\\.(?:[0-9]|10)\\.\\d+|4\\.11\\.[0-4]|4\\.12\\.0)[\\\"']?[\n  \\t]*(?:#[",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.python.django-httpresponse-xss:.pattern-sanitizers:2de6713c": {
-  "element": "pattern: format_html(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.python.django-httpresponse-xss:.pattern-sanitizers:355a8b62": {
   "element": "pattern: escape(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.python.django-httpresponse-xss:.pattern-sanitizers:6598aa0e": {
-  "element": "pattern: django.utils.html.format_html(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.python.django-httpresponse-xss:.pattern-sanitizers:78ed007a": {
@@ -4007,28 +3763,16 @@
   "element": "pattern: django.http.HttpResponse($X, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
+ "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@47822d70": {
+  "element": "focus-metavariable: $X",
+  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ },
  "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@7f4b49ad": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@aa050646": {
+ "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@ca489917": {
   "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@e478306f": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:66c420a6": {
-  "element": "pattern-not: HttpResponse(..., content_type=\"application/json\", ...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:9283281d": {
-  "element": "pattern-not: $C(..., content_type=\"application/json\", ...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:daeb489c": {
-  "element": "pattern-not: $C(..., content_type=\"text/plain\", ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.python.django-httpresponse-xss:.pattern-sources.patterns.pattern-either:522f3e06": {
@@ -4121,10 +3865,6 @@
  },
  "sast.python.path-traversal:.pattern-sanitizers:caad13db": {
   "element": "pattern: secure_filename(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.python.path-traversal:.pattern-sanitizers:f4faea67": {
-  "element": "pattern: $P.name",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.python.path-traversal:.pattern-sinks.patterns.pattern-either:0f1e3957": {
@@ -4231,10 +3971,6 @@
   "element": "pattern: urllib.request.Request(\"$URL\", ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.requests-cleartext:.patterns.pattern-either:aeac531b": {
-  "element": "pattern: httpx.$M(..., url=\"$URL\", ...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.python.requests-cleartext:.patterns.pattern-either:df639e49": {
   "element": "pattern: urlopen(\"$URL\", ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -4305,26 +4041,6 @@
  },
  "sast.python.torch-load-unsafe:.pattern-either:a599342a": {
   "element": "pattern: torch.serialization.load(..., weights_only=False, ...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.terraform.aws-ami-no-owner:.patterns:1e39ac1d": {
-  "element": "pattern-not: \"data \\\"aws_ami\\\" \\\"$NAME\\\" {\\n  ...\\n  filter {\\n    ...\\n    name =\\\n  \\ \\\"owner-id\\\"\\n    ...\\n    values = module.$M.$X\\n    ...\\n  }\\n  ...\\n}",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.terraform.aws-ami-no-owner:.patterns:6f7db787": {
-  "element": "pattern-not: \"data \\\"aws_ami\\\" \\\"$NAME\\\" {\\n  ...\\n  filter {\\n    ...\\n    name =\\\n  \\ \\\"owner-alias\\\"\\n    ...\\n    values = var.$X\\n    ...\\n  }\\n  ...\\n}\\n\"",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.terraform.aws-ami-no-owner:.patterns:cf43180b": {
-  "element": "pattern-not: \"data \\\"aws_ami\\\" \\\"$NAME\\\" {\\n  ...\\n  filter {\\n    ...\\n    name =\\\n  \\ \\\"owner-id\\\"\\n    ...\\n    values = local.$X\\n    ...\\n  }\\n  ...\\n}\\n\"",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.terraform.aws-ami-no-owner:.patterns:e9f2f255": {
-  "element": "pattern-not: \"data \\\"aws_ami\\\" \\\"$NAME\\\" {\\n  ...\\n  filter {\\n    ...\\n    name =\\\n  \\ \\\"owner-alias\\\"\\n    ...\\n    values = module.$M.$X\\n    ...\\n  }\\n  ...",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.terraform.aws-ami-no-owner:.patterns:fdcd42c4": {
-  "element": "pattern-not: \"data \\\"aws_ami\\\" \\\"$NAME\\\" {\\n  ...\\n  filter {\\n    ...\\n    name =\\\n  \\ \\\"owner-alias\\\"\\n    ...\\n    values = local.$X\\n    ...\\n  }\\n  ...\\n}\\",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  }
 }
