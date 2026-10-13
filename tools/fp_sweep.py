@@ -59,8 +59,16 @@ def checkout(work: Path, repo: str, sha: str) -> Path:
 def rules_digest() -> str:
     """Hash of the rule bundle and the Opengrep version the sweep scans with: findings from another rule
     revision or engine version are stale (targeting and parsing can change between versions)."""
-    eng = shutil.which("opengrep")
-    ver = subprocess.run([eng, "--version"], capture_output=True, text=True, timeout=60).stdout.strip() if eng else "none"
+    eng, ver = shutil.which("opengrep"), "none"
+    if eng:   # a version we cannot read must not hash as "" and match another engine's findings
+        try:
+            r = subprocess.run([eng, "--version"], capture_output=True, text=True, timeout=60, check=False)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise ValueError(f"cannot read the Opengrep version: {e}") from e
+        ver = r.stdout.strip()
+        if r.returncode or not ver:
+            raise ValueError(f"cannot read the Opengrep version: `opengrep --version` exited {r.returncode} "
+                             f"with output {ver!r}")
     return hashlib.sha256((ROOT / "dist" / "rules.yaml").read_bytes() + b"\0" + ver.encode()).hexdigest()[:16]
 
 
@@ -119,11 +127,12 @@ def report(work: Path, labels: list[dict], corpus: list[dict]) -> dict:
     for i, x in by_id.items():
         at.setdefault(key(x), []).append(i)
     stale_loc = {key(x) for x in allf} - set(at)   # labels for stale findings stay in the file but do not count
+    stale_ids = {finding_id(x) for x in allf} - set(by_id)   # the same, for labels that carry an id
     problems, labelled, matched = [], Counter(), {}
     if bad := sorted({x.get("label") for x in labels} - set(LABELS), key=str):
         problems.append(f"unknown labels {bad} (allowed: {', '.join(LABELS)})")
     for x in labels:
-        if x["repo"] not in current or (not x.get("id") and key(x) in stale_loc):
+        if x["repo"] not in current or x.get("id") in stale_ids or (not x.get("id") and key(x) in stale_loc):
             continue
         ids = [x["id"]] if x.get("id") else at.get(key(x), [])
         if len(ids) != 1 or ids[0] not in by_id:
@@ -187,7 +196,11 @@ def main() -> int:
         return 2
     # sast.py reuses dist/rules.yaml: rebuild it so the sweep scans the rules as they are now
     subprocess.run([sys.executable, "-I", str(ROOT / "scripts" / "build_rules.py")], check=True, timeout=600)
-    digest = rules_digest()
+    try:
+        digest = rules_digest()
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 2
     allf, failed = [], []
     for c in corpus:
         if a.repos and c["repo"] not in a.repos:
