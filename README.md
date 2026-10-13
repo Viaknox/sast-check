@@ -43,6 +43,7 @@ Inline, on or above the line: `// sast-ignore[sast.js.code-eval]: <reason>` (no 
 This is the **only** inline suppression. The scanners' own comments (`# noqa`, `// nosemgrep`, `gitleaks:allow`,
 `# zizmor: ignore[...]`, `trivy:ignore`) are ignored, so every suppression has a written reason and shows up in the report.
 The marker counts only in a real comment: inside a string (`"# sast-ignore[...]"`) it does nothing.
+Secrets cannot be suppressed either way: remove the secret from the PR's commits and rotate it.
 A misspelled `block_on` severity is a settings error (the check fails) rather than a gate that never blocks.
 All keys and defaults: [config/default.toml](config/default.toml).
 

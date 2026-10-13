@@ -78,3 +78,11 @@ app.get('/eval-header', (req, res) => {
   eval(req.get('x-code'));
   res.end();
 });
+
+// expression-bodied handlers with a renamed request parameter
+// ruleid: sast.js.code-eval
+app.get('/expr', (r, res) => res.send(String(eval(r.query.code))));
+// ruleid: sast.js.code-eval
+app.post('/expr-async', async (r, res) => res.json(new Function(r.body.src)()));
+// ok: sast.js.code-eval
+app.get('/expr-ok', (r, res) => res.send(String(eval('6 * 7'))));

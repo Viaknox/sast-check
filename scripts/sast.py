@@ -450,6 +450,22 @@ def script_kind(path: Path) -> str | None:
 SCAN_AS = {".mts": ".ts", ".cts": ".ts"}
 
 
+def special_name_files(ctx: Ctx) -> list[str]:
+    """Full scans: tracked and untracked files a recursive scan of "." skips by name (.mts/.cts, extensionless
+    node/python scripts such as bin/tool), so they are passed explicitly. Diff scans already list each file."""
+    if ctx.mode == "diff":
+        return []
+    excl = ctx.cfg["paths"]["exclude"]
+    out = []
+    for f in git_z(ctx.repo, ["ls-files", "-z"]) + untracked_files(ctx.repo):
+        p = ctx.repo / f
+        if glob_any(f, excl) or p.is_symlink() or not p.is_file():
+            continue
+        if Path(f).suffix in SCAN_AS or script_kind(p):
+            out.append(f)
+    return sorted(set(out))
+
+
 def run_opengrep(ctx: Ctx) -> list[Finding]:
     engine = shutil.which("opengrep") or shutil.which("semgrep")
     if not engine:
@@ -458,6 +474,7 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     if not rules.exists():
         sh([sys.executable, str(HERE / "build_rules.py")], ROOT)
     tg = targets(ctx)
+    tg += [f for f in special_name_files(ctx) if f not in tg]
     if not tg:
         return []
     # --disable-nosem: a PR's `// nosemgrep` comment must not hide a finding (only sast-ignore with a reason)
@@ -580,7 +597,8 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
         raise FileNotFoundError("ruff not installed")
     tg = targets(ctx, (".py", ".pyi", ".pyw", ".ipynb"))
     # an extensionless script with a python shebang is Python too (Ruff lints any file it is given)
-    tg += [f for f in targets(ctx) if f != "." and f not in tg and script_kind(ctx.repo / f) == "python"]
+    tg += [f for f in targets(ctx) + special_name_files(ctx)
+           if f != "." and f not in tg and script_kind(ctx.repo / f) == "python"]
     if not tg:
         return []
     # --ignore-noqa: a PR's noqa comments must not hide a finding (only sast-ignore with a reason)
@@ -1174,7 +1192,10 @@ def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] | froz
                          or id(f) in new_by_base or (f.tool, f.rule, f.path, f.line) in ctx.new_keys)
         elif ctx.mode == "diff" and f.kind == "dependency":
             f.in_diff = f.path in ctx.changed_files
-        f.suppressed = inline_suppression(ctx.repo, f) or config_suppression(ctx.cfg, f, today)
+        # a leaked secret always blocks: neither a sast-ignore comment nor an [[ignore]] entry can waive it
+        # (the fix is to remove and rotate the secret, not to ignore it)
+        f.suppressed = "" if f.kind == "secret" else (
+            inline_suppression(ctx.repo, f) or config_suppression(ctx.cfg, f, today))
         f.blocking = (
             f.severity in block_on and f.in_diff and not f.suppressed
             and (f.confidence != "low" or pol.get("low_confidence_blocks", False))

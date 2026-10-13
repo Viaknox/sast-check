@@ -63,3 +63,7 @@ app.get('/quote', (req, res) => {
   exec('ls ' + shq.quote(req.query.dir));
   res.end();
 });
+
+// expression-bodied handler with a renamed request parameter
+// ruleid: sast.js.command-injection
+app.get('/expr', (r, res) => res.send(execSync('ping ' + r.query.host)));

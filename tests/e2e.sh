@@ -885,6 +885,32 @@ set +e; env PATH=/usr/bin:/bin python3 -I "$HERE/scripts/sast.py" --mode diff --
 check "missing scanner: skipped, not a baseline error"   "$(q "[(r['name'], r['status']) for r in d['runs']]")" "[('ruff', 'skipped')]"
 git checkout -q main
 
+# r21: a secret always blocks; neither an inline sast-ignore nor a base [[ignore]] entry can waive it
+git checkout -q -b r21s main
+printf '[[ignore]]\nrule = "*"\npath = "src/sec21/**"\nreason = "wildcard ignore"\n' > .sast-check.toml
+git add .sast-check.toml && git commit -qm r21base
+mkdir -p src/sec21
+printf '# sast-ignore[secret.aws-access-token]: test key\nK21 = "AKIAIOSFODNN7ABCDEFJ"\n' > src/r21.py
+echo 'K22 = "AKIAIOSFODNN7ABCDEFK"' > src/sec21/k.py
+git add src/r21.py src/sec21/k.py && git commit -qm r21
+gate --mode diff --base HEAD~1 --only gitleaks
+check "inline sast-ignore cannot waive a secret"         "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/r21.py')")" "1"
+check "base [[ignore]] cannot waive a secret"            "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/sec21/k.py')")" "1"
+git checkout -q main
+
+# r21: full scans also find .mts files and extensionless node/python scripts (a recursive scan skips them)
+git checkout -q -b r21f main
+mkdir -p bin
+printf '#!/usr/bin/env python3\neval(input())\n' > bin/pytool21
+printf '#!/usr/bin/env node\napp.get("/t", (req, res) => { eval(req.query.t); });\n' > bin/nodetool21
+printf "app.get('/m', (req, res) => { eval(req.query.m); });\n" > src/m21.mts
+git add bin src/m21.mts && git commit -qm r21f
+gate --mode full --only opengrep,ruff
+check "full scope: extensionless python script is scanned" "$(q "sum(1 for f in d['findings'] if f['tool']=='ruff' and f['path']=='bin/pytool21')")" "1"
+check "full scope: extensionless node script is scanned"   "$(q "sum(1 for f in d['findings'] if f['tool']=='opengrep' and f['path']=='bin/nodetool21')")" "1"
+check "full scope: .mts file is scanned"                   "$(q "sum(1 for f in d['findings'] if f['tool']=='opengrep' and f['path']=='src/m21.mts')")" "1"
+git checkout -q main
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks
