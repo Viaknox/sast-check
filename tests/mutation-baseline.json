@@ -47,35 +47,35 @@
   "element": "metavariable-regex:\n  metavariable: $VM\n  regex: ^(vm|node_vm)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@205be85b": {
+ "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@243a28f5": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@3b9d80d1": {
+ "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@4c5a75a1": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@407b05ca": {
+ "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@7e988f25": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@532a988e": {
+ "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@8f82eafc": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@5d6d6e85": {
+ "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@a2405152": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@8098b79e": {
+ "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@ad5bccbf": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@ef08d9f4": {
+ "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@bcb800ff": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@f24b9335": {
+ "sast.js.code-eval:.pattern-sinks.patterns:59514ec2@f4d25039": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -279,19 +279,19 @@
   "element": "focus-metavariable: $ARGS",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.command-injection:.pattern-sinks.patterns:59514ec2@8b08b34d": {
+ "sast.js.command-injection:.pattern-sinks.patterns:59514ec2@c6c32d90": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.command-injection:.pattern-sinks.patterns:59514ec2@fc398aac": {
+ "sast.js.command-injection:.pattern-sinks.patterns:59514ec2@f67fdedc": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.command-injection:.pattern-sinks.patterns:c57625ca@47a75d3c": {
+ "sast.js.command-injection:.pattern-sinks.patterns:c57625ca@287ee721": {
   "element": "metavariable-regex:\n  metavariable: $F\n  regex: (^|\\.)(spawn|spawnSync|execFile|execFileSync)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.command-injection:.pattern-sinks.patterns:c57625ca@fc398aac": {
+ "sast.js.command-injection:.pattern-sinks.patterns:c57625ca@c6c32d90": {
   "element": "metavariable-regex:\n  metavariable: $F\n  regex: (^|\\.)(spawn|spawnSync|execFile|execFileSync)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -479,23 +479,23 @@
   "element": "pattern: escapeHtml(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.dom-xss-sink:.pattern-sinks.patterns:59514ec2@847e8630": {
+ "sast.js.dom-xss-sink:.pattern-sinks.patterns:59514ec2@06062eb7": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.dom-xss-sink:.pattern-sinks.patterns:59514ec2@8632296c": {
+ "sast.js.dom-xss-sink:.pattern-sinks.patterns:59514ec2@26ad98f3": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.dom-xss-sink:.pattern-sinks.patterns:59514ec2@ac3c9f3f": {
+ "sast.js.dom-xss-sink:.pattern-sinks.patterns:59514ec2@2d6c6385": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.dom-xss-sink:.pattern-sinks.patterns:59514ec2@c1769a62": {
+ "sast.js.dom-xss-sink:.pattern-sinks.patterns:59514ec2@2e843bf2": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.dom-xss-sink:.pattern-sinks.patterns:59514ec2@e4612dc7": {
+ "sast.js.dom-xss-sink:.pattern-sinks.patterns:59514ec2@c8a0af95": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -603,19 +603,19 @@
   "element": "pattern: '$V = { ..., nodeIntegration: true, ... }\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@4cd43c9c": {
+ "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@304672fb": {
   "element": "pattern-inside: '$V = { ... };\n\n  ...\n\n  <... new $W({ ..., webPreferences: $V, ... }) ...>;\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@c78a8bec": {
+ "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@4fe15347": {
   "element": "pattern-inside: '$V = { ... };\n\n  ...\n\n  <... new $W({ ..., webPreferences: $V, ... }) ...>;\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@cc5eff96": {
+ "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@b1c9a22a": {
   "element": "pattern-inside: '$V = { ... };\n\n  ...\n\n  <... new $W({ ..., webPreferences: $V, ... }) ...>;\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@fdf2b516": {
+ "sast.js.electron-node-integration:.pattern-either.patterns:e637ddf5@cde71d98": {
   "element": "pattern-inside: '$V = { ... };\n\n  ...\n\n  <... new $W({ ..., webPreferences: $V, ... }) ...>;\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -735,15 +735,15 @@
   "element": "pattern: Number(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.express-render-ssti:.pattern-sinks.patterns:35379f2a@03d51cd9": {
+ "sast.js.express-render-ssti:.pattern-sinks.patterns:35379f2a@625497f7": {
   "element": "metavariable-regex:\n  metavariable: $R\n  regex: ^(res|response|reply|ctx|resp)(\\.(status|type|set|header|code|vary|cookie)\\([^()]*\\))*$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.express-render-ssti:.pattern-sinks.patterns:35379f2a@d2479325": {
+ "sast.js.express-render-ssti:.pattern-sinks.patterns:35379f2a@cee7bead": {
   "element": "metavariable-regex:\n  metavariable: $R\n  regex: ^(res|response|reply|ctx|resp)(\\.(status|type|set|header|code|vary|cookie)\\([^()]*\\))*$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.express-render-ssti:.pattern-sinks.patterns:59514ec2@d2d25039": {
+ "sast.js.express-render-ssti:.pattern-sinks.patterns:59514ec2@cc406052": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -1183,71 +1183,71 @@
   "element": "pattern-either:\n- pattern-inside: '$W.addEventListener(\"message\", function($E) { ... })\n\n    '\n- pattern-inside: '$W.addEventListener(\"message\", ($E) => { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:024d89a2@0ae27762": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:024d89a2@86eb7898": {
   "element": "pattern-not-inside: \"function $F(...) {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n\\\n  \\  ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:024d89a2@5ab851d8": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:024d89a2@97bbde6e": {
   "element": "pattern-not-inside: \"function $F(...) {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n\\\n  \\  ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:024d89a2@ab0619f9": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:024d89a2@bcafb54f": {
   "element": "pattern-not-inside: \"function $F(...) {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n\\\n  \\  ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:0371d828@21ef8dad": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:0371d828@2e36954b": {
   "element": "pattern-not-inside: 'const $X = <... verify($TOK, ...) ...>;\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:0371d828@c9613230": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:0371d828@8b1ab7bf": {
   "element": "pattern-not-inside: 'const $X = <... verify($TOK, ...) ...>;\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:06028936@21ef8dad": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:06028936@2e36954b": {
   "element": "pattern-not-inside: \"function (...) {\\n  ...\\n  <... verify($TOK, ...) ...>\\n  ...\\n\\\n  }\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:06028936@c9613230": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:06028936@8b1ab7bf": {
   "element": "pattern-not-inside: \"function (...) {\\n  ...\\n  <... verify($TOK, ...) ...>\\n  ...\\n\\\n  }\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:0fbac18d@0ae27762": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:0fbac18d@86eb7898": {
   "element": "pattern-not-inside: 'const $X = <... $J.verify($TOK, ...) ...>;\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:0fbac18d@5ab851d8": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:0fbac18d@97bbde6e": {
   "element": "pattern-not-inside: 'const $X = <... $J.verify($TOK, ...) ...>;\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:0fbac18d@ab0619f9": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:0fbac18d@bcafb54f": {
   "element": "pattern-not-inside: 'const $X = <... $J.verify($TOK, ...) ...>;\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:18e4ada8@21ef8dad": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:18e4ada8@2e36954b": {
   "element": "pattern-not-inside: \"function $F(...) {\\n  ...\\n  <... verify($TOK, ...) ...>\\n  ...\\n\\\n  }\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:18e4ada8@c9613230": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:18e4ada8@8b1ab7bf": {
   "element": "pattern-not-inside: \"function $F(...) {\\n  ...\\n  <... verify($TOK, ...) ...>\\n  ...\\n\\\n  }\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:1bc475a5@806b475c": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:1bc475a5@6bb5bf2d": {
   "element": "pattern: '$J.verify($T, $K, {..., algorithms: [..., \"none\", ...], ...}, ...)\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:1bc475a5@9268b8fe": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:1bc475a5@ae796c9f": {
   "element": "pattern: '$J.verify($T, $K, {..., algorithms: [..., \"none\", ...], ...}, ...)\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:1be4a6d7@ab0619f9": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:1be4a6d7@3a2f4cb3": {
   "element": "pattern-inside: 'import $J from \"jsonwebtoken\";\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:1be4a6d7@ca2e6322": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:1be4a6d7@bcafb54f": {
   "element": "pattern-inside: 'import $J from \"jsonwebtoken\";\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:28b60d31@5abb3b47": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:28b60d31@17a03a0b": {
   "element": "pattern: 'verify($T, $K, {..., algorithms: [..., \"none\", ...], ...}, ...)\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -1255,59 +1255,59 @@
   "element": "pattern-inside: 'const { ..., verify, ... } = require(\"jsonwebtoken\");\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:32c9b8fa@0ae27762": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:32c9b8fa@86eb7898": {
   "element": "pattern-not-inside: '<... $J.verify($TOK, ...) ...>;\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:32c9b8fa@5ab851d8": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:32c9b8fa@97bbde6e": {
   "element": "pattern-not-inside: '<... $J.verify($TOK, ...) ...>;\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:32c9b8fa@ab0619f9": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:32c9b8fa@bcafb54f": {
   "element": "pattern-not-inside: '<... $J.verify($TOK, ...) ...>;\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:38d9644c@21ef8dad": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:38d9644c@2e36954b": {
   "element": "pattern-not-inside: \"(...) => {\\n  ...\\n  <... verify($TOK, ...) ...>\\n  ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:38d9644c@c9613230": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:38d9644c@8b1ab7bf": {
   "element": "pattern-not-inside: \"(...) => {\\n  ...\\n  <... verify($TOK, ...) ...>\\n  ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:5098fefc@0ae27762": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:5098fefc@86eb7898": {
   "element": "pattern-not-inside: \"(...) => {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n  ...\\n\\\n  }\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:5098fefc@5ab851d8": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:5098fefc@97bbde6e": {
   "element": "pattern-not-inside: \"(...) => {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n  ...\\n\\\n  }\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:5098fefc@ab0619f9": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:5098fefc@bcafb54f": {
   "element": "pattern-not-inside: \"(...) => {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n  ...\\n\\\n  }\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:525db994@21ef8dad": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:525db994@2e36954b": {
   "element": "pattern-not-inside: \"async function $F(...) {\\n  ...\\n  <... verify($TOK, ...) ...>\\n\\\n  \\  ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:525db994@c9613230": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:525db994@8b1ab7bf": {
   "element": "pattern-not-inside: \"async function $F(...) {\\n  ...\\n  <... verify($TOK, ...) ...>\\n\\\n  \\  ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:554ebc6f@0ae27762": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:554ebc6f@86eb7898": {
   "element": "pattern: $J.decode($TOK, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:554ebc6f@5ab851d8": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:554ebc6f@97bbde6e": {
   "element": "pattern: $J.decode($TOK, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:859a4d6f@21ef8dad": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:859a4d6f@2e36954b": {
   "element": "pattern-not-inside: '<... verify($TOK, ...) ...>;\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:859a4d6f@c9613230": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:859a4d6f@8b1ab7bf": {
   "element": "pattern-not-inside: '<... verify($TOK, ...) ...>;\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -1315,23 +1315,23 @@
   "element": "pattern-inside: 'const { ..., decode, ... } = require(\"jsonwebtoken\");\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:96df5726@0ae27762": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:96df5726@6bb5bf2d": {
   "element": "pattern-inside: 'const $J = require(\"jsonwebtoken\");\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:96df5726@9268b8fe": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:96df5726@97bbde6e": {
   "element": "pattern-inside: 'const $J = require(\"jsonwebtoken\");\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:9bd82612@0ae27762": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:9bd82612@86eb7898": {
   "element": "pattern-not-inside: \"function (...) {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n \\\n  \\ ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:9bd82612@5ab851d8": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:9bd82612@97bbde6e": {
   "element": "pattern-not-inside: \"function (...) {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n \\\n  \\ ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:9bd82612@ab0619f9": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:9bd82612@bcafb54f": {
   "element": "pattern-not-inside: \"function (...) {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n \\\n  \\ ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -1339,19 +1339,19 @@
   "element": "pattern-inside: 'import { ..., verify, ... } from \"jsonwebtoken\";\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:aec9967d@21ef8dad": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:aec9967d@2e36954b": {
   "element": "pattern-not-inside: \"async (...) => {\\n  ...\\n  <... verify($TOK, ...) ...>\\n  ...\\n\\\n  }\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:aec9967d@c9613230": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:aec9967d@8b1ab7bf": {
   "element": "pattern-not-inside: \"async (...) => {\\n  ...\\n  <... verify($TOK, ...) ...>\\n  ...\\n\\\n  }\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:c27a4b3e@5ab851d8": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:c27a4b3e@86eb7898": {
   "element": "pattern-inside: 'import * as $J from \"jsonwebtoken\";\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:c27a4b3e@806b475c": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:c27a4b3e@ae796c9f": {
   "element": "pattern-inside: 'import * as $J from \"jsonwebtoken\";\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -1359,31 +1359,31 @@
   "element": "pattern-inside: 'import { ..., decode, ... } from \"jsonwebtoken\";\n\n  ...\n\n  '",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:e9fc1ce2@0ae27762": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:e9fc1ce2@86eb7898": {
   "element": "pattern-not-inside: \"async function $F(...) {\\n  ...\\n  <... $J.verify($TOK, ...)\\\n  \\ ...>\\n  ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:e9fc1ce2@5ab851d8": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:e9fc1ce2@97bbde6e": {
   "element": "pattern-not-inside: \"async function $F(...) {\\n  ...\\n  <... $J.verify($TOK, ...)\\\n  \\ ...>\\n  ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:e9fc1ce2@ab0619f9": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:e9fc1ce2@bcafb54f": {
   "element": "pattern-not-inside: \"async function $F(...) {\\n  ...\\n  <... $J.verify($TOK, ...)\\\n  \\ ...>\\n  ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:fc36da67@0ae27762": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:fc36da67@86eb7898": {
   "element": "pattern-not-inside: \"async (...) => {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n \\\n  \\ ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:fc36da67@5ab851d8": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:fc36da67@97bbde6e": {
   "element": "pattern-not-inside: \"async (...) => {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n \\\n  \\ ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:fc36da67@ab0619f9": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:fc36da67@bcafb54f": {
   "element": "pattern-not-inside: \"async (...) => {\\n  ...\\n  <... $J.verify($TOK, ...) ...>\\n \\\n  \\ ...\\n}\\n\"",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:fda80005@c9613230": {
+ "sast.js.jwt-decode-unverified:.patterns.pattern-either.patterns:fda80005@8b1ab7bf": {
   "element": "pattern: decode($TOK, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -1415,11 +1415,11 @@
   "element": "patterns:\n- pattern: decode($TOK, ...)\n- pattern-inside: 'const { ..., decode, ... } = require(\"jsonwebtoken\");\n\n    ...\n\n    '\n- pattern-not-inside: \"function ",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-verify-error-swallowed:.patterns.pattern-either.patterns:2f3ccff8@0cf5ceba": {
+ "sast.js.jwt-verify-error-swallowed:.patterns.pattern-either.patterns:2f3ccff8@e84f5b06": {
   "element": "pattern-not-inside: $J.verify($TOK, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.jwt-verify-error-swallowed:.patterns.pattern-either.patterns:554ebc6f@0cf5ceba": {
+ "sast.js.jwt-verify-error-swallowed:.patterns.pattern-either.patterns:554ebc6f@e84f5b06": {
   "element": "pattern: $J.decode($TOK, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -1451,11 +1451,11 @@
   "element": "focus-metavariable: $DN",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.ldap-dn-injection:.pattern-sinks.patterns:e1423444@5211887f": {
+ "sast.js.ldap-dn-injection:.pattern-sinks.patterns:e1423444@0d003fa2": {
   "element": "metavariable-regex:\n  metavariable: $C\n  regex: (?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.ldap-dn-injection:.pattern-sinks.patterns:e1423444@5cc2a6d6": {
+ "sast.js.ldap-dn-injection:.pattern-sinks.patterns:e1423444@f1b99ce1": {
   "element": "metavariable-regex:\n  metavariable: $C\n  regex: (?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -1655,11 +1655,11 @@
   "element": "pattern: ldapEscape.filter(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.ldap-injection:.pattern-sinks.patterns:59514ec2@1a623037": {
+ "sast.js.ldap-injection:.pattern-sinks.patterns:59514ec2@61e04ff8": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.ldap-injection:.pattern-sinks.patterns:59514ec2@3623ab16": {
+ "sast.js.ldap-injection:.pattern-sinks.patterns:59514ec2@9c955aa5": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -1923,11 +1923,11 @@
   "element": "pattern: window.open($X, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.location-xss:.pattern-sinks.patterns:59514ec2@ee4cd83f": {
+ "sast.js.location-xss:.pattern-sinks.patterns:59514ec2@40417305": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.location-xss:.pattern-sinks.patterns:59514ec2@ef946d1a": {
+ "sast.js.location-xss:.pattern-sinks.patterns:59514ec2@e48ce32c": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -1999,15 +1999,15 @@
   "element": "pattern: Boolean(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.nosql-injection:.pattern-sinks.patterns:0a4e6a58@3df15998": {
+ "sast.js.nosql-injection:.pattern-sinks.patterns:0a4e6a58@f6cc983c": {
   "element": "metavariable-regex:\n  metavariable: $FN\n  regex: ^(find|findOne|findOneAndUpdate|findOneAndDelete|findOneAndReplace|updateOne|updateMany|deleteOne|deleteMany|co",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.nosql-injection:.pattern-sinks.patterns:59514ec2@3df15998": {
+ "sast.js.nosql-injection:.pattern-sinks.patterns:59514ec2@b79f063f": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.nosql-injection:.pattern-sinks.patterns:59514ec2@f821b1e6": {
+ "sast.js.nosql-injection:.pattern-sinks.patterns:59514ec2@f6cc983c": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -2143,51 +2143,51 @@
   "element": "metavariable-regex:\n  metavariable: $K\n  regex: (?i)^[\"'`]?location[\"'`]?$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@1af44891": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@55c5a417": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@2b4c5831": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@58fa4f1b": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@54f48f31": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@7c6c50e8": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@54fb3a41": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@a2e9b1cc": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@a2018923": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@d99c16dd": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@bf03a47e": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@df569e12": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@c5bcef61": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:59514ec2@fa9d4d6c": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:9e0aacdc@1af44891": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:9e0aacdc@58fa4f1b": {
   "element": "metavariable-regex:\n  metavariable: $R\n  regex: ^(res|response|reply|ctx|resp|h|c|context)(\\.(status|type|set|header|code|vary|cookie)\\([^()]*\\))*$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:9e0aacdc@2b4c5831": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:9e0aacdc@7c6c50e8": {
   "element": "metavariable-regex:\n  metavariable: $R\n  regex: ^(res|response|reply|ctx|resp|h|c|context)(\\.(status|type|set|header|code|vary|cookie)\\([^()]*\\))*$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:9e0aacdc@54f48f31": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:9e0aacdc@a2e9b1cc": {
   "element": "metavariable-regex:\n  metavariable: $R\n  regex: ^(res|response|reply|ctx|resp|h|c|context)(\\.(status|type|set|header|code|vary|cookie)\\([^()]*\\))*$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:9e0aacdc@a2018923": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:9e0aacdc@df569e12": {
   "element": "metavariable-regex:\n  metavariable: $R\n  regex: ^(res|response|reply|ctx|resp|h|c|context)(\\.(status|type|set|header|code|vary|cookie)\\([^()]*\\))*$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.open-redirect:.pattern-sinks.patterns:9e0aacdc@c5bcef61": {
+ "sast.js.open-redirect:.pattern-sinks.patterns:9e0aacdc@fa9d4d6c": {
   "element": "metavariable-regex:\n  metavariable: $R\n  regex: ^(res|response|reply|ctx|resp|h|c|context)(\\.(status|type|set|header|code|vary|cookie)\\([^()]*\\))*$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -2387,15 +2387,15 @@
   "element": "metavariable-regex:\n  metavariable: $FS\n  regex: ^(fs|fsp|fsPromises|promises|fs\\.promises|fse|fsExtra)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.path-traversal:.pattern-sinks.patterns:c89b3d66@92786e54": {
+ "sast.js.path-traversal:.pattern-sinks.patterns:c89b3d66@3186498c": {
   "element": "focus-metavariable: $P",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.path-traversal:.pattern-sinks.patterns:c89b3d66@eb980ba4": {
+ "sast.js.path-traversal:.pattern-sinks.patterns:c89b3d66@814442c9": {
   "element": "focus-metavariable: $P",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.path-traversal:.pattern-sinks.patterns:c89b3d66@ec19ccc0": {
+ "sast.js.path-traversal:.pattern-sinks.patterns:c89b3d66@dd7e4004": {
   "element": "focus-metavariable: $P",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -2599,31 +2599,31 @@
   "element": "pattern-inside: for ($LV of $LI) { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:0908353f@0f432b6c": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:0908353f@6e448b7e": {
   "element": "focus-metavariable: $A",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:0908353f@af3a9552": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:0908353f@bf9f2449": {
   "element": "focus-metavariable: $A",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:203b92b9@26544d73": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:203b92b9@1acfa117": {
   "element": "focus-metavariable: $SRC",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:203b92b9@28fbe787": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:203b92b9@4c0aad94": {
   "element": "focus-metavariable: $SRC",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:203b92b9@3eb67dfd": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:203b92b9@5324f81d": {
   "element": "focus-metavariable: $SRC",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:203b92b9@6372f5a5": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:203b92b9@aaa67f63": {
   "element": "focus-metavariable: $SRC",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:203b92b9@ba8f72ae": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:203b92b9@e31792f6": {
   "element": "focus-metavariable: $SRC",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -2635,7 +2635,7 @@
   "element": "focus-metavariable: $K1",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:c89b3d66@01eb9901": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:c89b3d66@74bc5ab4": {
   "element": "focus-metavariable: $P",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -2643,15 +2643,15 @@
   "element": "metavariable-regex:\n  metavariable: $JQ\n  regex: ^(\\$|jQuery)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:db4c62ef@01eb9901": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:db4c62ef@1acfa117": {
   "element": "metavariable-regex:\n  metavariable: $L\n  regex: ^(_|lodash|lo)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:db4c62ef@ba8f72ae": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:db4c62ef@74bc5ab4": {
   "element": "metavariable-regex:\n  metavariable: $L\n  regex: ^(_|lodash|lo)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.prototype-pollution:.pattern-sinks.patterns:db4c62ef@f66ba202": {
+ "sast.js.prototype-pollution:.pattern-sinks.patterns:db4c62ef@c70a0381": {
   "element": "metavariable-regex:\n  metavariable: $L\n  regex: ^(_|lodash|lo)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -2799,15 +2799,15 @@
   "element": "pattern: (await $B.newPage()).goto($X, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@5090d34f": {
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@5990003e": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@64ff8204": {
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@5b0bfa2f": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@dc4b01a9": {
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@b0a50193": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -3283,23 +3283,23 @@
   "element": "metavariable-regex:\n  metavariable: $R\n  regex: ^(http|https)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.ssrf:.pattern-sinks.patterns:b6b7dc3a@271d4cbe": {
+ "sast.js.ssrf:.pattern-sinks.patterns:b6b7dc3a@749d123d": {
   "element": "focus-metavariable: $U",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.ssrf:.pattern-sinks.patterns:b6b7dc3a@34b4e080": {
+ "sast.js.ssrf:.pattern-sinks.patterns:b6b7dc3a@887f6b73": {
   "element": "focus-metavariable: $U",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.ssrf:.pattern-sinks.patterns:b6b7dc3a@3ea73926": {
+ "sast.js.ssrf:.pattern-sinks.patterns:b6b7dc3a@8901f09d": {
   "element": "focus-metavariable: $U",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.ssrf:.pattern-sinks.patterns:b6b7dc3a@78f35d1e": {
+ "sast.js.ssrf:.pattern-sinks.patterns:b6b7dc3a@9a08c4f2": {
   "element": "focus-metavariable: $U",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.ssrf:.pattern-sinks.patterns:b6b7dc3a@99c080b0": {
+ "sast.js.ssrf:.pattern-sinks.patterns:b6b7dc3a@dddfb82a": {
   "element": "focus-metavariable: $U",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -3507,331 +3507,331 @@
   "element": "pattern: location.hash",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@18cd27c5": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@604031b7": {
   "element": "pattern: $A !== $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@18cd27c5#10": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@60d46d43": {
   "element": "pattern: $A !== $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@18cd27c5#2": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@773f8ac7": {
   "element": "pattern: $A !== $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@18cd27c5#3": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@8efa8107": {
   "element": "pattern: $A !== $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@18cd27c5#4": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@9c7e88c5": {
   "element": "pattern: $A !== $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@18cd27c5#5": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@a83b7819": {
   "element": "pattern: $A !== $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@18cd27c5#6": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@b69fa24d": {
   "element": "pattern: $A !== $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@18cd27c5#7": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@dd1a1c30": {
   "element": "pattern: $A !== $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@18cd27c5#8": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@e712e8d8": {
   "element": "pattern: $A !== $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@18cd27c5#9": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:1a5ea2a4@f6b882b7": {
   "element": "pattern: $A !== $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@18cd27c5": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@604031b7": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@18cd27c5#10": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@60d46d43": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@18cd27c5#2": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@773f8ac7": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@18cd27c5#3": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@8efa8107": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@18cd27c5#4": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@9c7e88c5": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@18cd27c5#5": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@a83b7819": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@18cd27c5#6": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@b69fa24d": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@18cd27c5#7": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@dd1a1c30": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@18cd27c5#8": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@e712e8d8": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@18cd27c5#9": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:7ebf487e@f6b882b7": {
   "element": "pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@18cd27c5": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@604031b7": {
   "element": "pattern: $A == $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@18cd27c5#10": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@60d46d43": {
   "element": "pattern: $A == $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@18cd27c5#2": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@773f8ac7": {
   "element": "pattern: $A == $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@18cd27c5#3": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@8efa8107": {
   "element": "pattern: $A == $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@18cd27c5#4": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@9c7e88c5": {
   "element": "pattern: $A == $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@18cd27c5#5": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@a83b7819": {
   "element": "pattern: $A == $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@18cd27c5#6": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@b69fa24d": {
   "element": "pattern: $A == $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@18cd27c5#7": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@dd1a1c30": {
   "element": "pattern: $A == $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@18cd27c5#8": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@e712e8d8": {
   "element": "pattern: $A == $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@18cd27c5#9": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:e38e85d7@f6b882b7": {
   "element": "pattern: $A == $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@18cd27c5": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@604031b7": {
   "element": "pattern: $A === $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@18cd27c5#10": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@60d46d43": {
   "element": "pattern: $A === $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@18cd27c5#2": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@773f8ac7": {
   "element": "pattern: $A === $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@18cd27c5#3": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@8efa8107": {
   "element": "pattern: $A === $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@18cd27c5#4": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@9c7e88c5": {
   "element": "pattern: $A === $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@18cd27c5#5": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@a83b7819": {
   "element": "pattern: $A === $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@18cd27c5#6": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@b69fa24d": {
   "element": "pattern: $A === $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@18cd27c5#7": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@dd1a1c30": {
   "element": "pattern: $A === $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@18cd27c5#8": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@e712e8d8": {
   "element": "pattern: $A === $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@18cd27c5#9": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns.pattern-either:f34c582b@f6b882b7": {
   "element": "pattern: $A === $B",
   "why": "YAML alias copy (anchors &id001-&id003 are reused in every branch): each branch repeats the same comparison/name checks, so deleting one copy changes nothing while another branch still matches; counted once per copy since the tool stopped sharing alias objects"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:0e18a4cc@7ae26cee": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:0e18a4cc@19a5e8ad": {
   "element": "pattern-inside: async function $F(..., $REQ, ...) { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:0e18a4cc@a9e16b36": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:0e18a4cc@c7225853": {
   "element": "pattern-inside: async function $F(..., $REQ, ...) { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@3cfd9082": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@19a5e8ad": {
   "element": "pattern-either:\n- pattern: $A === $B\n- pattern: $A == $B\n- pattern: $A !== $B\n- pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@7a8fe8e9": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@5d887fab": {
   "element": "pattern-either:\n- pattern: $A === $B\n- pattern: $A == $B\n- pattern: $A !== $B\n- pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@7ae26cee": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@83369cca": {
   "element": "pattern-either:\n- pattern: $A === $B\n- pattern: $A == $B\n- pattern: $A !== $B\n- pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@a9e16b36": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@b186a274": {
   "element": "pattern-either:\n- pattern: $A === $B\n- pattern: $A == $B\n- pattern: $A !== $B\n- pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@b24a063f": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@c1891225": {
   "element": "pattern-either:\n- pattern: $A === $B\n- pattern: $A == $B\n- pattern: $A !== $B\n- pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@bc2fc5b0": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@c67abaad": {
   "element": "pattern-either:\n- pattern: $A === $B\n- pattern: $A == $B\n- pattern: $A !== $B\n- pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@d0838ea1": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@c7225853": {
   "element": "pattern-either:\n- pattern: $A === $B\n- pattern: $A == $B\n- pattern: $A !== $B\n- pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@dc233434": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:18cd27c5@cf6c9d4b": {
   "element": "pattern-either:\n- pattern: $A === $B\n- pattern: $A == $B\n- pattern: $A !== $B\n- pattern: $A != $B",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:26457d83@3cfd9082": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:26457d83@c1891225": {
   "element": "pattern-inside: async (..., $REQ, ...) => { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:26457d83@dc233434": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:26457d83@c67abaad": {
   "element": "pattern-inside: async (..., $REQ, ...) => { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:2ae02279@3cfd9082": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:2ae02279@5d887fab": {
   "element": "metavariable-regex:\n  metavariable: $A\n  regex: (?is)^(?![\\'\"`\\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|t",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:2ae02279@7a8fe8e9": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:2ae02279@83369cca": {
   "element": "metavariable-regex:\n  metavariable: $A\n  regex: (?is)^(?![\\'\"`\\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|t",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:2ae02279@a9e16b36": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:2ae02279@a4beecfc": {
   "element": "metavariable-regex:\n  metavariable: $A\n  regex: (?is)^(?![\\'\"`\\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|t",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:2ae02279@bc2fc5b0": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:2ae02279@c67abaad": {
   "element": "metavariable-regex:\n  metavariable: $A\n  regex: (?is)^(?![\\'\"`\\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|t",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:2ae02279@e219ef18": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:2ae02279@c7225853": {
   "element": "metavariable-regex:\n  metavariable: $A\n  regex: (?is)^(?![\\'\"`\\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|t",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:30b0e102@3cfd9082": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:30b0e102@5d887fab": {
   "element": "metavariable-regex:\n  metavariable: $B\n  regex: (?s)^(?!(null|undefined|\"\"|''|``|true|false|-?\\d+(\\.\\d+)?)$)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:30b0e102@7a8fe8e9": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:30b0e102@83369cca": {
   "element": "metavariable-regex:\n  metavariable: $B\n  regex: (?s)^(?!(null|undefined|\"\"|''|``|true|false|-?\\d+(\\.\\d+)?)$)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:30b0e102@a9e16b36": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:30b0e102@a4beecfc": {
   "element": "metavariable-regex:\n  metavariable: $B\n  regex: (?s)^(?!(null|undefined|\"\"|''|``|true|false|-?\\d+(\\.\\d+)?)$)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:30b0e102@bc2fc5b0": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:30b0e102@c67abaad": {
   "element": "metavariable-regex:\n  metavariable: $B\n  regex: (?s)^(?!(null|undefined|\"\"|''|``|true|false|-?\\d+(\\.\\d+)?)$)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:30b0e102@e219ef18": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:30b0e102@c7225853": {
   "element": "metavariable-regex:\n  metavariable: $B\n  regex: (?s)^(?!(null|undefined|\"\"|''|``|true|false|-?\\d+(\\.\\d+)?)$)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:47095d23@7a8fe8e9": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:47095d23@5d887fab": {
   "element": "pattern-inside: (..., $REQ, ...) => { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:47095d23@d0838ea1": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:47095d23@b186a274": {
   "element": "pattern-inside: (..., $REQ, ...) => { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@3cfd9082": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@19a5e8ad": {
   "element": "metavariable-regex:\n  metavariable: $REQ\n  regex: ^(req|request|ctx)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@7a8fe8e9": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@5d887fab": {
   "element": "metavariable-regex:\n  metavariable: $REQ\n  regex: ^(req|request|ctx)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@7ae26cee": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@b186a274": {
   "element": "metavariable-regex:\n  metavariable: $REQ\n  regex: ^(req|request|ctx)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@a9e16b36": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@c1891225": {
   "element": "metavariable-regex:\n  metavariable: $REQ\n  regex: ^(req|request|ctx)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@d0838ea1": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@c67abaad": {
   "element": "metavariable-regex:\n  metavariable: $REQ\n  regex: ^(req|request|ctx)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@dc233434": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:b01cd156@c7225853": {
   "element": "metavariable-regex:\n  metavariable: $REQ\n  regex: ^(req|request|ctx)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:b6b08eef@b24a063f": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:b6b08eef@83369cca": {
   "element": "pattern-inside: function $F(..., $REQ, ...) { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:b6b08eef@bc2fc5b0": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:b6b08eef@cf6c9d4b": {
   "element": "pattern-inside: function $F(..., $REQ, ...) { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:be986b26@0aee5d20": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:be986b26@19a5e8ad": {
   "element": "metavariable-regex:\n  metavariable: $A\n  regex: (?s)^(?!(null|undefined|\"\"|''|``|true|false|-?\\d+(\\.\\d+)?)$)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:be986b26@7ae26cee": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:be986b26@b186a274": {
   "element": "metavariable-regex:\n  metavariable: $A\n  regex: (?s)^(?!(null|undefined|\"\"|''|``|true|false|-?\\d+(\\.\\d+)?)$)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:be986b26@b24a063f": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:be986b26@c1891225": {
   "element": "metavariable-regex:\n  metavariable: $A\n  regex: (?s)^(?!(null|undefined|\"\"|''|``|true|false|-?\\d+(\\.\\d+)?)$)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:be986b26@d0838ea1": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:be986b26@cf6c9d4b": {
   "element": "metavariable-regex:\n  metavariable: $A\n  regex: (?s)^(?!(null|undefined|\"\"|''|``|true|false|-?\\d+(\\.\\d+)?)$)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:be986b26@dc233434": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:be986b26@dcd9dfd9": {
   "element": "metavariable-regex:\n  metavariable: $A\n  regex: (?s)^(?!(null|undefined|\"\"|''|``|true|false|-?\\d+(\\.\\d+)?)$)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:f043674d@0aee5d20": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:f043674d@19a5e8ad": {
   "element": "metavariable-regex:\n  metavariable: $B\n  regex: (?is)^(?![\\'\"`\\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|t",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:f043674d@7ae26cee": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:f043674d@b186a274": {
   "element": "metavariable-regex:\n  metavariable: $B\n  regex: (?is)^(?![\\'\"`\\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|t",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:f043674d@b24a063f": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:f043674d@c1891225": {
   "element": "metavariable-regex:\n  metavariable: $B\n  regex: (?is)^(?![\\'\"`\\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|t",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:f043674d@d0838ea1": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:f043674d@cf6c9d4b": {
   "element": "metavariable-regex:\n  metavariable: $B\n  regex: (?is)^(?![\\'\"`\\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|t",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.timing-unsafe-compare:.pattern-either.patterns:f043674d@dc233434": {
+ "sast.js.timing-unsafe-compare:.pattern-either.patterns:f043674d@dcd9dfd9": {
   "element": "metavariable-regex:\n  metavariable: $B\n  regex: (?is)^(?![\\'\"`\\d])(?!.*(typeof|length|count|expir|type|kind|name|url|path|prefix))(?=.*(password|passwd|secret|t",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -4007,15 +4007,15 @@
   "element": "pattern: django.http.HttpResponse($X, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@4014364f": {
+ "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@7f4b49ad": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@926ab1ad": {
+ "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@aa050646": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@b39cf5d0": {
+ "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@e478306f": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -4199,11 +4199,11 @@
   "element": "metavariable-regex:\n  metavariable: $M\n  regex: ^(read_text|read_bytes|open)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.path-traversal:.pattern-sinks.patterns:c89b3d66@6efb964a": {
+ "sast.python.path-traversal:.pattern-sinks.patterns:c89b3d66@907395c3": {
   "element": "focus-metavariable: $P",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.path-traversal:.pattern-sinks.patterns:c89b3d66@fdb38ab4": {
+ "sast.python.path-traversal:.pattern-sinks.patterns:c89b3d66@fc24be75": {
   "element": "focus-metavariable: $P",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
@@ -4279,7 +4279,7 @@
   "element": "metavariable-regex:\n  metavariable: $M\n  regex: ^(get|post|put|delete|patch|head|options|stream)$",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.ssrf:.pattern-sinks.patterns:b6b7dc3a@f47ccb39": {
+ "sast.python.ssrf:.pattern-sinks.patterns:b6b7dc3a@88c3b4ad": {
   "element": "focus-metavariable: $U",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },

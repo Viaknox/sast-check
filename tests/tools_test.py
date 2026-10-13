@@ -51,8 +51,20 @@ class MutantIds(unittest.TestCase):
             {"patterns": [{"pattern": "g($X)"}, {"pattern-not": "f(1)"}]}]}]}
         before = {mid for mid, _, _ in rm.mutants(doc)}
         doc["rules"][0]["pattern-either"].insert(0, {"patterns": [{"pattern": "h($X)"}, {"pattern-not": "f(1)"}]})
+        doc["rules"][0]["pattern-either"].reverse()
         after = {mid for mid, _, _ in rm.mutants(doc)}
         self.assertTrue(before <= after, sorted(before - after))
+
+    def test_identical_inner_lists_in_different_outer_branches_keep_ids(self):
+        inner = {"pattern-either": [{"pattern": "a == b"}, {"pattern": "a != b"}]}
+        doc = {"rules": [{"id": "r", "pattern-either": [
+            {"patterns": [inner, {"pattern-inside": "def f(): ..."}]},
+            {"patterns": [inner, {"pattern-inside": "def g(): ..."}]}]}]}
+        before = {mid for mid, _, _ in rm.mutants(doc)}
+        doc["rules"][0]["pattern-either"].reverse()
+        after = {mid for mid, _, _ in rm.mutants(doc)}
+        self.assertEqual(before, after)
+        self.assertFalse(any("#" in m for m in before), sorted(before))
 
     def test_identical_elements_get_distinct_ids(self):
         doc = json.loads(json.dumps(RULE))
@@ -84,6 +96,16 @@ class EngineFailure(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             eng = Path(td) / "opengrep"
             eng.write_text("#!/bin/sh\nexit 3\n")
+            eng.chmod(eng.stat().st_mode | stat.S_IEXEC)
+            _, fails = rules_test.rule_failures(str(eng), rm.RULES / "js" / "code-eval.yaml")
+        self.assertTrue(fails and all(rules_test.ENGINE_FAILED in f for f in fails), fails)
+
+
+class EngineExit(unittest.TestCase):
+    def test_nonzero_exit_with_json_is_an_engine_failure(self):
+        with tempfile.TemporaryDirectory() as td:
+            eng = Path(td) / "opengrep"
+            eng.write_text('#!/bin/sh\necho \'{"results": [], "errors": []}\'\nexit 2\n')
             eng.chmod(eng.stat().st_mode | stat.S_IEXEC)
             _, fails = rules_test.rule_failures(str(eng), rm.RULES / "js" / "code-eval.yaml")
         self.assertTrue(fails and all(rules_test.ENGINE_FAILED in f for f in fails), fails)
@@ -136,6 +158,12 @@ class FpReport(unittest.TestCase):
         with self.assertRaises(ValueError):   # the same id twice and one finding left out
             fp_sweep.report(self.work, [ids[0], ids[0], ids[1]], self.corpus)
         self.assertEqual(fp_sweep.report(self.work, ids, self.corpus)["rules"]["r1"]["fp"], 3)
+
+    def test_a_label_with_another_findings_id_is_refused(self):
+        ids = [{**x, "id": fp_sweep.finding_id(x), "label": "fp"} for x in self.f]
+        swapped = [{**ids[0], "id": ids[1]["id"]}, {**ids[1], "id": ids[0]["id"]}]
+        with self.assertRaises(ValueError):
+            fp_sweep.report(self.work, swapped, self.corpus)
 
     def test_unknown_repo_filter_is_refused(self):
         argv = sys.argv

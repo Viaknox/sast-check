@@ -76,6 +76,8 @@ def rule_failures(engine: str, rule: Path, text: str | None = None) -> tuple[int
                  and "PartialParsing" not in str(e.get("type"))]
     if rule_errs:
         return len(rids), [f"{rule.relative_to(ROOT)}: engine error: {str(rule_errs[0].get('message'))[:200]}"] * len(rids)
+    if r.returncode != 0:   # JSON but a failed run (results may be incomplete): never a pass or a kill
+        return len(rids), [f"{rule.relative_to(ROOT)}: {ENGINE_FAILED}: exit {r.returncode}"] * len(rids)
     fails = []
     for rid in rids:
         got = {r["start"]["line"] for r in out.get("results", []) if r["check_id"].endswith(rid)}

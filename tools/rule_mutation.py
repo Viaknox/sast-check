@@ -55,8 +55,8 @@ def mutants(doc: dict) -> list[tuple[str, str, dict]]:
 
     The id is <rule id>:<keys from the rule root to the list>:<hash of the element>, with no list positions, so
     adding or reordering sibling branches elsewhere in the rule never renames a mutant. Identical elements under
-    the same keys (a pattern repeated in several branches) are told apart by the hash of the branch that holds
-    them (@<hash>), and only identical elements in identical branches fall back to #2, #3... in document order."""
+    the same keys (a pattern repeated in several branches) are told apart by a hash of the branches that hold
+    them, from the rule root down (@<hash>), and only identical elements in identical branches fall back to #2, #3... in document order."""
     # YAML anchors/aliases load as one shared object: a JSON round trip gives every occurrence its own copy,
     # so a mutant deletes one occurrence only (not every place the anchor is reused)
     doc = json.loads(json.dumps(doc))
@@ -69,8 +69,8 @@ def mutants(doc: dict) -> list[tuple[str, str, dict]]:
                     keys = "".join(f".{x}" for x in steps if isinstance(x, str))
                     for i, elem in enumerate(v):
                         sites.append((ri, steps, k, i, f"{rid}:{keys}.{k}:{h8(elem)}", parent))
-                    for i, elem in enumerate(v):
-                        walk(elem, steps + [k, i], ri, rid, h8(elem))
+                    for i, elem in enumerate(v):   # the branch's identity includes all of its ancestors
+                        walk(elem, steps + [k, i], ri, rid, h8([parent, elem]))
                 else:
                     walk(v, steps + [k], ri, rid, parent)
         elif isinstance(node, list):
