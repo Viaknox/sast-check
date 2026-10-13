@@ -19,8 +19,9 @@ rules:
         - https://nvd.nist.gov/vuln/detail/CVE-2025-30154
         - https://cwe.mitre.org/data/definitions/829.html
     # GitHub resolves owner/repo case-insensitively; YAML allows an anchor and a !!str tag before the value,
-    # a quoted key, and flow style ({ uses: x } or steps: [{uses: x}]). A 40-hex SHA stays ok (also before , } ])
-    pattern-regex: '(?m)^(?:[ \t]*(?:-[ \t]+)?|[^#\n]*[{,][ \t]*)["'']?uses["'']?[ \t]*:[ \t]*(?:&[^\s,\[\]{}]+[ \t]+)?(?:!!str[ \t]+)?["'']?(?i:tj-actions/changed-files|tj-actions/eslint-changed-files|reviewdog/action-[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?@(?![0-9a-fA-F]{40}["'']?[ \t]*(?:#.*$|$|[,}\]]))[^\s"''#,}\]]+'
+    # a quoted key, and flow style ({ uses: x } or steps: [{uses: x}]; the flow opener must be a YAML key or
+    # sequence dash at line start, so `{ uses: x }` inside a quoted command string is not a mapping). A 40-hex SHA stays ok (also before , } ])
+    pattern-regex: '(?m)^(?:[ \t]*(?:-[ \t]+)?|[ \t]*(?:-[ \t]+)*(?:["'']?[\w.-]+["'']?:[ \t]+)?[\[{](?:(?:[^#\n"'']|"[^"\n]*"|''[^''\n]*'')*?[{,])?[ \t]*)["'']?uses["'']?[ \t]*:[ \t]*(?:&[^\s,\[\]{}]+[ \t]+)?(?:!!str[ \t]+)?["'']?(?i:tj-actions/changed-files|tj-actions/eslint-changed-files|reviewdog/action-[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?@(?![0-9a-fA-F]{40}["'']?[ \t]*(?:#.*$|$|[,}\]]))[^\s"''#,}\]]+'
     paths:
       # only files GitHub runs: workflows and action metadata (an example in docs/ is not executed)
       include:

@@ -57,6 +57,17 @@ jobs:
       - uses: &pinned-ref tj-actions/changed-files@a284dc1814e3fd07f2e34267fc8f81227ed29fb8
       # ok: sast.gha.compromised-action
       # comment only: { uses: tj-actions/changed-files@v45 }
+      # ok: sast.gha.compromised-action
+      - run: "echo '{ uses: tj-actions/changed-files@v45 }'"
+      # ok: sast.gha.compromised-action
+      - run: 'echo "a, uses: reviewdog/action-setup@v1"'
+      # ok: sast.gha.compromised-action
+      - run: |
+          echo '{ name: x, uses: tj-actions/changed-files@v45 }'
+      # ruleid: sast.gha.compromised-action
+      - { name: "a, b", uses: tj-actions/changed-files@v45 }
+      # ruleid: sast.gha.compromised-action
+      - [ { uses: tj-actions/changed-files@v45 } ]
   flow:
     runs-on: ubuntu-latest
     # ruleid: sast.gha.compromised-action
