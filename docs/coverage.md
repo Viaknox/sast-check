@@ -76,7 +76,7 @@ All `S` rules run. Severity overrides (others default to low):
 
 ## GitHub Actions — zizmor (MIT)
 
-All default audits run; severity = zizmor's own, except `known-vulnerable-actions` → critical. Key ones: `template-injection`, `unpinned-uses`, `dangerous-triggers`, `excessive-permissions`, `artipacked`, `use-trusted-publishing`, `known-vulnerable-actions` (online, uses the job token). Also audits `.github/dependabot.yml` (e.g. `dependabot-execution`). On PRs the base branch's zizmor config is used (`.github/zizmor.yml`, `.github/zizmor.yaml`, `zizmor.yml`, `zizmor.yaml`, in zizmor's own order); a workflow zizmor cannot parse fails the check.
+All default audits run; severity = zizmor's own, except `known-vulnerable-actions` → critical. Key ones: `template-injection`, `unpinned-uses`, `dangerous-triggers`, `excessive-permissions`, `artipacked`, `use-trusted-publishing`, `known-vulnerable-actions` (online, uses the job token). Also audits `.github/dependabot.yml` (e.g. `dependabot-execution`). On PRs the base branch's zizmor config is used (`.github/zizmor.yml`, `.github/zizmor.yaml`, `zizmor.yml`, `zizmor.yaml`, in zizmor's own order); a workflow zizmor cannot parse fails the check. Workflows are the `.yml`/`.yaml` files directly in `.github/workflows`; GitHub never runs one in a subdirectory, so those are not scanned (an `action.yml` is scanned wherever it is).
 
 ## Secrets — gitleaks (MIT)
 

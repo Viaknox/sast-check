@@ -1009,6 +1009,38 @@ if command -v trivy >/dev/null; then
 fi
 check "trivy: an ignore word after a tab is defused too"  "$(python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import sast; print(sast.defuse_trivy_markers(b'x = 1\t#trivy:ignore:A'))" "$HERE/scripts")" "b'x = 1\t#trivy_ignore:A'"
 
+# r28 (#8): only files directly in .github/workflows are workflows; GitHub never runs a subdirectory
+git checkout -q -b r28w main
+mkdir -p .github/workflows/archive
+printf 'on: issues\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.issue.title }}"\n' > .github/workflows/archive/old.yml
+git add .github/workflows/archive/old.yml && git commit -qm wfarchive
+gate --mode diff --base HEAD~1 --only zizmor
+check "workflow in a subdirectory is not scanned (diff)"  "$(q "sum(1 for f in d['findings'] if f['path'].startswith('.github/workflows/archive/'))")" "0"
+gate --mode full --only zizmor
+check "workflow in a subdirectory is not scanned (full)"  "$(q "sum(1 for f in d['findings'] if f['path'].startswith('.github/workflows/archive/'))")" "0"
+git checkout -q main
+
+# r28 (#8): a new link leaving the repo is named even when its target does not exist on this machine
+git checkout -q -b r28l main
+ln -s /nonexistent-sast-check/config.py src/gone.py && git add src/gone.py && git commit -qm brokenoutlink
+gate --mode diff --base HEAD~1 --only ruff
+check "broken link leaving the repo is named"            "$(grep -c 'symlink `src/gone.py` (points outside the repository)' sast-results/report.md)" "1"
+git checkout -q main
+
+# r28 (#8): the Trivy baseline is built like the PR's copy: inline ignores defused, in-repo links followed,
+# so an old finding in a file the PR does not touch never counts as new
+if command -v trivy >/dev/null; then
+  git checkout -q -b r28t main
+  sg28() { printf 'resource "aws_security_group_rule" "%s" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = ["0.0.0.0/0"]\n  security_group_id = "sg-1"\n  description       = "d"\n}\n' "$1"; }
+  mkdir -p infra28 && { echo '#trivy:ignore:AWS-0107'; sg28 ign; } > infra28/ign.tf && sg28 real > infra28/real.tf
+  ln -s real.tf infra28/alias.tf
+  git add infra28 && git commit -qm t28base && echo 'y = 28' >> src/util.py && git commit -qam t28
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: old ignored finding is not new"            "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='infra28/ign.tf']")" "[False]"
+  check "trivy: old finding behind an old link is not new" "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='infra28/alias.tf']")" "[False]"
+  git checkout -q main
+fi
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks
