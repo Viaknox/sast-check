@@ -1,9 +1,11 @@
 import os
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from flask import request, send_file, send_from_directory
 from werkzeug.utils import secure_filename
+
+from uploads import Upload
 
 BASE = "/srv/uploads"
 
@@ -114,3 +116,42 @@ def ok_listdir_const():
 def ok_rmtree_const():
     # ok: sast.python.path-traversal
     shutil.rmtree("/tmp/cache")
+
+
+def bad_custom_name_attr():
+    up = Upload(request.args["f"])
+    # ruleid: sast.python.path-traversal
+    return open(up.name).read()
+
+
+def bad_custom_name_direct():
+    # ruleid: sast.python.path-traversal
+    return open(Upload(request.args["f"]).name).read()
+
+
+def ok_path_name_direct():
+    # ok: sast.python.path-traversal
+    return open(os.path.join(BASE, Path(request.args["f"]).name)).read()
+
+
+def ok_path_name_variable():
+    p = Path(request.args["f"])
+    # ok: sast.python.path-traversal
+    return open(os.path.join(BASE, p.name)).read()
+
+
+def ok_purepath_name():
+    # ok: sast.python.path-traversal
+    return open(os.path.join(BASE, PurePosixPath(request.form["f"]).name)).read()
+
+
+def bad_path_object_unreduced():
+    p = Path(request.args["f"])
+    # ruleid: sast.python.path-traversal
+    return open(p).read()
+
+
+def bad_path_parent_not_name():
+    p = Path(request.args["f"])
+    # ruleid: sast.python.path-traversal
+    return open(p.parent).read()
