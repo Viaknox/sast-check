@@ -27,6 +27,42 @@ app.get('/lookalikes', (req, res) => {
   res.end();
 });
 
+// ---- a client built in another module: only a receiver name that says ldap counts ----
+const ldapClient = require('./ldap-client');
+const client = makeHttpClient();
+app.get('/other-module', (req, res) => {
+  // ruleid: sast.js.ldap-injection
+  ldapClient.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+  const opts = { filter: `(uid=${req.query.u})` };
+  // ruleid: sast.js.ldap-injection
+  ldapClient.search('dc=ex', opts, () => {});
+  // ruleid: sast.js.ldap-injection
+  this.ldap.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+  ldapClient.search('dc=ex', {
+    filter:
+      // ruleid: sast.js.ldap-injection
+      '(uid=' + req.query.u + ')'
+  }, () => {});
+  ldapClient.search(
+    'dc=ex',
+    // ruleid: sast.js.ldap-injection
+    opts,
+    () => {}
+  );
+  // ruleid: sast.js.ldap-injection
+  this.ldap.search('dc=ex', opts, () => {});
+  // the filter is fixed, only the attribute list is request data: an options object written inline is judged by its filter
+  // ok: sast.js.ldap-injection
+  this.ldap.search('dc=ex', { filter: '(objectClass=*)', attributes: req.query.a }, () => {});
+  // ok: sast.js.ldap-injection
+  client.search('products', { filter: req.query.q }, () => {});
+  // ok: sast.js.ldap-injection
+  client.search('products', opts, () => {});
+  // ok: sast.js.ldap-injection
+  conn.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+  res.end();
+});
+
 // ---- search receivers: ldapjs, no module binding yet (#6 item 30) ----
 app.get('/chain', (req, res) => {
   const viaChain = require('ldapjs').createClient({ url: 'ldap://a' });

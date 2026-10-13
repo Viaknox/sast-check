@@ -58,6 +58,20 @@ app.post('/vm-named-script', (req, res) => {
   res.end();
 });
 
+// ---- named imports of vm under another name ----
+import { runInContext as runIn } from 'node:vm';
+import { Script as VmScript } from 'vm';
+import { createContext as makeCtx } from 'vm';
+app.post('/vm-aliased', (req, res) => {
+  // ruleid: sast.js.code-eval
+  runIn(req.body.script, ctx);
+  // ruleid: sast.js.code-eval
+  new VmScript(req.body.script);
+  // ok: sast.js.code-eval
+  makeCtx(req.body.sandbox);
+  res.end();
+});
+
 // ---- namespace and default imports of vm ----
 import * as vmNodeNs from 'node:vm';
 app.post('/vm-ns-node', (req, res) => {

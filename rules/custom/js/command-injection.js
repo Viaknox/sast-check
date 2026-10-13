@@ -54,6 +54,37 @@ app.get('/named', (req, res) => {
   res.end();
 });
 
+// ---- named imports under another name ----
+import { exec as runCmd } from 'node:child_process';
+import { spawn as launch } from 'child_process';
+import { fork as forkIt } from 'child_process';
+app.get('/aliased', (req, res) => {
+  // ruleid: sast.js.command-injection
+  runCmd('ls ' + req.query.dir);
+  // ruleid: sast.js.command-injection
+  launch('git', ['log', req.query.ref], { shell: true });
+  // ruleid: sast.js.command-injection
+  launch('sh', ['-c', req.body.script]);
+  // ok: sast.js.command-injection
+  launch('git', ['log', req.query.ref]);
+  // ok: sast.js.command-injection
+  launch('python3', ['-c', req.body.script]);
+  // ok: sast.js.command-injection
+  forkIt(req.query.module);
+  // ok: sast.js.command-injection
+  forkIt('worker.js', [req.query.arg], { shell: true });
+  // ok: sast.js.command-injection
+  forkIt('sh', ['-c', req.body.script]);
+  res.end();
+});
+
+app.get('/aliased-require', (req, res) => {
+  const { execFile: runFile } = require('child_process');
+  // ruleid: sast.js.command-injection
+  runFile(req.query.bin);
+  res.end();
+});
+
 // ---- namespace and default imports ----
 import * as cpNodeNs from 'node:child_process';
 app.get('/ns-node', (req, res) => {

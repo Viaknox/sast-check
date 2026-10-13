@@ -32,6 +32,37 @@ app.get('/lookalikes', (req, res) => {
   res.end();
 });
 
+// ---- a client built in another module: only a receiver name that says ldap counts ----
+const ldapClient = require('./ldap-client');
+const httpClient = makeHttpClient();
+app.get('/other-module', (req, res) => {
+  // ruleid: sast.js.ldap-dn-injection
+  ldapClient.bind('uid=' + req.body.user, req.body.pw, () => {});
+  // ruleid: sast.js.ldap-dn-injection
+  ldapClient.search(req.query.base, {}, () => {});
+  // ruleid: sast.js.ldap-dn-injection
+  this.ldap.del('uid=' + req.body.user, () => {});
+  // ruleid: sast.js.ldap-dn-injection
+  this.ldap.search(req.query.base, { scope: 'sub' }, () => {});
+  ldapClient.modify(
+    // ruleid: sast.js.ldap-dn-injection
+    'uid=' + req.body.user,
+    {},
+    () => {}
+  );
+  // ok: sast.js.ldap-dn-injection
+  ldapClient.search('dc=ex', { filter: req.query.q }, () => {});
+  // ok: sast.js.ldap-dn-injection
+  ldapClient.unbind(req.body.x);
+  // ok: sast.js.ldap-dn-injection
+  httpClient.del('/items/' + req.params.id, () => {});
+  // ok: sast.js.ldap-dn-injection
+  httpClient.search(req.query.base, {}, () => {});
+  // ok: sast.js.ldap-dn-injection
+  conn.bind('uid=' + req.body.user, req.body.pw, () => {});
+  res.end();
+});
+
 // ---- ldapjs / ldapts clients, each binding form on its own ----
 app.get('/chain', (req, res) => {
   const viaChain = require('ldapjs').createClient({ url: 'ldap://a' });
