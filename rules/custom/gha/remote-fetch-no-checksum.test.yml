@@ -144,3 +144,27 @@ jobs:
         # ok: sast.gha.remote-fetch-no-checksum
         run: |
           curl -fsSLo t.tgz https://example.com/t.tgz && echo "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  t.tgz" | sha256sum -c - && tar xzf t.tgz
+      - name: filename-only grep on hash output is not a verification
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          sha1sum tool.tgz | grep -q tool.tgz
+          tar xzf tool.tgz
+      - name: filename-only grep before process substitution
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          grep -q tool.tgz <(sha256sum tool.tgz)
+          tar xzf tool.tgz
+      - name: hash piped into grep against an expected variable
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          sha256sum tool.tgz | grep -q "$EXPECTED_SHA256"
+          tar xzf tool.tgz
+      - name: expected variable grepped against hash substitution
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          grep -q "$EXPECTED_SHA256" <(sha256sum tool.tgz)
+          tar xzf tool.tgz
