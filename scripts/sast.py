@@ -21,7 +21,7 @@ import tomllib
 from collections import Counter
 from dataclasses import dataclass, field, asdict
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -657,21 +657,28 @@ def run_ruff(ctx: Ctx) -> list[Finding]:
     return out
 
 
+def gha_input(f: str) -> bool:
+    """True for a file GitHub reads as Actions input: a workflow directly in .github/workflows (GitHub never
+    runs one in a subdirectory), an action.yml/action.yaml anywhere, or a Dependabot config."""
+    p = PurePosixPath(f)
+    return ((p.parent.as_posix() == ".github/workflows" and p.suffix in (".yml", ".yaml"))
+            or p.name in ("action.yml", "action.yaml") or f in DEPENDABOT)
+
+
 def run_zizmor(ctx: Ctx) -> list[Finding]:
     if not shutil.which("zizmor"):
         raise FileNotFoundError("zizmor not installed")
     if ctx.mode == "diff":
-        tg = [f for f in targets(ctx, (".yml", ".yaml"))
-              if f.startswith(".github/workflows/") or Path(f).name in ("action.yml", "action.yaml") or f in DEPENDABOT]
+        tg = [f for f in targets(ctx, (".yml", ".yaml")) if gha_input(f)]
     else:
         specs = ["--", ".github/workflows/*.yml", ".github/workflows/*.yaml", ":(glob)**/action.yml", ":(glob)**/action.yaml",
                  *DEPENDABOT]
         tracked = (git_z(ctx.repo, ["ls-files", "-z"] + specs)                                    # committed
                    + git_z(ctx.repo, ["ls-files", "-z", "--others", "--exclude-standard"] + specs))  # new, local runs
         # git does not list files under a directory symlink: add in-repo aliases named through the link
-        aliases = [f for f in targets(ctx, (".yml", ".yaml"))[1:]
-                   if f.startswith(".github/workflows/") or Path(f).name in ("action.yml", "action.yaml") or f in DEPENDABOT]
-        tg = sorted({f for f in tracked + aliases if f and not glob_any(f, ctx.cfg["paths"]["exclude"])})
+        aliases = [f for f in targets(ctx, (".yml", ".yaml"))[1:] if gha_input(f)]
+        # git's `*` also matches `/`, so the pathspec above lists workflows/<subdir>/x.yml too: filter again
+        tg = sorted({f for f in tracked + aliases if f and gha_input(f) and not glob_any(f, ctx.cfg["paths"]["exclude"])})
     if not tg:
         return []
     online = bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
@@ -954,31 +961,34 @@ def defuse_trivy_markers(data: bytes) -> bytes:
     return text.encode("utf-8", "surrogateescape")
 
 
+def trivy_mirror(root: Path, dst: Path, exclude: list[str]) -> None:
+    """Copy the IaC tree at root to dst for Trivy. Trivy has no switch for inline `trivy:ignore` /
+    `tfsec:ignore` rules, so they are defused (same length, line numbers hold). A symlink to a file or directory
+    inside root is copied as its target's content under the link's path (a link can bring excluded IaC into
+    scope); links leaving root are dropped. The PR tree and the base tree are both mirrored with this, so a
+    finding that did not change is found the same way on both sides."""
+    for d, dirs, names in os.walk(root):
+        reld = Path(d).relative_to(root).as_posix()
+        dirs[:] = [x for x in dirs if x != ".git" and not os.path.islink(os.path.join(d, x))
+                   and not glob_any(f"{x}/" if reld == "." else f"{reld}/{x}/", exclude)]
+        links = [x for x in os.listdir(d) if os.path.islink(os.path.join(d, x))]
+        for n in names + [x for x in links if x not in names]:
+            r = (Path(d) / n).relative_to(root).as_posix()
+            for f in link_dir_files(root, r) or [r]:
+                fp = root / f
+                if not fp.is_file() or glob_any(f, exclude) or (fp.is_symlink() and not in_repo(root, fp)):
+                    continue
+                (dst / f).parent.mkdir(parents=True, exist_ok=True)
+                (dst / f).write_bytes(defuse_trivy_markers(fp.read_bytes()))
+    dst.mkdir(parents=True, exist_ok=True)
+
+
 def run_trivy(ctx: Ctx) -> list[Finding]:
     if not shutil.which("trivy"):
         raise FileNotFoundError("trivy not installed")
     with tempfile.TemporaryDirectory() as td:
-        # Trivy has no switch for inline `trivy:ignore` / `tfsec:ignore` comments, so it scans a copy of the
-        # tree with those markers defused (same length, so line numbers hold). Symlinks are not copied.
         work = Path(td) / "src"
-        for d, dirs, names in os.walk(ctx.repo):
-            reld = Path(d).relative_to(ctx.repo).as_posix()
-            dirs[:] = [x for x in dirs if x != ".git" and not os.path.islink(os.path.join(d, x))
-                       and not glob_any(f"{x}/" if reld == "." else f"{reld}/{x}/", ctx.cfg["paths"]["exclude"])]
-            # a symlink to a file or directory inside the repo is copied as its target's content under the
-            # link's path (the link can bring excluded IaC into scope); links leaving the repo are dropped
-            links = [x for x in os.listdir(d) if os.path.islink(os.path.join(d, x))]
-            for n in names + [x for x in links if x not in names]:
-                src = Path(d) / n
-                r = src.relative_to(ctx.repo).as_posix()
-                for f in link_dir_files(ctx.repo, r) or [r]:
-                    fp = ctx.repo / f
-                    if (not fp.is_file() or glob_any(f, ctx.cfg["paths"]["exclude"])
-                            or (fp.is_symlink() and not in_repo(ctx.repo, fp))):
-                        continue
-                    (work / f).parent.mkdir(parents=True, exist_ok=True)
-                    (work / f).write_bytes(defuse_trivy_markers(fp.read_bytes()))
-        work.mkdir(exist_ok=True)
+        trivy_mirror(ctx.repo, work, ctx.cfg["paths"]["exclude"])
         cmd, cwd, base_p = ["trivy", "config", "--quiet", "--format", "json"], work, None
         if ctx.base:   # PR scans: the base branch's trivy.yaml / .trivyignore, never the PR's
             conf, ign = Path(td) / "trivy.yaml", Path(td) / "trivyignore"
@@ -987,16 +997,25 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
             cmd += ["--config", str(conf), "--ignorefile", str(ign)]
             # Trivy resolves relative paths in its config (custom checks, data, ignore policy) from the
             # working directory: run it inside a snapshot of the base tree so those files are the base's too
-            cwd = Path(td) / "base"
-            cwd.mkdir()
+            raw = Path(td).resolve() / "baseraw"
+            raw.mkdir()
             arc = subprocess.Popen(["git", "archive", "--format=tar", f"{ctx.base}^{{commit}}"], cwd=ctx.repo,
                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             with tarfile.open(fileobj=arc.stdout, mode="r|") as t:
-                for m in t:   # links are skipped (as in the PR copy): the data filter refuses ones leaving the tree
-                    if not (m.issym() or m.islnk()):
-                        t.extract(m, cwd, filter="data")
+                for m in t:
+                    if m.islnk():
+                        continue
+                    try:   # in-tree symlinks are kept so the baseline is mirrored like the PR; the data
+                        t.extract(m, raw, filter="data")   # filter refuses links leaving the tree: dropped
+                    except tarfile.FilterError:
+                        continue
             if arc.wait(timeout=900) != 0:
                 raise RuntimeError(f"git archive {ctx.base} failed")
+            # the working directory holds no links, so the vars files written into it below never write
+            # through one
+            cwd = Path(td) / "base"
+            shutil.copytree(raw, cwd, symlinks=True,
+                            ignore=lambda d, names: [n for n in names if os.path.islink(os.path.join(d, n))])
             # Terraform variable files are scan inputs, not policy: a vars file named in the config
             # (misconfiguration.terraform.vars) must be the PR's version, or a changed value goes unseen.
             # A vars file the PR deletes is emptied (Trivy fails on a named file that is missing): the defaults
@@ -1009,7 +1028,11 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
             # the base tree with its own vars, for the comparison below. Any PR, not only a vars change: a
             # variable default or local in one file changes resources elsewhere whose lines did not change
             if ctx.mode == "diff" or head_vars != base_vars:
-                base_p = sh(cmd + ["."], cwd)
+                # scanned as a mirror built exactly like the PR's (markers defused, in-repo links followed), so
+                # an unchanged finding is found on both sides and never counts as new
+                basework = Path(td) / "basesrc"
+                trivy_mirror(raw, basework, ctx.cfg["paths"]["exclude"])
+                base_p = sh(cmd + [str(basework)], cwd)
             for f in base_vars.keys() - head_vars.keys():
                 (cwd / f).write_text("{}" if f.endswith(".json") else "")
             for f, data in head_vars.items():
@@ -1023,7 +1046,7 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
             # unless the base tree (with the base vars) has the same rule on the line this line came from
             old = set()
             for b in trivy_findings(ctx, base_p.stdout):
-                line_map = aligned_lines(cwd / b.path, work / b.path)
+                line_map = aligned_lines(basework / b.path, work / b.path)
                 if b.line in line_map:
                     old.add((b.rule, b.path, line_map[b.line]))
             ctx.new_keys |= {("trivy", f.rule, f.path, f.line) for f in out if (f.rule, f.path, f.line) not in old}
@@ -1398,7 +1421,8 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[str]:
     now = {e.split("\t", 1)[1]: e.split()[1] for e in git_z(repo, ["ls-files", "-z", "-s"]) if e.startswith("160000 ")}
     out = [f"submodule {md_code(p)}" for p, sha in sorted(now.items()) if was.get(p) != sha]
     for f in changed:
-        if (repo / f).exists() and not in_repo(repo, repo / f):
+        # is_symlink, not exists: a link to a path missing on this machine is still unscanned content
+        if ((repo / f).is_symlink() or (repo / f).exists()) and not in_repo(repo, repo / f):
             out.append(f"symlink {md_code(f)} (points outside the repository)")
             continue
         try:
