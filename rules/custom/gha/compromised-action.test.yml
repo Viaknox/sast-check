@@ -36,6 +36,8 @@ jobs:
       # ruleid: sast.gha.compromised-action
       - uses: !!str tj-actions/changed-files@v45
       # ruleid: sast.gha.compromised-action
+      - uses: !!str &tagfirst tj-actions/changed-files@v45
+      # ruleid: sast.gha.compromised-action
       - uses: &compromised-ref tj-actions/changed-files@v45
       # ruleid: sast.gha.compromised-action
       - uses: &ref-v2_x reviewdog/action-setup@v1
@@ -55,6 +57,8 @@ jobs:
       - "uses": "tj-actions/changed-files@a284dc1814e3fd07f2e34267fc8f81227ed29fb8"
       # ok: sast.gha.compromised-action
       - uses: &pinned-ref tj-actions/changed-files@a284dc1814e3fd07f2e34267fc8f81227ed29fb8
+      # ok: sast.gha.compromised-action
+      - uses: !!str &pinned-tagfirst tj-actions/changed-files@a284dc1814e3fd07f2e34267fc8f81227ed29fb8
       # ok: sast.gha.compromised-action
       # comment only: { uses: tj-actions/changed-files@v45 }
       # ok: sast.gha.compromised-action
