@@ -2583,21 +2583,21 @@
   "element": "pattern: Number(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@0f0714df": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:0bca6323@750afefc": {
+  "element": "pattern-inside: '($PAGE, ...) => { ... }\n\n  '",
+  "why": "Opengrep also reads an arrow as `function $F(...)`, so the function form covers it there; Semgrep CE needs this arrow form (its arrow fixtures fail without it). Survives on Opengrep only."
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@18975931": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:0bca6323@9d35ddf1": {
+  "element": "pattern-inside: '($PAGE, ...) => { ... }\n\n  '",
+  "why": "Opengrep also reads an arrow as `function $F(...)`, so the function form covers it there; Semgrep CE needs this arrow form (its arrow fixtures fail without it). Survives on Opengrep only."
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:59514ec2@b17c1ce7": {
-  "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:77efb962@7f586581": {
+  "element": "pattern-inside: 'import { ... } from $M;\n\n  ...\n\n  '",
+  "why": "An import's region covers the rest of the file, so an earlier binding form always stands in for this one in a single fixture; each form was checked alone in separate files on both engines."
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns:9a7f6d43": {
-  "element": "metavariable-regex:\n  metavariable: $K\n  regex: ^(url|content)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:77efb962@9afc1c5d": {
+  "element": "pattern-inside: 'import { ... } from $M;\n\n  ...\n\n  '",
+  "why": "An import's region covers the rest of the file, so an earlier binding form always stands in for this one in a single fixture; each form was checked alone in separate files on both engines."
  },
  "sast.js.puppeteer-ssrf:.pattern-sources.pattern-either:010cc1c7": {
   "element": "pattern: ctx.query",
@@ -2639,10 +2639,6 @@
   "element": "pattern: ctx.request.body",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.puppeteer-ssrf:.pattern-sources.pattern-either:817d4782": {
-  "element": "pattern: req.body",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.js.puppeteer-ssrf:.pattern-sources.pattern-either:8dbfc944": {
   "element": "pattern: request.cookies",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -2669,10 +2665,6 @@
  },
  "sast.js.puppeteer-ssrf:.pattern-sources.pattern-either:adf3651a": {
   "element": "pattern: ctx.params",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.puppeteer-ssrf:.pattern-sources.pattern-either:b4a593b4": {
-  "element": "pattern: req.query",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.puppeteer-ssrf:.pattern-sources.pattern-either:c4ec63c8": {
@@ -2773,10 +2765,6 @@
  },
  "sast.js.puppeteer-ssrf:.pattern-sources:c4be862c": {
   "element": "label: INPUT\npatterns:\n- pattern-either:\n  - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })\n  - pattern-inside: $APP.$M($P, ..., async ($REQ, $R",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.puppeteer-ssrf:.pattern-sources:ef0fd102": {
-  "element": "label: INPUT\npattern-either:\n- pattern: req.query\n- pattern: req.body\n- pattern: req.params\n- pattern: req.headers\n- pattern: req.cookies\n- pattern: req.url\n- p",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.react-dangerous-html:.patterns:59514ec2": {
@@ -3847,10 +3835,6 @@
   "element": "pattern: langchain_classic.hub.pull(\"$NAME\", ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.path-traversal:.pattern-sanitizers:26075998": {
-  "element": "pattern: basename(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.python.path-traversal:.pattern-sanitizers:4a92488e": {
   "element": "pattern: werkzeug.utils.secure_filename(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -3881,10 +3865,6 @@
  },
  "sast.python.path-traversal:.pattern-sinks.patterns.pattern-either:41b44914": {
   "element": "pattern: pathlib.Path($P).read_text(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.python.path-traversal:.pattern-sinks.patterns.pattern-either:4acd42ae": {
-  "element": "pattern: shutil.copytree($P, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.python.path-traversal:.pattern-sinks.patterns.pattern-either:5330fcb2": {
@@ -3935,17 +3915,13 @@
   "element": "pattern: flask.send_file($P, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.path-traversal:.pattern-sinks.patterns:45e90f18": {
-  "element": "metavariable-regex:\n  metavariable: $M\n  regex: ^(read_text|read_bytes|open)$",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.python.path-traversal:.pattern-sinks.patterns:c89b3d66@907395c3": {
+ "sast.python.path-traversal:.pattern-sinks.patterns:c89b3d66@43e33d8c": {
   "element": "focus-metavariable: $P",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+  "why": "Same focus-metavariable as the baselined entries before (ids moved when sinks were added): removing it does not change the flagged line, so no fixture can kill it."
  },
- "sast.python.path-traversal:.pattern-sinks.patterns:c89b3d66@fc24be75": {
+ "sast.python.path-traversal:.pattern-sinks.patterns:c89b3d66@b2952981": {
   "element": "focus-metavariable: $P",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+  "why": "Same focus-metavariable as the baselined entries before (ids moved when sinks were added): removing it does not change the flagged line, so no fixture can kill it."
  },
  "sast.python.path-traversal:.pattern-sources.patterns.pattern-either:cc5aa149": {
   "element": "pattern: flask.request.$A",

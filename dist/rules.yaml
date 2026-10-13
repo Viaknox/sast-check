@@ -29,8 +29,9 @@ rules:
     - pattern-regex: (?mi)^[ \t]*RUN[ \t]+(?P<CMD>(?:[^\n\\]|\\\r?\n|\\.)*)
     - metavariable-regex:
         metavariable: $CMD
-        regex: (?s)^(?:(?!.*(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:grep|diff|cmp)\b|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|\bgrep\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|'\"\\]+)(?!(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:grep|diff|cmp)\b|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|\bgrep\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b))|.*\n(?=[^\n]*(?P=F))(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[
-          \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:grep|diff|cmp)\b|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|\bgrep\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b))).*|.*?\b(?:curl|wget)\b(?:(?!(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:grep|diff|cmp)\b|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|\bgrep\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).)*?(?:[;&|(]|\n)[ \t]*(?:\\\r?\n[ \t]*)*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:tar|unzip|gunzip|bunzip2|unxz|7za?|dpkg|rpm|\./\S+|(?:ba|z|da|k)?sh|source|python[0-9.]*|node|perl|ruby)(?=[ \t\n\\]|$).*)$
+        regex: (?s)^(?:(?!.*(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|'\"\\]+)(?!(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[
+          \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b))|.*\n(?=[^\n]*(?P=F))(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b))).*|.*?\b(?:curl|wget)\b(?:(?!(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[
+          \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).)*?(?:[;&|(]|\n)[ \t]*(?:\\\r?\n[ \t]*)*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:tar|unzip|gunzip|bunzip2|unxz|7za?|dpkg|rpm|\./\S+|(?:ba|z|da|k)?sh|source|python[0-9.]*|node|perl|ruby)(?=[ \t\n\\]|$).*)$
     - metavariable-regex:
         metavariable: $CMD
         regex: (?s).*(?:\bcurl\b[^\n|]*[ \t](?:-[A-Za-z]*[oO]\b|--output\b|--remote-name\b)|\bwget\b[ \t]+(?![^\n]*(?:--spider|-[A-Za-z]*O[ \t]*-))).*https?://.*
@@ -82,7 +83,7 @@ rules:
     - https://nvd.nist.gov/vuln/detail/CVE-2025-30066
     - https://nvd.nist.gov/vuln/detail/CVE-2025-30154
     - https://cwe.mitre.org/data/definitions/829.html
-  pattern-regex: (?m)^(?:[ \t]*(?:-[ \t]+)?|[^#\n]*[{,][ \t]*)["']?uses["']?[ \t]*:[ \t]*(?:&[^\s,\[\]{}]+[ \t]+)?(?:!!str[ \t]+)?["']?(?i:tj-actions/changed-files|tj-actions/eslint-changed-files|reviewdog/action-[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?@(?![0-9a-fA-F]{40}["']?[ \t]*(?:#.*$|$|[,}\]]))[^\s"'#,}\]]+
+  pattern-regex: (?m)^(?:[ \t]*(?:-[ \t]+)?|[ \t]*(?:-[ \t]+)*(?:["']?[\w.-]+["']?:[ \t]+)?[\[{](?:(?:[^#\n"']|"[^"\n]*"|'[^'\n]*')*?[{,])?[ \t]*)["']?uses["']?[ \t]*:[ \t]*(?:&[^\s,\[\]{}]+[ \t]+)?(?:!!str[ \t]+)?["']?(?i:tj-actions/changed-files|tj-actions/eslint-changed-files|reviewdog/action-[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?@(?![0-9a-fA-F]{40}["']?[ \t]*(?:#.*$|$|[,}\]]))[^\s"'#,}\]]+
   paths:
     include:
     - .github/workflows/*.yml
@@ -120,8 +121,9 @@ rules:
         regex: (?s).*(?:\bcurl\b[^\n|]*[ \t](?:-[A-Za-z]*[oO]\b|--output\b|--remote-name\b)(?![ \t]+/dev/null)|\bwget\b[ \t]+(?![^\n]*(?:--spider|-[A-Za-z]*O[ \t]*-)))[^\n|]*(?:\n|$).*
     - metavariable-regex:
         metavariable: $SCRIPT
-        regex: (?s)^(?:(?!.*(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:grep|diff|cmp)\b|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|\bgrep\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|'\"\\]+)(?!(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:grep|diff|cmp)\b|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|\bgrep\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b))|.*\n(?=[^\n]*(?P=F))(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[
-          \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:grep|diff|cmp)\b|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|\bgrep\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b))).*|.*?\b(?:curl|wget)\b(?:(?!(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:grep|diff|cmp)\b|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|\bgrep\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).)*?(?:\n|[;&|(])[ \t]*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:tar|unzip|gunzip|bunzip2|unxz|7za?|dpkg|rpm|\./\S+|(?:ba|z|da|k)?sh|source|python[0-9.]*|node|perl|ruby)(?=[ \t\n]|$).*)$
+        regex: (?s)^(?:(?!.*(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|'\"\\]+)(?!(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[
+          \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b))|.*\n(?=[^\n]*(?P=F))(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b))).*|.*?\b(?:curl|wget)\b(?:(?!(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[
+          \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).)*?(?:\n|[;&|(])[ \t]*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:tar|unzip|gunzip|bunzip2|unxz|7za?|dpkg|rpm|\./\S+|(?:ba|z|da|k)?sh|source|python[0-9.]*|node|perl|ruby)(?=[ \t\n]|$).*)$
     - metavariable-regex:
         metavariable: $SCRIPT
         regex: (?s)^(?!.*\|[ \t]*(?:sudo[ \t]+)?(?:(?:ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)\b(?![ \t]+-m[ \t]+json\.tool)).*
@@ -702,6 +704,9 @@ rules:
         <%- $X %>
 
         '
+  - patterns:
+    - pattern: <%- $X %>
+    - pattern-regex: (?s)<%\s*(?:(?:var|let|const)\s+)?([A-Za-z_$][\w$]*)\s*=(?!=)(?!\s*(?:['"]|include\s*\(\s*['"]))[^;]*;\s*%>(?:(?!<%\s*(?:(?:var|let|const)\s+)?\1\s*=(?!=)).)*<%-\s*\1\s*-?%>
 - id: sast.js.electron-node-integration
   languages:
   - javascript
@@ -2682,11 +2687,39 @@ rules:
     - pattern-either:
       - patterns:
         - pattern: $PAGE.goto($X, ...)
-        - pattern-inside: '$PAGE = await $B.newPage(...);
+        - pattern-either:
+          - pattern-inside: '$PAGE = await $B.newPage(...);
 
-            ...
+              ...
 
-            '
+              '
+          - patterns:
+            - pattern-either:
+              - pattern-inside: 'function $F(..., $PAGE, ...) { ... }
+
+                  '
+              - pattern-inside: '($PAGE, ...) => { ... }
+
+                  '
+            - pattern-either:
+              - pattern-inside: '$P = require($M);
+
+                  ...
+
+                  '
+              - pattern-inside: 'import * as $P from $M;
+
+                  ...
+
+                  '
+              - pattern-inside: 'import { ... } from $M;
+
+                  ...
+
+                  '
+            - metavariable-regex:
+                metavariable: $M
+                regex: ^["'`]?puppeteer(-core)?["'`]?$
       - pattern: (await $B.newPage()).goto($X, ...)
     - pattern-not: $PAGE.goto(encodeURIComponent(...), ...)
     - focus-metavariable: $X
@@ -2694,30 +2727,66 @@ rules:
     patterns:
     - pattern-either:
       - patterns:
-        - pattern: $PAGE.$M($X, ...)
-        - pattern-inside: '$PAGE = await $B.newPage(...);
+        - pattern-either:
+          - patterns:
+            - pattern: $PAGE.$M2($X, ...)
+            - metavariable-regex:
+                metavariable: $M2
+                regex: ^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$
+          - patterns:
+            - pattern: '$PAGE.addScriptTag({..., $K: $X, ...})
 
-            ...
+                '
+            - metavariable-regex:
+                metavariable: $K
+                regex: ^(url|content)$
+        - pattern-either:
+          - pattern-inside: '$PAGE = await $B.newPage(...);
 
-            '
-      - pattern: (await $B.newPage()).$M($X, ...)
-    - metavariable-regex:
-        metavariable: $M
-        regex: ^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$
-    - focus-metavariable: $X
-  - requires: INPUT
-    patterns:
-    - pattern: '$PAGE.addScriptTag({..., $K: $X, ...})
+              ...
 
-        '
-    - pattern-inside: '$PAGE = await $B.newPage(...);
+              '
+          - patterns:
+            - pattern-either:
+              - pattern-inside: 'function $F(..., $PAGE, ...) { ... }
 
-        ...
+                  '
+              - pattern-inside: '($PAGE, ...) => { ... }
 
-        '
-    - metavariable-regex:
-        metavariable: $K
-        regex: ^(url|content)$
+                  '
+            - pattern-either:
+              - pattern-inside: '$P = require($M);
+
+                  ...
+
+                  '
+              - pattern-inside: 'import * as $P from $M;
+
+                  ...
+
+                  '
+              - pattern-inside: 'import { ... } from $M;
+
+                  ...
+
+                  '
+            - metavariable-regex:
+                metavariable: $M
+                regex: ^["'`]?puppeteer(-core)?["'`]?$
+      - patterns:
+        - pattern-either:
+          - patterns:
+            - pattern: (await $B.newPage()).$M2($X, ...)
+            - metavariable-regex:
+                metavariable: $M2
+                regex: ^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$
+          - patterns:
+            - pattern: '(await $B.newPage()).addScriptTag({..., $K: $X, ...})
+
+                '
+            - metavariable-regex:
+                metavariable: $K
+                regex: ^(url|content)$
     - focus-metavariable: $X
 - id: sast.js.react-dangerous-html
   languages:
@@ -3235,18 +3304,26 @@ rules:
 
             '
         - patterns:
-          - pattern: '$FN($S, {..., schema: $SC, ...}, ...)
+          - pattern-either:
+            - pattern: '$FN($S, {..., schema: $SC, ...}, ...)
 
-              '
+                '
+            - pattern: '$FN($S, $O, {..., schema: $SC, ...}, ...)
+
+                '
           - pattern-inside: 'import { $FN } from "js-yaml";
 
               ...
 
               '
         - patterns:
-          - pattern: '$K($S, {..., schema: $SC, ...}, ...)
+          - pattern-either:
+            - pattern: '$K($S, {..., schema: $SC, ...}, ...)
 
-              '
+                '
+            - pattern: '$K($S, $O, {..., schema: $SC, ...}, ...)
+
+                '
           - pattern-inside: 'import { $FN as $K } from "js-yaml";
 
               ...
@@ -3334,6 +3411,12 @@ rules:
       - pattern-inside: 'module.exports = $X
 
           '
+    - focus-metavariable: $D
+  - patterns:
+    - pattern: '{ ..., define: $D, ... }
+
+        '
+    - pattern-regex: export\s+default\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}
     - focus-metavariable: $D
   - patterns:
     - pattern: '{ ..., define: $D, ..., $K: $V, ... }
@@ -3481,14 +3564,25 @@ rules:
     - metavariable-regex:
         metavariable: $FH
         regex: ^(django\.utils\.html\.)?format_html$
-  - pattern: Template("...").render(...)
+  - patterns:
+    - pattern: Template($S).render(...)
+    - metavariable-regex:
+        metavariable: $S
+        regex: (?s)^[rRuU]?["'](?!.*(\|\s*safe|autoescape\s+off))
+    - pattern-not: Template(...).render(Context(..., autoescape=False))
+    - pattern-not: Template(...).render(Context($D, False))
   - patterns:
     - pattern: $T.render(...)
-    - pattern-inside: '$T = Template("...")
+    - pattern-inside: '$T = Template($S)
 
         ...
 
         '
+    - metavariable-regex:
+        metavariable: $S
+        regex: (?s)^[rRuU]?["'](?!.*(\|\s*safe|autoescape\s+off))
+    - pattern-not: $T.render(Context(..., autoescape=False))
+    - pattern-not: $T.render(Context($D, False))
   - pattern: int(...)
   - pattern: float(...)
   - pattern: bool(...)
@@ -3675,13 +3769,29 @@ rules:
   pattern-sanitizers:
   - pattern: secure_filename(...)
   - pattern: werkzeug.utils.secure_filename(...)
-  - pattern: os.path.basename(...)
-  - pattern: basename(...)
+  - patterns:
+    - pattern-either:
+      - pattern: os.path.basename(...)
+      - pattern: basename(...)
+    - pattern-not-inside:
+        patterns:
+        - pattern: $DS(...)
+        - metavariable-regex:
+            metavariable: $DS
+            regex: ^(os\.(listdir|scandir|walk|rmdir|rename)|shutil\.(rmtree|copytree|move)|glob\.(glob|iglob))$
+    - pattern-not-inside: $Q.iterdir()
   - patterns:
     - pattern: $C(...).name
     - metavariable-regex:
         metavariable: $C
         regex: ^(pathlib\.)?(Path|PurePath|PurePosixPath|PureWindowsPath)$
+    - pattern-not-inside:
+        patterns:
+        - pattern: $DS(...)
+        - metavariable-regex:
+            metavariable: $DS
+            regex: ^(os\.(listdir|scandir|walk|rmdir|rename)|shutil\.(rmtree|copytree|move)|glob\.(glob|iglob))$
+    - pattern-not-inside: $Q.iterdir()
   - patterns:
     - pattern: $P.name
     - pattern-inside: '$P = $C(...)
@@ -3692,6 +3802,13 @@ rules:
     - metavariable-regex:
         metavariable: $C
         regex: ^(pathlib\.)?(Path|PurePath|PurePosixPath|PureWindowsPath)$
+    - pattern-not-inside:
+        patterns:
+        - pattern: $DS(...)
+        - metavariable-regex:
+            metavariable: $DS
+            regex: ^(os\.(listdir|scandir|walk|rmdir|rename)|shutil\.(rmtree|copytree|move)|glob\.(glob|iglob))$
+    - pattern-not-inside: $Q.iterdir()
   - pattern: int(...)
   - pattern: uuid.UUID(...)
   pattern-sinks:
@@ -3720,6 +3837,11 @@ rules:
       - pattern: os.rename($P, ...)
       - pattern: os.makedirs($P, ...)
       - pattern: os.listdir($P)
+      - pattern: os.scandir($P)
+      - pattern: os.walk($P, ...)
+      - pattern: os.rmdir($P)
+      - pattern: glob.glob($P, ...)
+      - pattern: pathlib.Path($P).iterdir()
       - pattern: shutil.rmtree($P, ...)
     - focus-metavariable: $P
   - patterns:
@@ -3728,7 +3850,7 @@ rules:
       - pattern: $Q.joinpath($P).$M(...)
     - metavariable-regex:
         metavariable: $M
-        regex: ^(read_text|read_bytes|open)$
+        regex: ^(read_text|read_bytes|open|iterdir)$
     - focus-metavariable: $P
 - id: sast.python.requests-cleartext
   languages:
