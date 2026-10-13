@@ -15,13 +15,13 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/79.html
         - https://mozilla.github.io/nunjucks/templating.html#safe
+    # Nunjucks is the JS engine that has a "safe" filter. The filter name is shared with Django and Python
+    # Jinja2, whose templates live in .html / .jinja / .j2 files and are covered by Python-side tooling, so
+    # those extensions are left out to avoid flagging developer-written Django help text.
     paths:
       include:
         - "*.njk"
-        - "*.html"
-        - "*.jinja"
-        - "*.jinja2"
-        - "*.j2"
+        - "*.nunjucks"
     # a sanitizer counts only as a call at the start of the expression or as a whole filter name, never as part of an identifier
     pattern-regex: >-
       (?i)\{\{-?(?!\s*(?:'[^']*'|"[^"]*")\s*\|)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()(?![^}]*\|\s*(?:escape|e|forceescape|striptags|sanitize|purify)\s*(?:[(|]|-?\}))(?![^}\n]*\.Content\b)[^}\n]*\|\s*(?:safe|safeHTML)\b[^}\n]*-?\}\}
