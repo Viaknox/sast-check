@@ -86,6 +86,19 @@ rules:
                   $APP.$M(..., $F)
                   ...
                   function $F($REQ, ...) { ... }
+              # Semgrep CE does not treat these as function definitions (Opengrep does), so spell them out
+              - pattern-inside: |
+                  const $F = ($REQ, ...) => { ... }
+                  ...
+                  $APP.$M(..., $F)
+              - pattern-inside: |
+                  const $F = async ($REQ, ...) => { ... }
+                  ...
+                  $APP.$M(..., $F)
+              - pattern-inside: |
+                  const $F = function ($REQ, ...) { ... }
+                  ...
+                  $APP.$M(..., $F)
           - metavariable-regex:
               metavariable: $M
               regex: '^(get|post|put|patch|delete|all|use|head|options)$'
@@ -163,4 +176,20 @@ rules:
           - metavariable-regex:
               metavariable: $T
               regex: '^(setTimeout|setInterval|window\.setTimeout|window\.setInterval|globalThis\.setTimeout|globalThis\.setInterval)$'
+          - focus-metavariable: $X
+      # vm functions imported under another name: import { runInNewContext as run } from "vm"
+      - patterns:
+          - pattern-either:
+              - pattern: $K($X, ...)
+              - pattern: new $K($X, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  import { $O as $K } from "vm";
+                  ...
+              - pattern-inside: |
+                  import { $O as $K } from "node:vm";
+                  ...
+          - metavariable-regex:
+              metavariable: $O
+              regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction|Script)$'
           - focus-metavariable: $X
