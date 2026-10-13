@@ -38,6 +38,14 @@ rules:
               - pattern-inside: |
                   module.exports = $X
           - focus-metavariable: $D
+      # the default export is the config, whatever keys it has
+      - patterns:
+          - pattern: |
+              { ..., define: $D, ... }
+          # the default-export object, read as text (3 levels of braces) because the engines disagree on how
+          # `export default` and `export const` differ in the syntax tree
+          - pattern-regex: 'export\s+default\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}'
+          - focus-metavariable: $D
       # a bare config object (e.g. export default { ... }) is recognised by a Vite-only sibling key
       - patterns:
           - pattern: |

@@ -121,3 +121,24 @@ export function unrelated2() {
   c.define = envUnrelated;
   return c;
 }
+
+// a default-exported config object whose only key is define (no Vite-only sibling key)
+const envBareDefault = loadEnv("production", process.cwd(), "");
+export default {
+  // ruleid: sast.js.vite-loadenv-all-vars
+  define: { __ENV__: JSON.stringify(envBareDefault) },
+};
+
+// default-exported config that picks specific keys stays quiet
+export default {
+  // ok: sast.js.vite-loadenv-all-vars
+  define: { __API__: JSON.stringify(envBareDefault.API_URL) },
+};
+
+// a config built in a variable is still recognised by its Vite-only key
+const envViaVar = loadEnv("production", process.cwd(), "");
+const viteCfg = {
+  server: { port: 3000 },
+  // ruleid: sast.js.vite-loadenv-all-vars
+  define: { __ALL__: JSON.stringify(envViaVar) },
+};
