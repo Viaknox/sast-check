@@ -25,7 +25,24 @@ rules:
       - pattern: $ENV[...]
       - pattern: Object.keys(...)
     pattern-sinks:
+      # define inside defineConfig(...) or the CommonJS export of a config file
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  { ..., define: $D, ... }
+              - pattern: |
+                  $CFG.define = $D
+          - pattern-either:
+              - pattern-inside: |
+                  defineConfig(...)
+              - pattern-inside: |
+                  module.exports = $X
+          - focus-metavariable: $D
+      # a bare config object (e.g. export default { ... }) is recognised by a Vite-only sibling key
       - patterns:
           - pattern: |
-              { ..., define: $D, ... }
+              { ..., define: $D, ..., $K: $V, ... }
+          - metavariable-regex:
+              metavariable: $K
+              regex: ^(plugins|server|build|base|resolve|css|esbuild|optimizeDeps|envPrefix|envDir|publicDir|preview|ssr|appType|worker)$
           - focus-metavariable: $D

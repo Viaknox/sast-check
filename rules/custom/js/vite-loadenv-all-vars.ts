@@ -80,3 +80,44 @@ export const e = defineConfig(({ mode }) => {
     define: pickPublic(loadEnv(mode, process.cwd(), "")),
   };
 });
+
+// the assignment form puts the whole environment into define too
+export const f = defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const cfg: any = { plugins: [] };
+  // ruleid: sast.js.vite-loadenv-all-vars
+  cfg.define = { "process.env": env };
+  return cfg;
+});
+
+// a plain default-exported config object (vite.config.ts without defineConfig)
+const envDefault = loadEnv("production", process.cwd(), "");
+export default {
+  plugins: [],
+  // ruleid: sast.js.vite-loadenv-all-vars
+  define: { __ALL__: JSON.stringify(envDefault) },
+};
+
+const envCjs = loadEnv("production", process.cwd(), "");
+module.exports = {
+  // ruleid: sast.js.vite-loadenv-all-vars
+  define: { ...envCjs },
+};
+
+// an unrelated object that happens to have a define key is not a Vite config
+const envUnrelated = loadEnv("production", process.cwd(), "");
+export const unrelated1 = {
+  // ok: sast.js.vite-loadenv-all-vars
+  define: envUnrelated,
+};
+export const unrelated3 = {
+  label: "x",
+  // ok: sast.js.vite-loadenv-all-vars
+  define: envUnrelated,
+};
+export function unrelated2() {
+  const c: any = {};
+  // ok: sast.js.vite-loadenv-all-vars
+  c.define = envUnrelated;
+  return c;
+}
