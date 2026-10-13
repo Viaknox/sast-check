@@ -266,3 +266,82 @@ def bad_helper_post(user, request):
 def bad_helper_cookies(user, request):
     # ruleid: sast.python.django-httpresponse-xss
     return HttpResponse("hi " + request.COOKIES["name"])
+
+
+# a literal template only sanitizes when it keeps Django's autoescaping
+def bad_template_autoescape_off(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(Template("{% autoescape off %}{{ q }}{% endautoescape %}").render(Context({"q": request.GET["q"]})))
+
+
+def bad_template_safe_filter(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(Template("<p>{{ q|safe }}</p>").render(Context({"q": request.GET["q"]})))
+
+
+def bad_template_safe_filter_spaced(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(Template("<p>{{ q | safe }}</p>").render(Context({"q": request.GET["q"]})))
+
+
+def bad_template_safeseq_filter(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(Template("{{ items|safeseq|join:',' }}").render(Context({"items": request.GET.getlist("i")})))
+
+
+def bad_template_multiline_autoescape_off(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(Template("""<div>
+{% autoescape off %}
+{{ q }}
+{% endautoescape %}
+</div>""").render(Context({"q": request.GET["q"]})))
+
+
+def bad_template_variable_autoescape_off(request):
+    tpl = Template("{% autoescape off %}{{ q }}{% endautoescape %}")
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(tpl.render(Context({"q": request.GET["q"]})))
+
+
+def bad_template_variable_safe_filter(request):
+    tpl = Template("<p>{{ q|safe }}</p>")
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(tpl.render(Context({"q": request.GET["q"]})))
+
+
+def bad_template_context_autoescape_false(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(Template("<p>{{ q }}</p>").render(Context({"q": request.GET["q"]}, autoescape=False)))
+
+
+def bad_template_variable_context_autoescape_false(request):
+    tpl = Template("<p>{{ q }}</p>")
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(tpl.render(Context({"q": request.GET["q"]}, autoescape=False)))
+
+
+def bad_template_context_autoescape_positional(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(Template("<p>{{ q }}</p>").render(Context({"q": request.GET["q"]}, False)))
+
+
+def bad_template_variable_context_autoescape_positional(request):
+    tpl = Template("<p>{{ q }}</p>")
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(tpl.render(Context({"q": request.GET["q"]}, False)))
+
+
+def ok_template_escape_filters(request):
+    # ok: sast.python.django-httpresponse-xss
+    return HttpResponse(Template("<p>{{ q|escape }} {{ q|force_escape }} {{ q|upper }}</p>").render(Context({"q": request.GET["q"]})))
+
+
+def ok_template_autoescape_on(request):
+    # ok: sast.python.django-httpresponse-xss
+    return HttpResponse(Template("{% autoescape on %}{{ q }}{% endautoescape %}").render(Context({"q": request.GET["q"]})))
+
+
+def ok_template_context_autoescape_true(request):
+    # ok: sast.python.django-httpresponse-xss
+    return HttpResponse(Template("<p>{{ q }}</p>").render(Context({"q": request.GET["q"]}, autoescape=True)))

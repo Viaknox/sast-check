@@ -62,13 +62,26 @@ rules:
           - metavariable-regex:
               metavariable: $FH
               regex: '^(django\.utils\.html\.)?format_html$'
-      # Template autoescapes variables; only a literal template source counts
-      - pattern: Template("...").render(...)
+      # Template autoescapes variables; only a literal template source counts, and only while the
+      # literal keeps escaping on (no |safe / |safeseq filter, no {% autoescape off %}) and the
+      # Context is not built with autoescape=False
+      - patterns:
+          - pattern: Template($S).render(...)
+          - metavariable-regex:
+              metavariable: $S
+              regex: '(?s)^[rRuU]?["''](?!.*(\|\s*safe|autoescape\s+off))'
+          - pattern-not: Template(...).render(Context(..., autoescape=False))
+          - pattern-not: Template(...).render(Context($D, False))
       - patterns:
           - pattern: $T.render(...)
           - pattern-inside: |
-              $T = Template("...")
+              $T = Template($S)
               ...
+          - metavariable-regex:
+              metavariable: $S
+              regex: '(?s)^[rRuU]?["''](?!.*(\|\s*safe|autoescape\s+off))'
+          - pattern-not: $T.render(Context(..., autoescape=False))
+          - pattern-not: $T.render(Context($D, False))
       - pattern: int(...)
       - pattern: float(...)
       - pattern: bool(...)
