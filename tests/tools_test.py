@@ -159,6 +159,26 @@ class FpReport(unittest.TestCase):
             fp_sweep.report(self.work, [ids[0], ids[0], ids[1]], self.corpus)
         self.assertEqual(fp_sweep.report(self.work, ids, self.corpus)["rules"]["r1"]["fp"], 3)
 
+    def test_a_label_with_the_id_of_a_stale_finding_is_skipped(self):
+        stale = {"repo": "o/a", "rule": "r1", "path": "old.js", "line": 5, "sha": "1" * 40, "rules": "old"}
+        (self.work / "findings.json").write_text(json.dumps(self.f + [stale]))
+        labels = [{**x, "id": fp_sweep.finding_id(x), "label": "fp"} for x in self.f + [stale]]
+        self.assertEqual(fp_sweep.report(self.work, labels, self.corpus)["rules"]["r1"]["fp"], 2)
+
+    def test_an_unreadable_engine_version_is_an_error_not_an_empty_digest(self):
+        with tempfile.TemporaryDirectory() as td:
+            eng = Path(td) / "opengrep"
+            for body in ("exit 1", "exit 0", "echo 1.30.2; exit 3"):
+                eng.write_text(f"#!/bin/sh\n{body}\n")
+                eng.chmod(eng.stat().st_mode | stat.S_IEXEC)
+                path = os.environ["PATH"]
+                os.environ["PATH"] = f"{td}{os.pathsep}{path}"
+                try:
+                    with self.assertRaises(ValueError, msg=body):
+                        fp_sweep.rules_digest()
+                finally:
+                    os.environ["PATH"] = path
+
     def test_a_label_with_another_findings_id_is_refused(self):
         ids = [{**x, "id": fp_sweep.finding_id(x), "label": "fp"} for x in self.f]
         swapped = [{**ids[0], "id": ids[1]["id"]}, {**ids[1], "id": ids[0]["id"]}]
