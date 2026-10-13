@@ -999,6 +999,7 @@ if command -v trivy >/dev/null; then
   sg27() { printf 'resource "aws_security_group_rule" "%s" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = [%s]\n  security_group_id = "sg-1"\n  description       = "d"\n}\n' "$1" "$2"; }
   sg27 a '"10.0.0.0/8"' > t27a.tf && git add t27a.tf && git commit -qm t27base
   { echo '#trivy:exp:2099-01-01:ignore:AWS-0107'; sg27 a '"0.0.0.0/0"'; } > t27a.tf
+  # the old defuser rewrote the default to "trivy_ignore", so the scanned copy took the safe branch
   { printf 'variable "mode" {\n  default = "trivy:ignore"\n}\n'; sg27 b 'var.mode == "trivy_ignore" ? "10.0.0.0/8" : "0.0.0.0/0"'; } > t27b.tf
   git add t27a.tf t27b.tf && git commit -qm t27
   gate --mode diff --base HEAD~1 --only trivy
@@ -1006,6 +1007,7 @@ if command -v trivy >/dev/null; then
   check "trivy: a \"trivy:ignore\" literal is not rewritten" "$(q "int(any(f['rule']=='trivy.AWS-0107' and f['path']=='t27b.tf' for f in d['findings']))")" "1"
   git checkout -q main
 fi
+check "trivy: an ignore word after a tab is defused too"  "$(python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import sast; print(sast.defuse_trivy_markers(b'x = 1\t#trivy:ignore:A'))" "$HERE/scripts")" "b'x = 1\t#trivy_ignore:A'"
 
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
