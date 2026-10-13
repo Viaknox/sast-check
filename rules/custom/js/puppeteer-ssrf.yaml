@@ -79,8 +79,11 @@ rules:
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
-    # The receiver must be a page: a variable assigned from `await <browser or context>.newPage()`, or that
-    # expression written inline. A variable's name decides nothing.
+    # The receiver must be a page, shown by one of:
+    #   - a variable assigned from `await <browser or context>.newPage()`
+    #   - that expression written inline
+    #   - a function parameter, when the file requires/imports puppeteer or puppeteer-core above it
+    # A variable's name decides nothing, and without a puppeteer import a parameter proves nothing.
     pattern-sinks:
       # navigation: a fixed https://host/ origin or component encoding keeps the host fixed
       - requires: INPUT and not FIXED_ORIGIN
@@ -88,9 +91,29 @@ rules:
           - pattern-either:
               - patterns:
                   - pattern: $PAGE.goto($X, ...)
-                  - pattern-inside: |
-                      $PAGE = await $B.newPage(...);
-                      ...
+                  - pattern-either:
+                      - pattern-inside: |
+                          $PAGE = await $B.newPage(...);
+                          ...
+                      - patterns:
+                          - pattern-either:
+                              - pattern-inside: |
+                                  function $F(..., $PAGE, ...) { ... }
+                              - pattern-inside: |
+                                  ($PAGE, ...) => { ... }
+                          - pattern-either:
+                              - pattern-inside: |
+                                  $P = require($M);
+                                  ...
+                              - pattern-inside: |
+                                  import * as $P from $M;
+                                  ...
+                              - pattern-inside: |
+                                  import { ... } from $M;
+                                  ...
+                          - metavariable-regex:
+                              metavariable: $M
+                              regex: '^["''`]?puppeteer(-core)?["''`]?$'
               - pattern: (await $B.newPage()).goto($X, ...)
           - pattern-not: $PAGE.goto(encodeURIComponent(...), ...)
           - focus-metavariable: $X
@@ -99,23 +122,52 @@ rules:
         patterns:
           - pattern-either:
               - patterns:
-                  - pattern: $PAGE.$M($X, ...)
-                  - pattern-inside: |
-                      $PAGE = await $B.newPage(...);
-                      ...
-              - pattern: (await $B.newPage()).$M($X, ...)
-          - metavariable-regex:
-              metavariable: $M
-              regex: '^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$'
-          - focus-metavariable: $X
-      - requires: INPUT
-        patterns:
-          - pattern: |
-              $PAGE.addScriptTag({..., $K: $X, ...})
-          - pattern-inside: |
-              $PAGE = await $B.newPage(...);
-              ...
-          - metavariable-regex:
-              metavariable: $K
-              regex: '^(url|content)$'
+                  - pattern-either:
+                      - patterns:
+                          - pattern: $PAGE.$M2($X, ...)
+                          - metavariable-regex:
+                              metavariable: $M2
+                              regex: '^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$'
+                      - patterns:
+                          - pattern: |
+                              $PAGE.addScriptTag({..., $K: $X, ...})
+                          - metavariable-regex:
+                              metavariable: $K
+                              regex: '^(url|content)$'
+                  - pattern-either:
+                      - pattern-inside: |
+                          $PAGE = await $B.newPage(...);
+                          ...
+                      - patterns:
+                          - pattern-either:
+                              - pattern-inside: |
+                                  function $F(..., $PAGE, ...) { ... }
+                              - pattern-inside: |
+                                  ($PAGE, ...) => { ... }
+                          - pattern-either:
+                              - pattern-inside: |
+                                  $P = require($M);
+                                  ...
+                              - pattern-inside: |
+                                  import * as $P from $M;
+                                  ...
+                              - pattern-inside: |
+                                  import { ... } from $M;
+                                  ...
+                          - metavariable-regex:
+                              metavariable: $M
+                              regex: '^["''`]?puppeteer(-core)?["''`]?$'
+              - patterns:
+                  - pattern-either:
+                      - patterns:
+                          - pattern: (await $B.newPage()).$M2($X, ...)
+                          - metavariable-regex:
+                              metavariable: $M2
+                              regex: '^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$'
+                      - patterns:
+                          - pattern: |
+                              (await $B.newPage()).addScriptTag({..., $K: $X, ...})
+                          - metavariable-regex:
+                              metavariable: $K
+                              regex: '^(url|content)$'
           - focus-metavariable: $X

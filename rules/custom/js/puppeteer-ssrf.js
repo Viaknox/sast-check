@@ -1,3 +1,76 @@
+// How this fixture is ordered (read before editing):
+// A page handed in as a parameter only counts once puppeteer is imported earlier in the file, so the
+// no-import look-alikes come first, then one region per way of importing, then the main fixture.
+
+// ---- no puppeteer import above this point: a parameter's name proves nothing ----
+async function noLibGoto(page, req) {
+  // ok: sast.js.puppeteer-ssrf
+  await page.goto(req.query.url);
+}
+
+async function noLibContent(page, req) {
+  // ok: sast.js.puppeteer-ssrf
+  page.setContent(req.body.html);
+  // ok: sast.js.puppeteer-ssrf
+  page.addScriptTag({ url: req.query.src });
+}
+
+// ---- puppeteer-core required inside the function that receives the page ----
+async function viaCoreRequire(page, req) {
+  const core = require('puppeteer-core');
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.goto(req.query.url);
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.setContent(req.body.html);
+}
+// ---- modules that are not puppeteer (required inside the function, then imported) ----
+async function otherRequire(page, req) {
+  const lodash = require('lodash');
+  // ok: sast.js.puppeteer-ssrf
+  await page.goto(req.query.url);
+  // ok: sast.js.puppeteer-ssrf
+  await page.setContent(req.body.html);
+  // ok: sast.js.puppeteer-ssrf
+  await page.addScriptTag({ url: req.query.src });
+}
+
+import otherLib from 'lodash';
+async function afterOtherImport(page, req) {
+  // ok: sast.js.puppeteer-ssrf
+  await page.goto(req.query.url);
+  // ok: sast.js.puppeteer-ssrf
+  await page.setContent(req.body.html);
+  // ok: sast.js.puppeteer-ssrf
+  await page.addScriptTag({ url: req.query.src });
+}
+
+// ---- each way of importing puppeteer, in its own region (an import covers everything below it) ----
+// `import * as` is first because only it is tested alone; a default import is read by the `import { }` pattern
+import * as ppStar from 'puppeteer-core';
+async function afterStarImport(page, req) {
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.goto(req.query.url);
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.evaluate(req.body.script);
+}
+
+import puppeteerDefault from 'puppeteer';
+async function afterDefaultImport(page, req) {
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.goto(req.query.url);
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.setContent(req.body.html);
+}
+
+import { launch } from 'puppeteer';
+async function afterNamedImport(page, req) {
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.goto(req.query.url);
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.addScriptTag({ content: req.body.code });
+}
+
+
 const puppeteer = require('puppeteer');
 const express = require('express');
 const app = express();
@@ -118,5 +191,90 @@ app.get('/not-a-page', async (req, res) => {
   const other = makeThing();
   // ok: sast.js.puppeteer-ssrf
   await other.goto(req.query.url);
+  res.end();
+});
+
+// ---- the page is a parameter of the function (puppeteer is required at the top of this file) ----
+async function shoot(page, req) {
+  // ruleid: sast.js.puppeteer-ssrf
+  await page.goto(req.query.url);
+}
+
+const render = async (pg, req) => {
+  // ruleid: sast.js.puppeteer-ssrf
+  await pg.setContent(req.body.html);
+  // ruleid: sast.js.puppeteer-ssrf
+  await pg.evaluate(req.body.script);
+  // ruleid: sast.js.puppeteer-ssrf
+  await pg.addScriptTag({ url: req.query.src });
+};
+
+function plain(p, req) {
+  // ruleid: sast.js.puppeteer-ssrf
+  return p.waitForFunction(req.body.expr);
+}
+
+async function safeParam(page, req) {
+  // ok: sast.js.puppeteer-ssrf
+  await page.goto('https://example.com/r?id=' + encodeURIComponent(req.query.id));
+  // ok: sast.js.puppeteer-ssrf
+  await page.setContent('<h1>Static</h1>');
+  // ok: sast.js.puppeteer-ssrf
+  await page.addScriptTag({ url: 'https://example.com/app.js' });
+}
+
+// a local that is not a parameter and not from newPage() is still not a page
+function localNotParam(req) {
+  const tab = makeTab();
+  // ok: sast.js.puppeteer-ssrf
+  return tab.goto(req.query.url);
+}
+
+// ---- inline newPage() receivers, same shapes as the variable form ----
+app.get('/inline-all', async (req, res) => {
+  const browser = await puppeteer.launch();
+  // ruleid: sast.js.puppeteer-ssrf
+  await (await browser.newPage()).addScriptTag({ url: req.query.src });
+  // ruleid: sast.js.puppeteer-ssrf
+  await (await browser.newPage()).addScriptTag({ content: req.body.code });
+  // ok: sast.js.puppeteer-ssrf
+  await (await browser.newPage()).addScriptTag({ url: 'https://example.com/app.js' });
+  res.end();
+});
+
+// ---- other page methods and other script-tag keys are not sinks, on either receiver form ----
+app.get('/other-methods', async (req, res) => {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  // ok: sast.js.puppeteer-ssrf
+  await page.click(req.query.sel);
+  // ok: sast.js.puppeteer-ssrf
+  await page.addScriptTag({ type: req.query.t });
+  // ok: sast.js.puppeteer-ssrf
+  await (await browser.newPage()).click(req.query.sel);
+  // ok: sast.js.puppeteer-ssrf
+  await (await browser.newPage()).addScriptTag({ type: req.query.t });
+  res.end();
+});
+
+// ---- the finding sits on the request data, even when the call spans lines ----
+app.get('/multi-line', async (req, res) => {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  await page.goto(
+    // ruleid: sast.js.puppeteer-ssrf
+    req.query.url);
+  await page.setContent(
+    // ruleid: sast.js.puppeteer-ssrf
+    req.body.html);
+  await page.addScriptTag({
+    // ruleid: sast.js.puppeteer-ssrf
+    url: req.query.src });
+  await (await browser.newPage()).setContent(
+    // ruleid: sast.js.puppeteer-ssrf
+    req.body.html);
+  await (await browser.newPage()).addScriptTag({
+    // ruleid: sast.js.puppeteer-ssrf
+    url: req.query.src });
   res.end();
 });
