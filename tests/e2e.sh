@@ -951,6 +951,96 @@ export PATH="$OLDPATH"
 check "osv: only non-excluded dependency files are scanned" "$(tr '\n' ' ' < "$T/osv-files")" "./app/requirements.txt "
 git checkout -q main
 
+# r24: a blank ignore reason is no reason (settings error, not a silent suppression)
+git checkout -q -b r24r main
+printf '[[ignore]]\nrule = "*"\nreason = "   "\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm blankreason
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "blank [[ignore]] reason is a settings error"      "$code" "2"
+git checkout -q main
+git checkout -q -b r25e main
+printf '[[ignore]]\nrule = "*"\nreason = "temp"\nexpires = "never"\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm badexpiry
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "malformed [[ignore]] expires is a settings error" "$code" "2"
+git checkout -q main
+
+# r24: a new untracked secret in an excluded dir, exposed through an existing dir link, blocks (local runs)
+git checkout -q -b r24u main
+mkdir -p vendor/v24 && echo 'x = 1' > vendor/v24/ok.py && ln -s ../vendor/v24 src/v24
+git add vendor/v24/ok.py src/v24 && git commit -qm v24base && echo 'y = 2' >> src/util.py && git commit -qam v24
+echo 'K24 = "AKIAIOSFODNN7ABCDEFL"' > vendor/v24/key.py
+gate --mode diff --base HEAD~1 --only gitleaks
+check "untracked secret behind a dir link blocks"        "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/v24/key.py')")" "1"
+rm -f vendor/v24/key.py
+git checkout -q main
+
+# r26: the PR comment is cut by characters, so a multi-byte character at the cut stays valid UTF-8
+mkdir -p "$T/ghstub" && cat > "$T/ghstub/gh" <<EOF
+#!/bin/sh
+for a in "\$@"; do case "\$a" in body=*) printf '%s' "\${a#body=}" > "$T/posted-body";; esac; done
+EOF
+chmod +x "$T/ghstub/gh"
+python3 -c "import sys; open(sys.argv[1], 'w', encoding='utf-8').write('a' * 59999 + 'é' + 'tail')" "$T/big-report.md"
+PATH="$T/ghstub:$PATH" REPO=o/r PR=1 bash "$HERE/scripts/comment.sh" "$T/big-report.md" >/dev/null
+check "PR comment body is valid UTF-8 at the cut"        "$(python3 -c "import sys; b=open(sys.argv[1],'rb').read(); b.decode('utf-8'); print(b.endswith('é'.encode()))" "$T/posted-body" 2>&1)" "True"
+
+# r27: a new untracked code file in an excluded dir, exposed through an existing dir link, is scanned (local runs)
+git checkout -q -b r27u main
+mkdir -p vendor/v27 && echo 'x = 1' > vendor/v27/ok.py && ln -s ../vendor/v27 src/v27
+git add vendor/v27/ok.py src/v27 && git commit -qm v27base && echo 'y = 2' >> src/util.py && git commit -qam v27
+printf 'import pickle\n\ndef load(b):\n    return pickle.loads(b)\n' > vendor/v27/new.py
+gate --mode diff --base HEAD~1 --only ruff
+check "untracked code behind a dir link is scanned"      "$(q "int(any(f['path']=='src/v27/new.py' for f in d['findings']))")" "1"
+rm -f vendor/v27/new.py
+git checkout -q main
+
+# r27: Trivy reads `trivy:` tokens with keys in any order; a string that is not such a token is scanned as written
+if command -v trivy >/dev/null; then
+  git checkout -q -b r27t main
+  sg27() { printf 'resource "aws_security_group_rule" "%s" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = [%s]\n  security_group_id = "sg-1"\n  description       = "d"\n}\n' "$1" "$2"; }
+  sg27 a '"10.0.0.0/8"' > t27a.tf && git add t27a.tf && git commit -qm t27base
+  { echo '#trivy:exp:2099-01-01:ignore:AWS-0107'; sg27 a '"0.0.0.0/0"'; } > t27a.tf
+  # the old defuser rewrote the default to "trivy_ignore", so the scanned copy took the safe branch
+  { printf 'variable "mode" {\n  default = "trivy:ignore"\n}\n'; sg27 b 'var.mode == "trivy_ignore" ? "10.0.0.0/8" : "0.0.0.0/0"'; } > t27b.tf
+  git add t27a.tf t27b.tf && git commit -qm t27
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: exp-first inline ignore cannot hide"       "$(q "int(any(f['rule']=='trivy.AWS-0107' and f['path']=='t27a.tf' for f in d['findings']))")" "1"
+  check "trivy: a \"trivy:ignore\" literal is not rewritten" "$(q "int(any(f['rule']=='trivy.AWS-0107' and f['path']=='t27b.tf' for f in d['findings']))")" "1"
+  git checkout -q main
+fi
+check "trivy: an ignore word after a tab is defused too"  "$(python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import sast; print(sast.defuse_trivy_markers(b'x = 1\t#trivy:ignore:A'))" "$HERE/scripts")" "b'x = 1\t#trivy_ignore:A'"
+
+# r28 (#8): only files directly in .github/workflows are workflows; GitHub never runs a subdirectory
+git checkout -q -b r28w main
+mkdir -p .github/workflows/archive
+printf 'on: issues\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.issue.title }}"\n' > .github/workflows/archive/old.yml
+git add .github/workflows/archive/old.yml && git commit -qm wfarchive
+gate --mode diff --base HEAD~1 --only zizmor
+check "workflow in a subdirectory is not scanned (diff)"  "$(q "sum(1 for f in d['findings'] if f['path'].startswith('.github/workflows/archive/'))")" "0"
+gate --mode full --only zizmor
+check "workflow in a subdirectory is not scanned (full)"  "$(q "sum(1 for f in d['findings'] if f['path'].startswith('.github/workflows/archive/'))")" "0"
+git checkout -q main
+
+# r28 (#8): a new link leaving the repo is named even when its target does not exist on this machine
+git checkout -q -b r28l main
+ln -s /nonexistent-sast-check/config.py src/gone.py && git add src/gone.py && git commit -qm brokenoutlink
+gate --mode diff --base HEAD~1 --only ruff
+check "broken link leaving the repo is named"            "$(grep -c 'symlink `src/gone.py` (points outside the repository)' sast-results/report.md)" "1"
+git checkout -q main
+
+# r28 (#8): the Trivy baseline is built like the PR's copy: inline ignores defused, in-repo links followed,
+# so an old finding in a file the PR does not touch never counts as new
+if command -v trivy >/dev/null; then
+  git checkout -q -b r28t main
+  sg28() { printf 'resource "aws_security_group_rule" "%s" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = ["0.0.0.0/0"]\n  security_group_id = "sg-1"\n  description       = "d"\n}\n' "$1"; }
+  mkdir -p infra28 && { echo '#trivy:ignore:AWS-0107'; sg28 ign; } > infra28/ign.tf && sg28 real > infra28/real.tf
+  ln -s real.tf infra28/alias.tf
+  git add infra28 && git commit -qm t28base && echo 'y = 28' >> src/util.py && git commit -qam t28
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: old ignored finding is not new"            "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='infra28/ign.tf']")" "[False]"
+  check "trivy: old finding behind an old link is not new" "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='infra28/alias.tf']")" "[False]"
+  git checkout -q main
+fi
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks

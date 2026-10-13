@@ -76,7 +76,7 @@ All `S` rules run. Severity overrides (others default to low):
 
 ## GitHub Actions — zizmor (MIT)
 
-All default audits run; severity = zizmor's own, except `known-vulnerable-actions` → critical. Key ones: `template-injection`, `unpinned-uses`, `dangerous-triggers`, `excessive-permissions`, `artipacked`, `use-trusted-publishing`, `known-vulnerable-actions` (online, uses the job token). Also audits `.github/dependabot.yml` (e.g. `dependabot-execution`). On PRs the base branch's zizmor config is used (`.github/zizmor.yml`, `.github/zizmor.yaml`, `zizmor.yml`, `zizmor.yaml`, in zizmor's own order); a workflow zizmor cannot parse fails the check.
+All default audits run; severity = zizmor's own, except `known-vulnerable-actions` → critical. Key ones: `template-injection`, `unpinned-uses`, `dangerous-triggers`, `excessive-permissions`, `artipacked`, `use-trusted-publishing`, `known-vulnerable-actions` (online, uses the job token). Also audits `.github/dependabot.yml` (e.g. `dependabot-execution`). On PRs the base branch's zizmor config is used (`.github/zizmor.yml`, `.github/zizmor.yaml`, `zizmor.yml`, `zizmor.yaml`, in zizmor's own order); a workflow zizmor cannot parse fails the check. Workflows are the `.yml`/`.yaml` files directly in `.github/workflows`; GitHub never runs one in a subdirectory, so those are not scanned (an `action.yml` is scanned wherever it is).
 
 ## Secrets — gitleaks (MIT)
 
@@ -89,7 +89,7 @@ Runs when a lockfile changes. Severity from CVSS (≥9 critical, ≥7 high, ≥4
 ## Optional — Trivy (Apache-2.0)
 
 `[tools] trivy = true` adds deep Docker/Terraform/K8s misconfiguration checks (install trivy yourself).
-On PRs it uses the base branch's `trivy.yaml` and `.trivyignore`; inline `trivy:ignore` / `tfsec:ignore` comments are not honored (use `sast-ignore` or `[[ignore]]`). Findings carry Trivy's full-line range, so a change inside a resource counts. On PRs Trivy runs from a snapshot of the base tree, so files the base `trivy.yaml` points to (custom checks, data) are the base's, not the PR's. Terraform variable files (`*.tfvars`, `*.tfvars.json`) are scan inputs and come from the PR; a vars file the PR deletes is scanned as empty (defaults apply). When a PR changes or deletes one, a finding counts as new unless the base tree (with its own vars) has the same rule on the matching line, even though no `.tf` line changed. Helm values files named in `trivy.yaml` are still read from the base.
+On PRs it uses the base branch's `trivy.yaml` and `.trivyignore`; inline `trivy:ignore` / `tfsec:ignore` rules are not honored (use `sast-ignore` or `[[ignore]]`). Trivy reads such a rule from any space-separated word starting with `trivy:` or `tfsec:`, even inside a string, so Trivy scans a copy where exactly those words are defused (`trivy_...`); a string value that is one of them is scanned in that changed form. Findings carry Trivy's full-line range, so a change inside a resource counts. On PRs Trivy runs from a snapshot of the base tree, so files the base `trivy.yaml` points to (custom checks, data) are the base's, not the PR's. Terraform variable files (`*.tfvars`, `*.tfvars.json`) are scan inputs and come from the PR; a vars file the PR deletes is scanned as empty (defaults apply). When a PR changes or deletes one, a finding counts as new unless the base tree (with its own vars) has the same rule on the matching line, even though no `.tf` line changed. Helm values files named in `trivy.yaml` are still read from the base.
 
 ## Not in v1
 
