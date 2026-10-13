@@ -1,4 +1,5 @@
 {
+ "rules_bundle": "5f8320c7dcb18cca",
  "corpus": [
   {
    "repo": "expressjs/express",
@@ -85,6 +86,7 @@
    "sha": "10539f0669a5689df82198f0fafcee5800a5926b"
   }
  ],
+ "stale_findings_excluded": 0,
  "rules": {
   "sast.docker.remote-fetch-no-checksum": {
    "tp_test": 6,

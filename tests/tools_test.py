@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
@@ -50,6 +52,17 @@ class MutantIds(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
 
 
+class Aliases(unittest.TestCase):
+    def test_a_mutant_deletes_one_alias_occurrence_only(self):
+        doc = yaml.safe_load("rules:\n- id: a\n  patterns:\n  - pattern-either: &x\n    - pattern: f(1)\n    - pattern: f(2)\n"
+                             "  - pattern-not-inside:\n      pattern-either: *x\n")
+        for _, _, m in rm.mutants(doc):
+            pats = m["rules"][0]["patterns"]
+            kept = [len(p["pattern-either"]) for p in pats if "pattern-either" in p] + \
+                   [len(p["pattern-not-inside"]["pattern-either"]) for p in pats if "pattern-not-inside" in p]
+            self.assertIn(2, kept, "a deletion removed the element from both alias occurrences")
+
+
 class BaselineReason(unittest.TestCase):
     def test_only_a_written_reason_counts(self):
         for entry in ({}, {"why": ""}, {"why": "  "}, {"why": "TODO: add a fixture line or justify"}, "x", None):
@@ -73,9 +86,12 @@ class FpReport(unittest.TestCase):
         self.work = Path(self.td.name)
         self.f = [{"repo": "o/a", "rule": "r1", "path": "x.js", "line": 3},
                   {"repo": "o/b", "rule": "r1", "path": "y.js", "line": 9}]
-        (self.work / "findings.json").write_text(json.dumps(self.f))
-        (self.work / "scanned.json").write_text(json.dumps(["o/a", "o/b", "o/c"]))
         self.corpus = [{"repo": r, "sha": "0" * 40} for r in ("o/a", "o/b", "o/c", "o/d")]
+        cur = ["0" * 40, fp_sweep.rules_digest()]
+        for f in self.f:
+            f.update(sha=cur[0], rules=cur[1])
+        (self.work / "findings.json").write_text(json.dumps(self.f))
+        (self.work / "scanned.json").write_text(json.dumps({"o/a": cur, "o/b": cur, "o/c": cur}))
 
     def tearDown(self):
         self.td.cleanup()
@@ -88,6 +104,18 @@ class FpReport(unittest.TestCase):
         self.assertEqual(rep["rules"]["r1"]["repos"], {"o/a": {"fp": 1}, "o/b": {"tp_test": 1}})
         self.assertEqual(rep["rules"]["r1"]["noise"], 0.5)
         self.assertEqual([c["repo"] for c in rep["corpus"]], ["o/a", "o/b", "o/c"])   # o/d was never scanned
+
+    def test_findings_from_another_commit_or_rule_bundle_are_excluded(self):
+        stale = {"repo": "o/c", "rule": "r1", "path": "z.js", "line": 1, "sha": "1" * 40, "rules": "old"}
+        (self.work / "findings.json").write_text(json.dumps(self.f + [stale]))
+        rep = fp_sweep.report(self.work, self.lab("fp", "tp") + [{**stale, "label": "fp"}], self.corpus)
+        self.assertEqual(rep["stale_findings_excluded"], 1)
+        self.assertEqual(rep["rules"]["r1"]["fp"], 1)
+
+    def test_two_findings_on_one_line_need_two_labels(self):
+        (self.work / "findings.json").write_text(json.dumps(self.f + [self.f[0]]))
+        with self.assertRaises(ValueError):
+            fp_sweep.report(self.work, self.lab("fp", "tp"), self.corpus)
 
     def test_partial_duplicate_stale_or_unknown_labels_are_refused(self):
         bad = [self.lab("fp"),                                            # a finding without a label

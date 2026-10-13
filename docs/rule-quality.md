@@ -41,6 +41,10 @@ Runs all rules in full mode over a pinned corpus of well-maintained open-source 
 labelled `fp` (safe code, the rule is wrong), `tp` (a real weakness), `tp_test` (the rule is right, but the code
 is a test, example or docs) or `unclear`. Noise = fp / (fp + tp + tp_test).
 
+- The sweep needs Opengrep (the CI engine) and rebuilds `dist/rules.yaml` first. Every finding is tagged with the commit
+  and rule bundle it came from; the report counts only findings from the pinned commit and the current bundle
+  (`stale_findings_excluded` says how many were left out), and labels must match those findings one to one.
+- A rule with a single scalar pattern has nothing to delete: the mutation tool prints `NOT MUTATION-TESTED` for it.
 - A confirmed false positive becomes a hand-written `ok:` fixture line, never code copied from the repository.
 - A true positive in someone else's project is never published (no issue, no PR, no fixture copied from it).
   Raw findings stay in the scratch `--work` directory; the committed report has only rule, repository, counts
