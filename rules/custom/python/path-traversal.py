@@ -1,4 +1,6 @@
+import glob
 import os
+import pathlib
 import shutil
 from pathlib import Path, PurePosixPath
 
@@ -155,3 +157,142 @@ def bad_path_parent_not_name():
     p = Path(request.args["f"])
     # ruleid: sast.python.path-traversal
     return open(p.parent).read()
+
+
+# a basename can still be "..": for a directory sink that climbs out of BASE
+def bad_listdir_path_name():
+    # ruleid: sast.python.path-traversal
+    return os.listdir(os.path.join(BASE, Path(request.args["f"]).name))
+
+
+def bad_listdir_path_name_variable():
+    p = Path(request.args["f"])
+    # ruleid: sast.python.path-traversal
+    return os.listdir(os.path.join(BASE, p.name))
+
+
+def bad_listdir_basename():
+    # ruleid: sast.python.path-traversal
+    return os.listdir(os.path.join(BASE, os.path.basename(request.args["f"])))
+
+
+def bad_listdir_bare_basename():
+    # ruleid: sast.python.path-traversal
+    return os.listdir(os.path.join(BASE, basename(request.args["f"])))
+
+
+def bad_rmtree_basename():
+    # ruleid: sast.python.path-traversal
+    shutil.rmtree(os.path.join(BASE, os.path.basename(request.form["d"])))
+
+
+def bad_rmtree_path_name():
+    # ruleid: sast.python.path-traversal
+    shutil.rmtree(os.path.join(BASE, PurePosixPath(request.form["d"]).name))
+
+
+def bad_copytree_basename():
+    # ruleid: sast.python.path-traversal
+    shutil.copytree(os.path.join(BASE, os.path.basename(request.args["d"])), "/tmp/out")
+
+
+def bad_scandir_basename():
+    # ruleid: sast.python.path-traversal
+    return list(os.scandir(os.path.join(BASE, os.path.basename(request.args["d"]))))
+
+
+def bad_walk_path_name():
+    # ruleid: sast.python.path-traversal
+    return list(os.walk(os.path.join(BASE, Path(request.args["d"]).name)))
+
+
+def bad_rmdir_basename():
+    # ruleid: sast.python.path-traversal
+    os.rmdir(os.path.join(BASE, os.path.basename(request.form["d"])))
+
+
+def bad_glob_basename():
+    # ruleid: sast.python.path-traversal
+    return glob.glob(os.path.join(BASE, os.path.basename(request.args["d"]), "*"))
+
+
+def bad_iterdir_path_name():
+    # ruleid: sast.python.path-traversal
+    return list((Path(BASE) / Path(request.args["d"]).name).iterdir())
+
+
+def bad_scandir_raw():
+    # ruleid: sast.python.path-traversal
+    return list(os.scandir(request.args["d"]))
+
+
+def bad_walk_raw():
+    # ruleid: sast.python.path-traversal
+    return list(os.walk(request.args["d"]))
+
+
+def bad_rmdir_raw():
+    # ruleid: sast.python.path-traversal
+    os.rmdir(request.form["d"])
+
+
+def bad_glob_raw():
+    # ruleid: sast.python.path-traversal
+    return glob.glob(os.path.join(BASE, request.args["d"], "*"))
+
+
+def bad_iterdir_raw():
+    # ruleid: sast.python.path-traversal
+    return list(Path(request.args["d"]).iterdir())
+
+
+# file sinks fail on ".." (it is a directory), so a basename stays a valid sanitizer there
+def ok_remove_basename():
+    # ok: sast.python.path-traversal
+    os.remove(os.path.join(BASE, os.path.basename(request.form["f"])))
+
+
+def ok_read_text_path_name():
+    # ok: sast.python.path-traversal
+    return (Path(BASE) / Path(request.args["f"]).name).read_text()
+
+
+def ok_listdir_secure_filename():
+    # ok: sast.python.path-traversal
+    return os.listdir(os.path.join(BASE, secure_filename(request.args["d"])))
+
+
+def ok_iterdir_secure_filename():
+    # ok: sast.python.path-traversal
+    return list((Path(BASE) / secure_filename(request.args["d"])).iterdir())
+
+
+def ok_scandir_const():
+    # ok: sast.python.path-traversal
+    return list(os.scandir(BASE))
+
+
+def bad_iterdir_qualified_raw():
+    # ruleid: sast.python.path-traversal
+    return list(pathlib.Path(request.args["d"]).iterdir())
+
+
+def bad_iterdir_basename():
+    # ruleid: sast.python.path-traversal
+    return list((Path(BASE) / os.path.basename(request.args["d"])).iterdir())
+
+
+def bad_iterdir_path_name_variable():
+    p = Path(request.args["d"])
+    # ruleid: sast.python.path-traversal
+    return list((Path(BASE) / p.name).iterdir())
+
+
+def ok_open_bare_basename():
+    # ok: sast.python.path-traversal
+    return open(os.path.join(BASE, basename(request.args["f"]))).read()
+
+
+def ok_path_exists_not_a_sink():
+    # ok: sast.python.path-traversal
+    return (Path(BASE) / request.args["f"]).exists()
