@@ -19,8 +19,6 @@ rules:
     mode: taint
     pattern-sources:
       - pattern-either:
-          - pattern: location.hash
-          - pattern: location.search
           - pattern: window.location.hash
           - pattern: window.location.search
           - pattern: document.location.hash
@@ -38,6 +36,21 @@ rules:
               - pattern-inside: |
                   $W.onmessage = ($E) => { ... }
           - pattern: $E.data
+      - patterns:
+          - pattern-either:
+              - pattern: location.hash
+              - pattern: location.search
+          # a variable, parameter or prop that is itself called location is not the browser location
+          - pattern-not-inside: |
+              function $F(..., location, ...) { ... }
+          - pattern-not-inside: |
+              var location = $E;
+              ...
+          - pattern-not-inside: |
+              var { ..., location, ... } = $E;
+              ...
+          - pattern-not-inside: |
+              function $F(..., { ..., location, ... }, ...) { ... }
     pattern-sanitizers:
       # the check only counts inside the branch it guards (or after an early return), not when its result is ignored
       - patterns:
@@ -67,24 +80,38 @@ rules:
     pattern-sinks:
       - patterns:
           - pattern-either:
-              - pattern: location = $X
               - pattern: window.location = $X
               - pattern: document.location = $X
-              - pattern: location.href = $X
               - pattern: window.location.href = $X
               - pattern: document.location.href = $X
           - pattern-not: $L = `/...`
           - focus-metavariable: $X
       - patterns:
           - pattern-either:
-              - pattern: location.assign($X)
               - pattern: window.location.assign($X)
               - pattern: document.location.assign($X)
-              - pattern: location.replace($X)
               - pattern: window.location.replace($X)
               - pattern: document.location.replace($X)
               - pattern: window.open($X, ...)
               - pattern: window.open($X)
               - pattern: open($X)
           - pattern-not: $F(`/...`, ...)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-either:
+              - pattern: location = $X
+              - pattern: location.href = $X
+              - pattern: location.assign($X)
+              - pattern: location.replace($X)
+          # a variable, parameter or prop that is itself called location is not the browser location
+          - pattern-not-inside: |
+              function $F(..., location, ...) { ... }
+          - pattern-not-inside: |
+              var location = $E;
+              ...
+          - pattern-not-inside: |
+              var { ..., location, ... } = $E;
+              ...
+          - pattern-not-inside: |
+              function $F(..., { ..., location, ... }, ...) { ... }
           - focus-metavariable: $X

@@ -103,3 +103,107 @@ function ok8() {
     window.location.assign(next);
   }
 }
+
+// a local variable, parameter or prop called location is not the browser location
+function l1(location) {
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.href = v;
+}
+const l2 = function (location) {
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.assign(v);
+};
+const l3 = (location) => {
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.replace(v);
+};
+function l4() {
+  const location = getPlace();
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location = v;
+}
+function l5(props) {
+  const { location } = props;
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.href = v;
+}
+function L6({ location }) {
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.href = v;
+}
+const l7 = ({ id, location }) => {
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.href = v;
+};
+// the same names as the source: location.search / location.hash of a local object
+function s1(location) {
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+}
+const s2 = function (location) {
+  // ok: sast.js.location-xss
+  window.location.href = location.hash;
+};
+const s3 = (location) => {
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+};
+function s4() {
+  const location = getPlace();
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+}
+function s5(props) {
+  const { location } = props;
+  // ok: sast.js.location-xss
+  window.location.href = location.hash;
+}
+function S6({ location }) {
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+}
+const s7 = ({ location }) => {
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+};
+// the browser location is still checked when another function has a parameter with that name
+function m1(location) {
+  return location;
+}
+function m2() {
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ruleid: sast.js.location-xss
+  location = v;
+}
+function m3() {
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ruleid: sast.js.location-xss
+  location.replace(v);
+}
+function m4(location) {
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ruleid: sast.js.location-xss
+  window.location.href = v;
+}
+function m7() {
+  const v = new URLSearchParams(window.location.search).get("v");
+  location.assign(
+    // ruleid: sast.js.location-xss
+    v
+  );
+}
+function m6() {
+  // ruleid: sast.js.location-xss
+  window.location.href = location.search;
+}
+function m5(location) {
+  // ruleid: sast.js.location-xss
+  window.location.href = window.location.search;
+}
