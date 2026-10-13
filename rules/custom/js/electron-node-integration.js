@@ -56,3 +56,44 @@ function h() {
   loadSettings();
   return new BrowserWindow({ show: false, webPreferences: wp });
 }
+
+// settings objects that never reach an Electron window constructor
+function cfgA() {
+  // ok: sast.js.electron-node-integration
+  return { name: "runner", webPreferences: { sandbox: false } };
+}
+function cfgB(Widget) {
+  // ok: sast.js.electron-node-integration
+  return new Widget({ webPreferences: { contextIsolation: false } });
+}
+function cfgC() {
+  // ok: sast.js.electron-node-integration
+  const wp = { sandbox: false };
+  return new Panel({ webPreferences: wp });
+}
+function cfgD() {
+  // ok: sast.js.electron-node-integration
+  const wp = { webSecurity: false };
+  return wp;
+}
+
+function m() {
+  // ruleid: sast.js.electron-node-integration
+  const wp = { nodeIntegrationInWorker: true };
+  return new BrowserWindow({ webPreferences: wp });
+}
+function n() {
+  // ruleid: sast.js.electron-node-integration
+  const wp = { webSecurity: false };
+  return new BrowserWindow({ webPreferences: wp });
+}
+
+function k() {
+  // ruleid: sast.js.electron-node-integration
+  return new WebContentsView({ webPreferences: { sandbox: false } });
+}
+function l() {
+  // ruleid: sast.js.electron-node-integration
+  const wp = { sandbox: false };
+  return new WebContentsView({ webPreferences: wp });
+}
