@@ -57,8 +57,11 @@ def checkout(work: Path, repo: str, sha: str) -> Path:
 
 
 def rules_digest() -> str:
-    """Hash of the rule bundle the sweep scans with (findings from another rule revision are stale)."""
-    return hashlib.sha256((ROOT / "dist" / "rules.yaml").read_bytes()).hexdigest()[:16]
+    """Hash of the rule bundle and the Opengrep version the sweep scans with: findings from another rule
+    revision or engine version are stale (targeting and parsing can change between versions)."""
+    eng = shutil.which("opengrep")
+    ver = subprocess.run([eng, "--version"], capture_output=True, text=True, timeout=60).stdout.strip() if eng else "none"
+    return hashlib.sha256((ROOT / "dist" / "rules.yaml").read_bytes() + b"\0" + ver.encode()).hexdigest()[:16]
 
 
 def scan(work: Path, repo: str, d: Path, sha: str, digest: str) -> list[dict]:
@@ -116,7 +119,7 @@ def report(work: Path, labels: list[dict], corpus: list[dict]) -> dict:
     for i, x in by_id.items():
         at.setdefault(key(x), []).append(i)
     stale_loc = {key(x) for x in allf} - set(at)   # labels for stale findings stay in the file but do not count
-    problems, labelled = [], Counter()
+    problems, labelled, matched = [], Counter(), {}
     if bad := sorted({x.get("label") for x in labels} - set(LABELS), key=str):
         problems.append(f"unknown labels {bad} (allowed: {', '.join(LABELS)})")
     for x in labels:
@@ -127,7 +130,11 @@ def report(work: Path, labels: list[dict], corpus: list[dict]) -> dict:
             problems.append(f"label {key(x)} matches {'no' if not ids or ids[0] not in by_id else 'more than one'} "
                             "current finding (give it the finding's id)")
             continue
+        if x.get("id") and key(x) != key(by_id[ids[0]]):
+            problems.append(f"label {key(x)} carries the id of a different finding {key(by_id[ids[0]])}")
+            continue
         labelled[ids[0]] += 1
+        matched[ids[0]] = x["label"]
     if dup := [i for i, n in labelled.items() if n > 1]:
         problems.append(f"{len(dup)} findings labelled more than once, e.g. {key(by_id[dup[0]])}")
     if missing := [i for i in by_id if i not in labelled]:
@@ -135,13 +142,12 @@ def report(work: Path, labels: list[dict], corpus: list[dict]) -> dict:
     if problems:
         raise ValueError("labels do not match --work/findings.json: " + "; ".join(problems[:5]))
     per: dict[str, dict] = {}
-    for x in labels:
-        if x["repo"] not in current or (not x.get("id") and key(x) in stale_loc):
-            continue
-        r = per.setdefault(x["rule"], {"counts": Counter(), "fp_repos": Counter()})
-        r["counts"][x["label"]] += 1
-        if x["label"] == "fp":
-            r["fp_repos"][x["repo"]] += 1
+    for i, lab in matched.items():   # counted by the matched finding's rule and repo, never the label's copy
+        f = by_id[i]
+        r = per.setdefault(f["rule"], {"counts": Counter(), "fp_repos": Counter()})
+        r["counts"][lab] += 1
+        if lab == "fp":
+            r["fp_repos"][f["repo"]] += 1
     out = {"rules_bundle": digest, "corpus": [{"repo": c["repo"], "sha": c["sha"]} for c in corpus if c["repo"] in current],
            "stale_findings_excluded": len(allf) - len(findings), "rules": {}}
     for rule, r in sorted(per.items()):
