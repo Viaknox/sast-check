@@ -77,6 +77,11 @@ function cfgD() {
   return wp;
 }
 
+function secure() {
+  // ok: sast.js.electron-node-integration
+  const wp = { nodeIntegration: false, contextIsolation: true, sandbox: true };
+  return new BrowserWindow({ webPreferences: wp });
+}
 function m() {
   // ruleid: sast.js.electron-node-integration
   const wp = { nodeIntegrationInWorker: true };
