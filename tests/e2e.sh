@@ -724,6 +724,14 @@ if command -v osv-scanner >/dev/null; then
   gate --mode diff --base HEAD~1 --only osv
   check "lockfile behind a directory link is reported"     "$(q "int(any(f['path']=='src/pkg15l/package-lock.json' and f['in_diff'] for f in d['findings']))")" "1"
   git checkout -q main
+  # ...and a clean change to such a lockfile passes (its own scan read it; no vulnerabilities is not an error)
+  git checkout -q -b r22c main
+  mkdir -p vendor/pkgc src && printf '{"name":"x","lockfileVersion":3,"requires":true,"packages":{"":{"name":"x","dependencies":{"lodash":"4.17.21"}},"node_modules/lodash":{"version":"4.17.21","resolved":"https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"}}}\n' > vendor/pkgc/package-lock.json
+  ln -s ../vendor/pkgc src/pkgc && git add vendor/pkgc src/pkgc && git commit -qm cbase
+  sed -i 's/"name":"x"/"name":"y"/' vendor/pkgc/package-lock.json && git commit -qam cclean
+  gate --mode diff --base HEAD~1 --only osv
+  check "clean lockfile behind a link into an excluded dir passes" "$code" "0"
+  git checkout -q main
 fi
 
 # r17: "**/*_test.py" also matches a root-level test file (only the "**/" prefix is optional)

@@ -856,6 +856,7 @@ def run_osv(ctx: Ctx) -> list[Finding]:
         return []
     # 0 = clean, 1 = vulns found, 128 = no packages found
     extra: list[dict] = []
+    inputs_ok = False
     with tempfile.TemporaryDirectory() as td:
         # --no-ignore: a PR's .gitignore must not hide a committed lockfile
         cmd = ["osv-scanner", "scan", "source", "-r", "--no-ignore", "--format", "json"]
@@ -880,14 +881,16 @@ def run_osv(ctx: Ctx) -> list[Finding]:
                 if q.returncode not in (0, 1):
                     raise RuntimeError(f"osv-scanner could not read changed dependency input {f}: "
                                        f"{(q.stderr or '').strip()[-200:]}")
+                inputs_ok = True
                 # the recursive scan does not follow directory links (src/pkg -> ../vendor/pkg): keep this
                 # input's own results, named by the changed path (duplicates are merged later)
                 for res in json.loads(q.stdout or "{}").get("results", []):
                     res["source"]["path"] = f
                     extra.append(res)
-    if p.returncode == 128 and ctx.mode == "diff" and not extra:
-        # a dependency manifest changed but OSV found no packages: unparseable or unsupported -> not a pass
-        # (packages found by the per-input scans count: an input may sit only behind a link into an excluded dir)
+    if p.returncode == 128 and ctx.mode == "diff" and not inputs_ok:
+        # a dependency manifest changed but OSV found no packages: unparseable or unsupported -> not a pass.
+        # Each changed input that its own scan read (exit 0/1) counts, even with no vulnerabilities: an input
+        # may sit only behind a link into an excluded dir, which the recursive scan skips.
         raise RuntimeError("osv-scanner found no packages although a dependency manifest changed")
     data = json.loads(p.stdout or "{}")
     out = []
