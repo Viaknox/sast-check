@@ -46,14 +46,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
           REPO: ${{ github.repository }}
         run: |
-          # fetch a file from the base branch; only "not there yet" (404) may fall back to empty,
+          # compare with the PR's base branch, or on a push with the commit before the push (main allows no
+          # force-push, so it exists); only a branch's first push has nothing to compare with
+          ref="$BASE_REF"
+          if [ -z "$ref" ] && [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then ref="$BEFORE"; fi
+          # fetch a file from that ref; only "not there yet" (404) may fall back to empty,
           # any other error fails closed
           base_file() {
             : > "$2"
-            [ -n "$BASE_REF" ] || return 0
-            if ! gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/$1?ref=$BASE_REF" > "$2" 2> "$RUNNER_TEMP/gh.err"; then
+            [ -n "$ref" ] || return 0
+            if ! gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/$1?ref=$ref" > "$2" 2> "$RUNNER_TEMP/gh.err"; then
               if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then : > "$2"; else cat "$RUNNER_TEMP/gh.err" >&2; exit 1; fi
             fi
           }

@@ -983,6 +983,30 @@ python3 -c "import sys; open(sys.argv[1], 'w', encoding='utf-8').write('a' * 599
 PATH="$T/ghstub:$PATH" REPO=o/r PR=1 bash "$HERE/scripts/comment.sh" "$T/big-report.md" >/dev/null
 check "PR comment body is valid UTF-8 at the cut"        "$(python3 -c "import sys; b=open(sys.argv[1],'rb').read(); b.decode('utf-8'); print(b.endswith('é'.encode()))" "$T/posted-body" 2>&1)" "True"
 
+# r27: a new untracked code file in an excluded dir, exposed through an existing dir link, is scanned (local runs)
+git checkout -q -b r27u main
+mkdir -p vendor/v27 && echo 'x = 1' > vendor/v27/ok.py && ln -s ../vendor/v27 src/v27
+git add vendor/v27/ok.py src/v27 && git commit -qm v27base && echo 'y = 2' >> src/util.py && git commit -qam v27
+printf 'import pickle\n\ndef load(b):\n    return pickle.loads(b)\n' > vendor/v27/new.py
+gate --mode diff --base HEAD~1 --only ruff
+check "untracked code behind a dir link is scanned"      "$(q "int(any(f['path']=='src/v27/new.py' for f in d['findings']))")" "1"
+rm -f vendor/v27/new.py
+git checkout -q main
+
+# r27: Trivy reads `trivy:` tokens with keys in any order; a string that is not such a token is scanned as written
+if command -v trivy >/dev/null; then
+  git checkout -q -b r27t main
+  sg27() { printf 'resource "aws_security_group_rule" "%s" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = [%s]\n  security_group_id = "sg-1"\n  description       = "d"\n}\n' "$1" "$2"; }
+  sg27 a '"10.0.0.0/8"' > t27a.tf && git add t27a.tf && git commit -qm t27base
+  { echo '#trivy:exp:2099-01-01:ignore:AWS-0107'; sg27 a '"0.0.0.0/0"'; } > t27a.tf
+  { printf 'variable "mode" {\n  default = "trivy:ignore"\n}\n'; sg27 b 'var.mode == "trivy_ignore" ? "10.0.0.0/8" : "0.0.0.0/0"'; } > t27b.tf
+  git add t27a.tf t27b.tf && git commit -qm t27
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: exp-first inline ignore cannot hide"       "$(q "int(any(f['rule']=='trivy.AWS-0107' and f['path']=='t27a.tf' for f in d['findings']))")" "1"
+  check "trivy: a \"trivy:ignore\" literal is not rewritten" "$(q "int(any(f['rule']=='trivy.AWS-0107' and f['path']=='t27b.tf' for f in d['findings']))")" "1"
+  git checkout -q main
+fi
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks

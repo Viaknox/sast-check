@@ -352,12 +352,6 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
                 if (repo / f).is_file() and in_repo(repo, repo / f):   # never read a link's target outside the repo
                     with open(repo / f, errors="ignore") as fh:
                         files[f] = set(range(1, sum(1 for _ in fh) + 1))
-    # an existing link whose target changed brings that change in under the link's path
-    # (src/vuln.py -> ../vendor/payload.txt, with only the excluded vendor/payload.txt in the diff)
-    for f in changed_aliases(repo, list(files)):
-        if f not in files and (repo / f).is_file() and in_repo(repo, repo / f):
-            with open(repo / f, errors="ignore") as fh:
-                files[f] = set(range(1, sum(1 for _ in fh) + 1))
     # untracked new files (local runs) count as fully changed
     for u in untracked_files(repo):
         for f in link_dir_files(repo, u) or [u]:
@@ -369,6 +363,13 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
             except OSError:
                 continue
             files[f] = set(range(1, n + 1))
+    # an existing link whose target changed (or gained a new untracked file) brings that change in under the
+    # link's path
+    # (src/vuln.py -> ../vendor/payload.txt, with only the excluded vendor/payload.txt in the diff)
+    for f in changed_aliases(repo, list(files)):
+        if f not in files and (repo / f).is_file() and in_repo(repo, repo / f):
+            with open(repo / f, errors="ignore") as fh:
+                files[f] = set(range(1, sum(1 for _ in fh) + 1))
     return files
 
 
@@ -938,7 +939,17 @@ def run_osv(ctx: Ctx) -> list[Finding]:
     return out
 
 
-TRIVY_INLINE_RE = re.compile(rb"(trivy|tfsec):ignore", re.IGNORECASE)
+# Trivy (v0.75 pkg/iac/ignore) reads a rule from any space-separated token, in a comment or not, that starts
+# with `trivy:` or `tfsec:` after leading whitespace and `#` `/` `*` (keys in any order: `trivy:exp:...:ignore:ID`).
+# Exactly those tokens are defused; other text, such as a string literal "trivy:ignore", is left as written.
+TRIVY_INLINE_RE = re.compile(r"(?:^|(?<= ))[\s#/*]*(?:trivy|tfsec)(:)", re.MULTILINE)
+
+
+def defuse_trivy_markers(data: bytes) -> bytes:
+    """Return data with every token Trivy would read as an inline ignore rule made inert (same byte length)."""
+    text = data.decode("utf-8", "surrogateescape")
+    text = TRIVY_INLINE_RE.sub(lambda m: m.group(0)[:-1] + "_", text)
+    return text.encode("utf-8", "surrogateescape")
 
 
 def run_trivy(ctx: Ctx) -> list[Finding]:
@@ -964,7 +975,7 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
                             or (fp.is_symlink() and not in_repo(ctx.repo, fp))):
                         continue
                     (work / f).parent.mkdir(parents=True, exist_ok=True)
-                    (work / f).write_bytes(TRIVY_INLINE_RE.sub(rb"\1_ignore", fp.read_bytes()))
+                    (work / f).write_bytes(defuse_trivy_markers(fp.read_bytes()))
         work.mkdir(exist_ok=True)
         cmd, cwd, base_p = ["trivy", "config", "--quiet", "--format", "json"], work, None
         if ctx.base:   # PR scans: the base branch's trivy.yaml / .trivyignore, never the PR's
