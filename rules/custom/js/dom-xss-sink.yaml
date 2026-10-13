@@ -38,6 +38,8 @@ rules:
               - pattern: new URLSearchParams(...).getAll(...)
           - pattern-not: new URLSearchParams("...").get(...)
           - pattern-not: new URLSearchParams({...}).get(...)
+          - pattern-not: new URLSearchParams("...").getAll(...)
+          - pattern-not: new URLSearchParams({...}).getAll(...)
       - patterns:
           - pattern-either:
               - pattern-inside: |
