@@ -79,23 +79,30 @@ rules:
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
+    # The receiver must be a page: a variable assigned from `await <browser or context>.newPage()`, or that
+    # expression written inline. A variable's name decides nothing.
     pattern-sinks:
       # navigation: a fixed https://host/ origin or component encoding keeps the host fixed
       - requires: INPUT and not FIXED_ORIGIN
         patterns:
           - pattern-either:
-              - pattern: $PAGE.goto($X, ...)
+              - patterns:
+                  - pattern: $PAGE.goto($X, ...)
+                  - pattern-inside: |
+                      $PAGE = await $B.newPage(...);
+                      ...
               - pattern: (await $B.newPage()).goto($X, ...)
           - pattern-not: $PAGE.goto(encodeURIComponent(...), ...)
-          - metavariable-regex:
-              metavariable: $PAGE
-              regex: '(?i).*(page|tab|frame|context|browser|newPage).*'
           - focus-metavariable: $X
       # page content and code: no prefix or URL encoding makes request data safe here
       - requires: INPUT
         patterns:
           - pattern-either:
-              - pattern: $PAGE.$M($X, ...)
+              - patterns:
+                  - pattern: $PAGE.$M($X, ...)
+                  - pattern-inside: |
+                      $PAGE = await $B.newPage(...);
+                      ...
               - pattern: (await $B.newPage()).$M($X, ...)
           - metavariable-regex:
               metavariable: $M
@@ -105,6 +112,9 @@ rules:
         patterns:
           - pattern: |
               $PAGE.addScriptTag({..., $K: $X, ...})
+          - pattern-inside: |
+              $PAGE = await $B.newPage(...);
+              ...
           - metavariable-regex:
               metavariable: $K
               regex: '^(url|content)$'
