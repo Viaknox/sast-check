@@ -46,3 +46,10 @@ rules:
               $X = include("...");
               ...
               <%- $X %>
+      # the name was set from something other than a literal, and not set again before it is printed:
+      # a literal set earlier does not make this print safe (the regex range runs from the non-literal
+      # assignment to the last print before the next assignment, so every such print is inside it)
+      - patterns:
+          - pattern: <%- $X %>
+          - pattern-regex: >-
+              (?s)<%\s*(?:(?:var|let|const)\s+)?([A-Za-z_$][\w$]*)\s*=(?!=)(?!\s*(?:['"]|include\s*\(\s*['"]))[^;]*;\s*%>(?:(?!<%\s*(?:(?:var|let|const)\s+)?\1\s*=(?!=)).)*<%-\s*\1\s*-?%>

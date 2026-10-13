@@ -54,5 +54,40 @@
   <div><%-notDeclared%></div>
   <!-- ruleid: sast.js.ejs-unescaped -->
   <div><%- unknownName -%></div>
+  <% var banner = '<b>x</b>'; %>
+  <% banner = req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- banner %></div>
+
+  <% var crest = "<i>c</i>"; %>
+  <p>text between</p>
+  <% crest = user.crest; %>
+  <p>more text</p>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- crest %></div>
+
+  <% var badge = '<b>1</b>'; %>
+  <% badge = '<b>2</b>'; %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- badge %></div>
+  <% var seal = '<b>s</b>'; %>
+  <% seal = req.query.s; %>
+  <% seal = '<b>safe again</b>'; %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- seal %></div>
+
+  <% var tag = '<b>t</b>'; %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- tag %></div>
+  <% tag = req.query.t; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- tag %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%-tag-%></div>
+
+  <% let partial = include('partials/a'); %>
+  <% partial = user.partial; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- partial %></div>
 </body>
 </html>
