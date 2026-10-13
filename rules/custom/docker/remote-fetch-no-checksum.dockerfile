@@ -95,3 +95,29 @@ RUN wget https://example.com/tool.zip && \
 RUN curl -fsSLo /tmp/tool.tgz https://example.com/tool.tgz && \
     [ "$(sha256sum /tmp/tool.tgz | cut -d' ' -f1)" = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" ] && \
     tar -xzf /tmp/tool.tgz -C /usr/local/bin
+
+# filename-only grep on hash output succeeds for any digest: not a verification
+# ruleid: sast.docker.remote-fetch-no-checksum
+RUN curl -fsSLo /tmp/tool.tgz https://example.com/tool.tgz && \
+    sha1sum /tmp/tool.tgz | grep -q tool.tgz && \
+    tar -xzf /tmp/tool.tgz -C /usr/local/bin
+
+# ruleid: sast.docker.remote-fetch-no-checksum
+RUN curl -fsSLo /tmp/tool.tgz https://example.com/tool.tgz && \
+    grep -q tool.tgz <(sha256sum /tmp/tool.tgz) && \
+    tar -xzf /tmp/tool.tgz -C /usr/local/bin
+
+# ok: sast.docker.remote-fetch-no-checksum
+RUN curl -fsSLo /tmp/tool.tgz https://example.com/tool.tgz && \
+    sha256sum /tmp/tool.tgz | grep -q "$EXPECTED_SHA256" && \
+    tar -xzf /tmp/tool.tgz -C /usr/local/bin
+
+# ok: sast.docker.remote-fetch-no-checksum
+RUN curl -fsSLo /tmp/tool.tgz https://example.com/tool.tgz && \
+    grep -q "$EXPECTED_SHA256" <(sha256sum /tmp/tool.tgz) && \
+    tar -xzf /tmp/tool.tgz -C /usr/local/bin
+
+# ok: sast.docker.remote-fetch-no-checksum
+RUN curl -fsSLo /tmp/tool.tgz https://example.com/tool.tgz && \
+    echo "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  /tmp/tool.tgz" | sha256sum -c - && \
+    tar -xzf /tmp/tool.tgz -C /usr/local/bin
