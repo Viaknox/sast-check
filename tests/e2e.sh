@@ -951,6 +951,23 @@ export PATH="$OLDPATH"
 check "osv: only non-excluded dependency files are scanned" "$(tr '\n' ' ' < "$T/osv-files")" "./app/requirements.txt "
 git checkout -q main
 
+# r24: a blank ignore reason is no reason (settings error, not a silent suppression)
+git checkout -q -b r24r main
+printf '[[ignore]]\nrule = "*"\nreason = "   "\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm blankreason
+set +e; python3 -I "$HERE/scripts/sast.py" --mode diff --base HEAD~1 --only ruff >/dev/null 2>&1; code=$?; set -e
+check "blank [[ignore]] reason is a settings error"      "$code" "2"
+git checkout -q main
+
+# r24: a new untracked secret in an excluded dir, exposed through an existing dir link, blocks (local runs)
+git checkout -q -b r24u main
+mkdir -p vendor/v24 && echo 'x = 1' > vendor/v24/ok.py && ln -s ../vendor/v24 src/v24
+git add vendor/v24/ok.py src/v24 && git commit -qm v24base && echo 'y = 2' >> src/util.py && git commit -qam v24
+echo 'K24 = "AKIAIOSFODNN7ABCDEFL"' > vendor/v24/key.py
+gate --mode diff --base HEAD~1 --only gitleaks
+check "untracked secret behind a dir link blocks"        "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/v24/key.py')")" "1"
+rm -f vendor/v24/key.py
+git checkout -q main
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks

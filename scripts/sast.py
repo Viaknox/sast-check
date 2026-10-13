@@ -215,7 +215,8 @@ def check_settings(uc: dict, defaults: dict) -> None:
             for ig in val:
                 bad = [k for k in ig if k not in IGNORE_KEYS] if isinstance(ig, dict) else ["(not a table)"]
                 bad += [k for k, t in IGNORE_KEYS.items() if k in ig and not isinstance(ig[k], t)] if not bad else []
-                if bad or not isinstance(ig.get("rule"), str) or not isinstance(ig.get("reason"), str):
+                if (bad or not isinstance(ig.get("rule"), str) or not isinstance(ig.get("reason"), str)
+                        or not ig["reason"].strip()):   # a blank reason is no reason
                     raise RuntimeError(f"[[ignore]] needs string rule and reason, and only {', '.join(IGNORE_KEYS)}; got {ig!r}"[:250])
             continue
         if sec not in defaults or not isinstance(val, dict):
@@ -737,8 +738,10 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
             # for the history scan to see
             ns = name_status(ctx.repo, ctx.base or "")
             moved = [p for st, p in ns if st[:1] in ("R", "C") or (ctx.repo / p).is_symlink()]
-            moved += changed_aliases(ctx.repo, [p for _, p in ns])
-            scan = untracked_files(ctx.repo) + moved
+            untracked = untracked_files(ctx.repo)
+            # aliases of untracked files too: a new vendor/key.py is excluded, but src -> vendor exposes it
+            moved += changed_aliases(ctx.repo, [p for _, p in ns] + untracked)
+            scan = untracked + moved
         else:
             runs.append(["gitleaks", "dir", "."])   # does not follow links: every in-repo alias is added below
             scan = repo_links(ctx.repo)
@@ -1112,7 +1115,7 @@ def config_suppression(cfg: dict, f: Finding, today: str) -> str:
             continue
         if ig.get("path") and not glob_any(f.path, [ig["path"]]):
             continue
-        if not ig.get("reason"):
+        if not str(ig.get("reason") or "").strip():
             continue
         if ig.get("expires") and str(ig["expires"]) < today:
             continue
