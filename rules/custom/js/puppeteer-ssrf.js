@@ -69,3 +69,54 @@ app.get('/host', async (req, res) => {
   await page.goto('https://' + req.query.host + '/' + 'x');
   res.end();
 });
+
+// ---- the page is whatever newPage() returned, not a variable with a page-like name (#6 item 13) ----
+app.get('/renamed', async (req, res) => {
+  const browser = await puppeteer.launch();
+  const p = await browser.newPage();
+  // ruleid: sast.js.puppeteer-ssrf
+  await p.goto(req.query.url);
+  const renderer = await browser.newPage();
+  // ruleid: sast.js.puppeteer-ssrf
+  await renderer.setContent(req.body.html);
+  let shot;
+  shot = await browser.newPage();
+  // ruleid: sast.js.puppeteer-ssrf
+  await shot.evaluate(req.body.script);
+  const viaContext = await browser.createBrowserContext();
+  const q = await viaContext.newPage();
+  // ruleid: sast.js.puppeteer-ssrf
+  await q.goto(req.query.target);
+  const r = await (await puppeteer.launch()).newPage();
+  // ruleid: sast.js.puppeteer-ssrf
+  await r.addScriptTag({ url: req.query.src });
+  // ruleid: sast.js.puppeteer-ssrf
+  await (await browser.newPage()).evaluate(req.body.script);
+  res.end();
+});
+
+// ---- setContent / evaluate / goto on something that is not a page (#6 item 14) ----
+app.get('/not-a-page', async (req, res) => {
+  const tab = makeTab();
+  const frame = getFrame();
+  const cache = makeCache();
+  const tpl = loadTemplate();
+  // ok: sast.js.puppeteer-ssrf
+  await tab.goto(req.query.url);
+  // ok: sast.js.puppeteer-ssrf
+  await frame.evaluate(req.body.script);
+  // ok: sast.js.puppeteer-ssrf
+  cache.evaluate(req.body.expr);
+  // ok: sast.js.puppeteer-ssrf
+  tpl.setContent(req.body.html);
+  // ok: sast.js.puppeteer-ssrf
+  tpl.addScriptTag({ url: req.query.src });
+  const browser = await puppeteer.launch();
+  // ok: sast.js.puppeteer-ssrf
+  await browser.setContent(req.body.html);
+  const page = await browser.newPage();
+  const other = makeThing();
+  // ok: sast.js.puppeteer-ssrf
+  await other.goto(req.query.url);
+  res.end();
+});

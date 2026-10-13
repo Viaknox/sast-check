@@ -66,20 +66,105 @@ rules:
               - pattern: $REQ.path
               - pattern: $REQ.get(...)
               - pattern: $REQ.header(...)
+    # sanitizers count only when the function really comes from the ldap-escape package (require or import),
+    # so a local helper or object that happens to be called ldapEscape or escapeFilter does not clean the value
     pattern-sanitizers:
-      - pattern: ldapEscape.filter(...)
-      - pattern: ldapEscape.filter`...`
-      - pattern: escapeFilter(...)
-      - pattern: escapeLdapFilter(...)
+      # a pattern with (...) also matches the tagged-template call form, ldapEscape.filter`(uid=${x})`
+      - patterns:
+          - pattern: $E.filter(...)
+          - pattern-either:
+              - pattern-inside: |
+                  $E = require("ldap-escape");
+                  ...
+              - pattern-inside: |
+                  import $E from "ldap-escape";
+                  ...
+              - pattern-inside: |
+                  import * as $E from "ldap-escape";
+                  ...
+          - pattern-not-inside: |
+              $E = {...};
+              ...
+      - patterns:
+          - pattern: filter(...)
+          - pattern-inside: |
+              import { filter } from "ldap-escape";
+              ...
+      - patterns:
+          - pattern: $K(...)
+          # the engine reads const { filter: $K } = require("ldap-escape") as the same import
+          - pattern-inside: |
+              import { filter as $K } from "ldap-escape";
+              ...
     pattern-sinks:
+      # the receiver must be a client built by ldapjs or ldapts in this file, not any object with a search() method
       - patterns:
-          - pattern: |
-              $C.search($B, {..., filter: $X, ...}, ...)
-          - focus-metavariable: $X
-      - patterns:
-          - pattern: $C.search($B, $OPTS, ...)
-          - pattern-not: $C.search($B, {...}, ...)
-          - focus-metavariable: $OPTS
+          - pattern-either:
+              - patterns:
+                  - pattern: |
+                      $C.search($B, {..., filter: $X, ...}, ...)
+                  - focus-metavariable: $X
+              - patterns:
+                  - pattern: $C.search($B, $OPTS, ...)
+                  - pattern-not: $C.search($B, {...}, ...)
+                  - focus-metavariable: $OPTS
+          - pattern-either:
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          $L = require("ldapjs");
+                          ...
+                      - pattern-inside: |
+                          import $L from "ldapjs";
+                          ...
+                      - pattern-inside: |
+                          import * as $L from "ldapjs";
+                          ...
+                  - pattern-inside: |
+                      $C = $L.createClient(...);
+                      ...
+              - pattern-inside: |
+                  $C = require("ldapjs").createClient(...);
+                  ...
+              - patterns:
+                  - pattern-inside: |
+                      import { createClient } from "ldapjs";
+                      ...
+                  - pattern-inside: |
+                      $C = createClient(...);
+                      ...
+              - patterns:
+                  - pattern-inside: |
+                      import { createClient as $K } from "ldapjs";
+                      ...
+                  - pattern-inside: |
+                      $C = $K(...);
+                      ...
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          $L = require("ldapts");
+                          ...
+                      - pattern-inside: |
+                          import * as $L from "ldapts";
+                          ...
+                  - pattern-inside: |
+                      $C = new $L.Client(...);
+                      ...
+              - patterns:
+                  - pattern-inside: |
+                      import { Client } from "ldapts";
+                      ...
+                  - pattern-inside: |
+                      $C = new Client(...);
+                      ...
+              - patterns:
+                  - pattern-inside: |
+                      import { Client as $K } from "ldapts";
+                      ...
+                  - pattern-inside: |
+                      $C = new $K(...);
+                      ...
       - patterns:
           - pattern: $AD.$M($X, ...)
           - metavariable-regex:

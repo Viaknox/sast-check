@@ -63,6 +63,35 @@ rules:
       - pattern: $U.searchParams.get(...)
       - pattern: location.search
       - pattern: location.hash
+      # a handler defined by name and registered on a route elsewhere in the file: function run(r, res) {...}; app.post('/x', run)
+      # (the engine treats arrow functions, function expressions and async functions assigned to a name as the same definition)
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+              - pattern: $REQ.url
+              - pattern: $REQ.originalUrl
+              - pattern: $REQ.path
+              - pattern: $REQ.get(...)
+              - pattern: $REQ.header(...)
+          - pattern-either:
+              - pattern-inside: |
+                  function $F($REQ, ...) { ... }
+                  ...
+                  $APP.$M(..., $F)
+              - pattern-inside: |
+                  $APP.$M(..., $F)
+                  ...
+                  function $F($REQ, ...) { ... }
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - metavariable-regex:
+              metavariable: $APP
+              regex: '(?i)^(app|server|.*router)$'
     pattern-sanitizers:
       - pattern: Number(...)
       - pattern: parseInt(...)
@@ -74,26 +103,60 @@ rules:
       - patterns:
           - pattern: new Function(..., $X)
           - focus-metavariable: $X
+      # vm used as a module object: the name must come from require("vm") or an import of vm / node:vm
       - patterns:
-          - pattern: $VM.$M($X, ...)
-          - metavariable-regex:
-              metavariable: $M
-              regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction)$'
-          - metavariable-regex:
-              metavariable: $VM
-              regex: '^(vm|node_vm)$'
+          - pattern-either:
+              - patterns:
+                  - pattern: $VM.$M($X, ...)
+                  - metavariable-regex:
+                      metavariable: $M
+                      regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction)$'
+              - pattern: new $VM.Script($X, ...)
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $VM = require($MOD);
+                      ...
+                  - metavariable-regex:
+                      metavariable: $MOD
+                      regex: '^["'']((node:)?vm)["'']$'
+              - pattern-inside: |
+                  import $VM from "vm";
+                  ...
+              - pattern-inside: |
+                  import $VM from "node:vm";
+                  ...
+              - pattern-inside: |
+                  import * as $VM from "vm";
+                  ...
+              - pattern-inside: |
+                  import * as $VM from "node:vm";
+                  ...
           - focus-metavariable: $X
+      # vm functions imported by name: const { runInNewContext } = require("vm") reads as the same import
       - patterns:
-          - pattern: runInNewContext($X, ...)
-          - focus-metavariable: $X
-      - patterns:
-          - pattern: runInThisContext($X, ...)
-          - focus-metavariable: $X
-      - patterns:
-          - pattern: new vm.Script($X, ...)
-          - focus-metavariable: $X
-      - patterns:
-          - pattern: new Script($X, ...)
+          - pattern-either:
+              - patterns:
+                  - pattern: $F($X, ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction)$'
+                  - pattern-either:
+                      - pattern-inside: |
+                          import { $F } from "vm";
+                          ...
+                      - pattern-inside: |
+                          import { $F } from "node:vm";
+                          ...
+              - patterns:
+                  - pattern: new Script($X, ...)
+                  - pattern-either:
+                      - pattern-inside: |
+                          import { Script } from "vm";
+                          ...
+                      - pattern-inside: |
+                          import { Script } from "node:vm";
+                          ...
           - focus-metavariable: $X
       - patterns:
           - pattern: $T($X, ...)
