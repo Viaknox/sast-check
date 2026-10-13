@@ -45,6 +45,15 @@ class MutantIds(unittest.TestCase):
         after = {mid for mid, _, _ in rm.mutants(doc)}
         self.assertTrue(before <= after, sorted(before - after))
 
+    def test_repeated_element_keeps_its_id_when_a_branch_is_inserted(self):
+        doc = {"rules": [{"id": "r", "pattern-either": [
+            {"patterns": [{"pattern": "f($X)"}, {"pattern-not": "f(1)"}]},
+            {"patterns": [{"pattern": "g($X)"}, {"pattern-not": "f(1)"}]}]}]}
+        before = {mid for mid, _, _ in rm.mutants(doc)}
+        doc["rules"][0]["pattern-either"].insert(0, {"patterns": [{"pattern": "h($X)"}, {"pattern-not": "f(1)"}]})
+        after = {mid for mid, _, _ in rm.mutants(doc)}
+        self.assertTrue(before <= after, sorted(before - after))
+
     def test_identical_elements_get_distinct_ids(self):
         doc = json.loads(json.dumps(RULE))
         doc["rules"][0]["pattern-either"].append({"pattern": "a(...)"})
@@ -99,10 +108,10 @@ class FpReport(unittest.TestCase):
     def lab(self, *labels):
         return [{**f, "label": lab} for f, lab in zip(self.f, labels)]
 
-    def test_counts_per_rule_and_repo(self):
+    def test_counts_per_rule_and_fp_repos(self):
         rep = fp_sweep.report(self.work, self.lab("fp", "tp_test"), self.corpus)
-        self.assertEqual(rep["rules"]["r1"]["repos"], {"o/a": {"fp": 1}, "o/b": {"tp_test": 1}})
-        self.assertEqual(rep["rules"]["r1"]["noise"], 0.5)
+        self.assertEqual(rep["rules"]["r1"]["fp_by_repo"], {"o/a": 1})
+        self.assertEqual((rep["rules"]["r1"]["correct"], rep["rules"]["r1"]["noise"]), (1, 0.5))
         self.assertEqual([c["repo"] for c in rep["corpus"]], ["o/a", "o/b", "o/c"])   # o/d was never scanned
 
     def test_findings_from_another_commit_or_rule_bundle_are_excluded(self):
@@ -112,10 +121,29 @@ class FpReport(unittest.TestCase):
         self.assertEqual(rep["stale_findings_excluded"], 1)
         self.assertEqual(rep["rules"]["r1"]["fp"], 1)
 
-    def test_two_findings_on_one_line_need_two_labels(self):
-        (self.work / "findings.json").write_text(json.dumps(self.f + [self.f[0]]))
-        with self.assertRaises(ValueError):
-            fp_sweep.report(self.work, self.lab("fp", "tp"), self.corpus)
+    def test_a_true_positive_is_never_tied_to_a_repository(self):
+        rep = fp_sweep.report(self.work, self.lab("tp", "tp"), self.corpus)
+        text = json.dumps(rep["rules"])
+        self.assertNotIn('"tp"', text)
+        self.assertEqual(rep["rules"]["r1"]["fp_by_repo"], {})
+
+    def test_two_findings_on_one_line_are_labelled_by_id(self):
+        other = {**self.f[0], "message": "second finding on the same line"}
+        (self.work / "findings.json").write_text(json.dumps(self.f + [other]))
+        with self.assertRaises(ValueError):   # a location-only label is ambiguous here
+            fp_sweep.report(self.work, self.lab("fp", "tp") + [{**self.f[0], "label": "fp"}], self.corpus)
+        ids = [{**x, "id": fp_sweep.finding_id(x), "label": "fp"} for x in self.f + [other]]
+        with self.assertRaises(ValueError):   # the same id twice and one finding left out
+            fp_sweep.report(self.work, [ids[0], ids[0], ids[1]], self.corpus)
+        self.assertEqual(fp_sweep.report(self.work, ids, self.corpus)["rules"]["r1"]["fp"], 3)
+
+    def test_unknown_repo_filter_is_refused(self):
+        argv = sys.argv
+        sys.argv = ["fp_sweep", "--work", str(self.work), "--repos", "no/such-repo"]
+        try:
+            self.assertEqual(fp_sweep.main(), 2)
+        finally:
+            sys.argv = argv
 
     def test_partial_duplicate_stale_or_unknown_labels_are_refused(self):
         bad = [self.lab("fp"),                                            # a finding without a label

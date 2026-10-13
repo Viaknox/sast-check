@@ -1,6 +1,11 @@
 {
  "date": "2026-10-13",
  "engine": "opengrep 1.30.2",
+ "total": {
+  "killed": 345,
+  "survived": 1082,
+  "score": 0.24
+ },
  "rules": {
   "docker/remote-fetch-no-checksum.yaml": {
    "killed": 6,
@@ -213,10 +218,10 @@
    "score": null
   },
   "js/timing-unsafe-compare.yaml": {
-   "killed": 34,
-   "survived": 62,
+   "killed": 4,
+   "survived": 92,
    "invalid": 2,
-   "score": 0.35
+   "score": 0.04
   },
   "js/tls-reject-unauthorized-off.yaml": {
    "killed": 5,

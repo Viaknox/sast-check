@@ -26,12 +26,14 @@ Add an `ok:` line that the rule would flag without it.
 **CI.** On every pull request, changed rules are mutated, and a survivor not listed in
 `tests/mutation-baseline.json` fails the check. The baseline records the survivors that existed when the tool
 was introduced, each with a `why`. An entry counts only with a written `why`: `{}`, a blank reason or a `TODO` from
-`--write-baseline` fails the check. A partial `--write-baseline` (`--rules`, `--changed-*`) rewrites only the rules it ran. Shrink it over time; a new entry needs a reason a reviewer accepts (for
+`--write-baseline` fails the check. A partial `--write-baseline` (`--rules`, `--changed-*`) rewrites only the rules it ran. For the rules that ran, a baseline entry that no longer survives fails the check (`STALE BASELINE`):
+remove it, so a later loss of that fixture line cannot pass silently. Shrink it over time; a new entry needs a reason a reviewer accepts (for
 example, two equivalent patterns kept for readability).
 
 ```
 python tools/rule_mutation.py --rules js/ssrf.yaml          # one rule
 python tools/rule_mutation.py --json out.json               # all rules
+python tools/rule_mutation.py --report docs/mutation-report.json   # the committed summary (full run)
 ```
 
 ## Noise: `tools/fp_sweep.py`
