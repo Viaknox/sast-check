@@ -824,6 +824,24 @@ def gitleaks_findings(ctx: Ctx, reports: list[dict]) -> list[Finding]:
     return out
 
 
+def excluded_dirs(ctx: Ctx) -> list[str]:
+    """Top-most directories (repo-relative) that paths.exclude covers entirely, e.g. node_modules, a/vendor."""
+    excl, out = ctx.cfg["paths"]["exclude"], []
+    for d, dirs, _ in os.walk(ctx.repo):
+        reld = Path(d).relative_to(ctx.repo).as_posix()
+        keep = []
+        for x in dirs:
+            r = x if reld == "." else f"{reld}/{x}"
+            if x == ".git" and reld == ".":
+                continue
+            if glob_any(f"{r}/", excl):
+                out.append(r)          # excluded: name it, and do not walk into it
+            else:
+                keep.append(x)
+        dirs[:] = keep
+    return sorted(out)
+
+
 def run_osv(ctx: Ctx) -> list[Finding]:
     if not shutil.which("osv-scanner"):
         raise FileNotFoundError("osv-scanner not installed")
@@ -845,7 +863,10 @@ def run_osv(ctx: Ctx) -> list[Finding]:
             conf = Path(td) / "osv-scanner.toml"
             conf.write_text(settings_file(ctx.repo, ctx.base, "osv-scanner.toml") or "")
             cmd.append(f"--config={conf}")
-        p = sh(cmd + ["."], ctx.repo, ok_codes=(0, 1, 128))
+        # excluded directories are never read or sent to the vulnerability service (":" = exact path relative
+        # to the working directory; OSV can exclude directories only, so file-level excludes are dropped below)
+        excl_dirs = excluded_dirs(ctx)
+        p = sh(cmd + [f"--x-exclude=:{d}" for d in excl_dirs] + ["."], ctx.repo, ok_codes=(0, 1, 128))
         if inputs:
             # each changed (or linked) input must parse on its own: the repo-wide scan succeeds as long as ANY lockfile
             # parses, which would hide a changed input OSV could not read (127 = extraction failed)
@@ -864,8 +885,9 @@ def run_osv(ctx: Ctx) -> list[Finding]:
                 for res in json.loads(q.stdout or "{}").get("results", []):
                     res["source"]["path"] = f
                     extra.append(res)
-    if p.returncode == 128 and ctx.mode == "diff":
+    if p.returncode == 128 and ctx.mode == "diff" and not extra:
         # a dependency manifest changed but OSV found no packages: unparseable or unsupported -> not a pass
+        # (packages found by the per-input scans count: an input may sit only behind a link into an excluded dir)
         raise RuntimeError("osv-scanner found no packages although a dependency manifest changed")
     data = json.loads(p.stdout or "{}")
     out = []
@@ -948,8 +970,10 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
                          for f in git_z(ctx.repo, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
                          if is_vars(f) and (ctx.repo / f).is_file() and in_repo(ctx.repo, ctx.repo / f)}
             base_vars = {q.relative_to(cwd).as_posix(): q.read_bytes() for q in cwd.rglob("*") if q.is_file() and is_vars(q.name)}
-            if head_vars != base_vars:
-                base_p = sh(cmd + ["."], cwd)   # the base tree with its own vars, for the comparison below
+            # the base tree with its own vars, for the comparison below. Any PR, not only a vars change: a
+            # variable default or local in one file changes resources elsewhere whose lines did not change
+            if ctx.mode == "diff" or head_vars != base_vars:
+                base_p = sh(cmd + ["."], cwd)
             for f in base_vars.keys() - head_vars.keys():
                 (cwd / f).write_text("{}" if f.endswith(".json") else "")
             for f, data in head_vars.items():
@@ -958,7 +982,8 @@ def run_trivy(ctx: Ctx) -> list[Finding]:
         p = sh(cmd + [str(work)], cwd)
         out = trivy_findings(ctx, p.stdout)
         if base_p is not None:
-            # a changed vars value changes resources whose lines did not change: a finding counts as new
+            # a changed input (vars value, variable default, local) changes resources whose lines did not
+            # change: a finding counts as new
             # unless the base tree (with the base vars) has the same rule on the line this line came from
             old = set()
             for b in trivy_findings(ctx, base_p.stdout):

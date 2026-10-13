@@ -327,6 +327,15 @@ if command -v trivy >/dev/null; then
   gate --mode diff --base HEAD~1 --only trivy
   check "trivy: deleting a masking tfvars file is new"     "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='dsg.tf']")" "[True]"
   git checkout -q main
+  # ...and when the PR changes a variable default in another .tf file (no vars file involved)
+  git checkout -q -b tvf main
+  printf 'variable "cidr" {\n  default = "10.0.0.0/8"\n}\n' > fvars.tf
+  printf 'resource "aws_security_group_rule" "r" {\n  type              = "ingress"\n  from_port         = 22\n  to_port           = 22\n  protocol          = "tcp"\n  cidr_blocks       = [var.cidr]\n  security_group_id = "sg-1"\n}\n' > fsg.tf
+  git add fvars.tf fsg.tf && git commit -qm tvfbase
+  sed -i 's#10.0.0.0/8#0.0.0.0/0#' fvars.tf && git commit -qam tvf
+  gate --mode diff --base HEAD~1 --only trivy
+  check "trivy: a changed variable default in another file is new" "$(q "[f['in_diff'] for f in d['findings'] if f['rule']=='trivy.AWS-0107' and f['path']=='fsg.tf']")" "[True]"
+  git checkout -q main
   git checkout -q -b tvp main
   printf 'cidr = "10.0.0.0/8"\n' > p.tfvars && git add p.tfvars && git commit -qm pvars
   printf 'misconfiguration:\n  terraform:\n    vars: [p.tfvars]\n' > trivy.yaml && git add trivy.yaml && git commit -qm ptrivy
@@ -909,6 +918,19 @@ gate --mode full --only opengrep,ruff
 check "full scope: extensionless python script is scanned" "$(q "sum(1 for f in d['findings'] if f['tool']=='ruff' and f['path']=='bin/pytool21')")" "1"
 check "full scope: extensionless node script is scanned"   "$(q "sum(1 for f in d['findings'] if f['tool']=='opengrep' and f['path']=='bin/nodetool21')")" "1"
 check "full scope: .mts file is scanned"                   "$(q "sum(1 for f in d['findings'] if f['tool']=='opengrep' and f['path']=='src/m21.mts')")" "1"
+git checkout -q main
+
+# r22: OSV never reads (or sends to osv.dev) dependency files under excluded directories
+git checkout -q -b r22o main
+mkdir -p node_modules/pkg app vendor/lib && echo 'requests==2.0.0' > app/requirements.txt
+echo 'requests==2.0.0' > node_modules/pkg/requirements.txt && echo 'requests==2.0.0' > vendor/lib/requirements.txt
+git add -f app node_modules vendor && git commit -qm r22o
+mkdir -p "$T/stub" && printf '#!/bin/sh\necho "$@" >> "%s/osv-args"\necho "{}"\n' "$T" > "$T/stub/osv-scanner" && chmod +x "$T/stub/osv-scanner"
+OLDPATH="$PATH"; export PATH="$T/stub:$PATH"
+gate --mode diff --base HEAD~1 --only osv
+export PATH="$OLDPATH"
+check "osv: excluded dirs are passed as exclusions"      "$(head -1 "$T/osv-args" | grep -c -- '--x-exclude=:node_modules .*--x-exclude=:vendor ')" "1"
+check "osv: a non-excluded dir is not excluded"          "$(head -1 "$T/osv-args" | grep -c -- ':app')" "0"
 git checkout -q main
 
 # clean PR passes
