@@ -928,17 +928,19 @@ check "full scope: extensionless node script is scanned"   "$(q "sum(1 for f in 
 check "full scope: .mts file is scanned"                   "$(q "sum(1 for f in d['findings'] if f['tool']=='opengrep' and f['path']=='src/m21.mts')")" "1"
 git checkout -q main
 
-# r22: OSV never reads (or sends to osv.dev) dependency files under excluded directories
+# r22: OSV never reads (or sends to osv.dev) excluded dependency files, by directory or by file glob
 git checkout -q -b r22o main
-mkdir -p node_modules/pkg app vendor/lib && echo 'requests==2.0.0' > app/requirements.txt
-echo 'requests==2.0.0' > node_modules/pkg/requirements.txt && echo 'requests==2.0.0' > vendor/lib/requirements.txt
+printf '[paths]\nexclude = ["node_modules/**", "vendor/**", "app/private/requirements.txt"]\n' > .sast-check.toml
+git add .sast-check.toml && git commit -qm r22base
+mkdir -p node_modules/pkg app/private vendor/lib && echo 'requests==2.0.0' > app/requirements.txt
+for f in node_modules/pkg vendor/lib app/private; do echo 'requests==2.0.0' > $f/requirements.txt; done
 git add -f app node_modules vendor && git commit -qm r22o
-mkdir -p "$T/stub" && printf '#!/bin/sh\necho "$@" >> "%s/osv-args"\necho "{}"\n' "$T" > "$T/stub/osv-scanner" && chmod +x "$T/stub/osv-scanner"
+# the stub records the files in the tree OSV scans recursively (the first call)
+mkdir -p "$T/stub" && printf '#!/bin/sh\n[ -f "%s/osv-files" ] || find . -type f | sort > "%s/osv-files"\necho "{}"\n' "$T" "$T" > "$T/stub/osv-scanner" && chmod +x "$T/stub/osv-scanner"
 OLDPATH="$PATH"; export PATH="$T/stub:$PATH"
 gate --mode diff --base HEAD~1 --only osv
 export PATH="$OLDPATH"
-check "osv: excluded dirs are passed as exclusions"      "$(head -1 "$T/osv-args" | grep -c -- '--x-exclude=:node_modules .*--x-exclude=:vendor ')" "1"
-check "osv: a non-excluded dir is not excluded"          "$(head -1 "$T/osv-args" | grep -c -- ':app')" "0"
+check "osv: only non-excluded dependency files are scanned" "$(tr '\n' ' ' < "$T/osv-files")" "./app/requirements.txt "
 git checkout -q main
 
 # clean PR passes

@@ -824,22 +824,25 @@ def gitleaks_findings(ctx: Ctx, reports: list[dict]) -> list[Finding]:
     return out
 
 
-def excluded_dirs(ctx: Ctx) -> list[str]:
-    """Top-most directories (repo-relative) that paths.exclude covers entirely, e.g. node_modules, a/vendor."""
-    excl, out = ctx.cfg["paths"]["exclude"], []
-    for d, dirs, _ in os.walk(ctx.repo):
-        reld = Path(d).relative_to(ctx.repo).as_posix()
-        keep = []
-        for x in dirs:
-            r = x if reld == "." else f"{reld}/{x}"
-            if x == ".git" and reld == ".":
-                continue
-            if glob_any(f"{r}/", excl):
-                out.append(r)          # excluded: name it, and do not walk into it
-            else:
-                keep.append(x)
-        dirs[:] = keep
-    return sorted(out)
+def is_dep_input(f: str) -> bool:
+    """A dependency manifest, lockfile or SBOM that OSV reads."""
+    return (Path(f).name in LOCKFILES or f.endswith(SBOM_SUFFIXES)
+            or (f.endswith(".txt") and "requirements" in Path(f).name))
+
+
+def dep_mirror(ctx: Ctx, dst: Path) -> None:
+    """Copy every non-excluded, tracked or untracked dependency input (not links) to dst under its own path.
+    OSV then scans only these: an excluded lockfile is never read or sent to osv.dev, whether a directory or a
+    file glob excludes it (OSV's own --x-exclude covers directories only). Full scans of a trusted branch also
+    keep its osv-scanner.toml files; PR scans pass the base one with --config instead."""
+    excl = ctx.cfg["paths"]["exclude"]
+    for f in set(git_z(ctx.repo, ["ls-files", "-z"]) + untracked_files(ctx.repo)):
+        p = ctx.repo / f
+        if p.is_symlink() or not p.is_file() or glob_any(f, excl):
+            continue
+        if is_dep_input(f) or (not ctx.base and p.name == "osv-scanner.toml"):
+            (dst / f).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(p, dst / f)
 
 
 def run_osv(ctx: Ctx) -> list[Finding]:
@@ -849,9 +852,7 @@ def run_osv(ctx: Ctx) -> list[Finding]:
     # follow directory links, so a lockfile behind src/pkg -> ../vendor/pkg is scanned on its own)
     cands = ctx.changed_files if ctx.mode == "diff" else targets(ctx)[1:]
     inputs = [f for f in cands
-              if (Path(f).name in LOCKFILES or f.endswith(SBOM_SUFFIXES)
-                  or (f.endswith(".txt") and "requirements" in Path(f).name))
-              and not glob_any(f, ctx.cfg["paths"]["exclude"]) and in_repo(ctx.repo, ctx.repo / f)]
+              if is_dep_input(f) and not glob_any(f, ctx.cfg["paths"]["exclude"]) and in_repo(ctx.repo, ctx.repo / f)]
     if ctx.mode == "diff" and not inputs:
         return []
     # 0 = clean, 1 = vulns found, 128 = no packages found
@@ -864,10 +865,13 @@ def run_osv(ctx: Ctx) -> list[Finding]:
             conf = Path(td) / "osv-scanner.toml"
             conf.write_text(settings_file(ctx.repo, ctx.base, "osv-scanner.toml") or "")
             cmd.append(f"--config={conf}")
-        # excluded directories are never read or sent to the vulnerability service (":" = exact path relative
-        # to the working directory; OSV can exclude directories only, so file-level excludes are dropped below)
-        excl_dirs = excluded_dirs(ctx)
-        p = sh(cmd + [f"--x-exclude=:{d}" for d in excl_dirs] + ["."], ctx.repo, ok_codes=(0, 1, 128))
+        mirror = Path(td) / "deps"
+        mirror.mkdir()
+        dep_mirror(ctx, mirror)
+        p = sh(cmd + ["."], mirror, ok_codes=(0, 1, 128))
+        recursive = json.loads(p.stdout or "{}").get("results", [])
+        for res in recursive:   # named by the repo path the mirror copy came from
+            res["source"]["path"] = rel(mirror, res["source"]["path"])
         if inputs:
             # each changed (or linked) input must parse on its own: the repo-wide scan succeeds as long as ANY lockfile
             # parses, which would hide a changed input OSV could not read (127 = extraction failed)
@@ -892,10 +896,9 @@ def run_osv(ctx: Ctx) -> list[Finding]:
         # Each changed input that its own scan read (exit 0/1) counts, even with no vulnerabilities: an input
         # may sit only behind a link into an excluded dir, which the recursive scan skips.
         raise RuntimeError("osv-scanner found no packages although a dependency manifest changed")
-    data = json.loads(p.stdout or "{}")
     out = []
-    for res in data.get("results", []) + extra:
-        src = rel(ctx.repo, res["source"]["path"])
+    for res in recursive + extra:
+        src = res["source"]["path"]
         if ctx.mode == "diff" and src not in ctx.changed_files:
             continue
         if glob_any(src, ctx.cfg["paths"]["exclude"]):   # excluded paths are never scanned
