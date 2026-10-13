@@ -941,8 +941,9 @@ def run_osv(ctx: Ctx) -> list[Finding]:
 
 # Trivy (v0.75 pkg/iac/ignore) reads a rule from any space-separated token, in a comment or not, that starts
 # with `trivy:` or `tfsec:` after leading whitespace and `#` `/` `*` (keys in any order: `trivy:exp:...:ignore:ID`).
-# Those tokens are defused; other text, such as a string literal "trivy:ignore", is left as written. Any whitespace
-# counts as a boundary (Trivy v0.75 splits on spaces only), so a Trivy that splits on tabs too is covered.
+# Those tokens are defused; other text, such as a string literal "trivy:ignore", is left as written. sast-check does
+# not install or pin Trivy (any installed version runs) and the parser has changed between versions, so any
+# whitespace counts as a boundary: a suppression must never work, even if a rare literal is scanned defused.
 TRIVY_INLINE_RE = re.compile(r"(?:^|(?<=\s))[\s#/*]*(?:trivy|tfsec)(:)", re.MULTILINE)
 
 
