@@ -76,41 +76,79 @@ rules:
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
+    # The function must come from the child_process module: a variable assigned from require("child_process" or
+    # "node:child_process"), an import of it, or a named import. db.exec(), shell.exec() and /re/.exec() do not count.
     pattern-sinks:
+      # called as a method of the module object: cp.exec(...), cp.spawn(...)
       - patterns:
-          - pattern: $F($X, ...)
-          - metavariable-regex:
-              metavariable: $F
-              regex: '^(exec|execSync)$'
+          - pattern-either:
+              - patterns:
+                  - pattern: $CP.$F($X, ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
+              - patterns:
+                  - pattern: |
+                      $CP.$F($C, $X, {..., shell: true, ...})
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(spawn|spawnSync|execFile|execFileSync)$'
+              - patterns:
+                  - pattern: $CP.$F($SH, [..., "-c", $X, ...], ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(spawn|spawnSync|execFile|execFileSync)$'
+                  - metavariable-regex:
+                      metavariable: $SH
+                      regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $CP = require($MOD);
+                      ...
+                  - metavariable-regex:
+                      metavariable: $MOD
+                      regex: '^["'']((node:)?child_process)["'']$'
+              - pattern-inside: |
+                  import $CP from "child_process";
+                  ...
+              - pattern-inside: |
+                  import $CP from "node:child_process";
+                  ...
+              - pattern-inside: |
+                  import * as $CP from "child_process";
+                  ...
+              - pattern-inside: |
+                  import * as $CP from "node:child_process";
+                  ...
           - focus-metavariable: $X
+      # called by name after a named import: const { exec } = require("child_process") reads as the same import
       - patterns:
-          - pattern: $CP.$F($X, ...)
-          - metavariable-regex:
-              metavariable: $CP
-              regex: '^(child_process|cp|childProcess|cproc|proc)$'
-          - metavariable-regex:
-              metavariable: $F
-              regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
-          - focus-metavariable: $X
-      - patterns:
-          - pattern: $F($X, ...)
-          - metavariable-regex:
-              metavariable: $F
-              regex: '^(spawn|spawnSync|execFile|execFileSync)$'
-          - focus-metavariable: $X
-      - patterns:
-          - pattern: |
-              $F($C, $ARGS, {..., shell: true, ...})
-          - metavariable-regex:
-              metavariable: $F
-              regex: '(^|\.)(spawn|spawnSync|execFile|execFileSync)$'
-          - focus-metavariable: $ARGS
-      - patterns:
-          - pattern: $F($SH, [..., "-c", $X, ...], ...)
-          - metavariable-regex:
-              metavariable: $F
-              regex: '(^|\.)(spawn|spawnSync|execFile|execFileSync)$'
-          - metavariable-regex:
-              metavariable: $SH
-              regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+          - pattern-either:
+              - patterns:
+                  - pattern: $F($X, ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
+              - patterns:
+                  - pattern: |
+                      $F($C, $X, {..., shell: true, ...})
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(spawn|spawnSync|execFile|execFileSync)$'
+              - patterns:
+                  - pattern: $F($SH, [..., "-c", $X, ...], ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(spawn|spawnSync|execFile|execFileSync)$'
+                  - metavariable-regex:
+                      metavariable: $SH
+                      regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+          - pattern-either:
+              - pattern-inside: |
+                  import { $F } from "child_process";
+                  ...
+              - pattern-inside: |
+                  import { $F } from "node:child_process";
+                  ...
           - focus-metavariable: $X
