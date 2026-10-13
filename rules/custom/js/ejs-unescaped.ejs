@@ -89,5 +89,46 @@
   <% partial = user.partial; %>
   <!-- ruleid: sast.js.ejs-unescaped -->
   <div><%- partial %></div>
+  <% var mark = '<b>m</b>'; %>
+  <% var mark2 = "<b>m2</b>"; %>
+  <% var part = include('partials/p'); %>
+  <% var part2 = include("partials/p2"); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- mark -%></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- mark2 -%></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%-part-%></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- part2 -%></div>
+
+  <% var lead = "safe"; %>
+  <% lead = "Hi " + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead %></div>
+  <% var lead2 = 'safe'; %>
+  <% lead2 = 'Hi ' + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead2 -%></div>
+  <% var lead3 = include('partials/a'); %>
+  <% lead3 = include('partials/a') + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead3 %></div>
+  <% var lead4 = "safe"; %>
+  <% lead4 = "a" + req.query.q + "b"; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead4 %></div>
+  <% var lead5 = include('partials/a'); %>
+  <% lead5 = include('partials/a', { u: 1 }) + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead5 %></div>
+  <% var lead6 = include('partials/a'); %>
+  <% lead6 = include(req.query.p); %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead6 %></div>
+  <% var okinc = include('partials/a'); %>
+  <% okinc = include('partials/b', { user: 1 }); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- okinc %></div>
 </body>
 </html>
