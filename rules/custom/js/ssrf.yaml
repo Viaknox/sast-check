@@ -1,0 +1,121 @@
+rules:
+  - id: sast.js.ssrf
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Request-controlled data is used as the address of an outgoing HTTP call. An attacker can make the server reach internal services or cloud metadata endpoints. Check the host against an allow-list before sending the request.
+    metadata:
+      sast_severity: medium
+      confidence: medium
+      cwe: "CWE-918"
+      category: security
+      fix: 'Validate the destination against an allow-list of hosts, resolve and block internal addresses, or accept only an id and build the URL server-side.'
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+        - https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.headers
+      - pattern: req.cookies
+      - pattern: req.url
+      - pattern: req.originalUrl
+      - pattern: req.path
+      - pattern: req.get(...)
+      - pattern: req.header(...)
+      - pattern: req.param(...)
+      - pattern: req.signedCookies
+      - pattern: req.files
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      - pattern: request.headers
+      - pattern: request.cookies
+      # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+              - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+              - pattern: $REQ.url
+              - pattern: $REQ.originalUrl
+              - pattern: $REQ.path
+              - pattern: $REQ.get(...)
+              - pattern: $REQ.header(...)
+      - pattern: ctx.query
+      - pattern: ctx.request.query
+      - pattern: ctx.headers
+      - pattern: ctx.cookies.get(...)
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $P + $X
+          - metavariable-regex:
+              metavariable: $P
+              regex: '^["''`]https?://[^/"''`]+/'
+      - pattern: encodeURIComponent(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $F($U, ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: '^(fetch|axios|got|ky|nodeFetch|needle|request|rp|phin|undiciFetch)$'
+          - focus-metavariable: $U
+      - patterns:
+          - pattern: $W.fetch($U, ...)
+          - metavariable-regex:
+              metavariable: $W
+              regex: '^(window|globalThis|self)$'
+          - focus-metavariable: $U
+      - patterns:
+          - pattern: $R.$M($U, ...)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(axios|got|ky|needle|superagent|http|https|undici|rp|phin|bent|request)$'
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|head|options|request|stream|fetch|del|json)$'
+          - focus-metavariable: $U
+      - patterns:
+          - pattern: |
+              $F({..., url: $U, ...}, ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: '(^|\.)(axios|got|request|rp|ky|needle)(\.request)?$'
+          - focus-metavariable: $U
+      - patterns:
+          - pattern: |
+              $R.$M({..., $K: $U, ...}, ...)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(http|https)$'
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|request)$'
+          - metavariable-regex:
+              metavariable: $K
+              regex: '^(host|hostname)$'
+          - focus-metavariable: $U
+      - patterns:
+          - pattern: |
+              axios.create({..., baseURL: $U, ...})
+          - focus-metavariable: $U

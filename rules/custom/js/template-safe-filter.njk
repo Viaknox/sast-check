@@ -1,0 +1,39 @@
+<div>
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{ user.bio | safe }}</p>
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{comment.body|safe}}</p>
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{ page.summary | safeHTML }}</p>
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{- item.html | trim | safe -}}</p>
+
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{ unsanitizedBio | safe }}</p>
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{ user.bio | purifyLater | safe }}</p>
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{ notEscapedYet | e2 | safe }}</p>
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{ raw.sanitized_bio | safe }}</p>
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{ unsanitizedBio | sanitizeNot | safe }}</p>
+
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{ unsanitize(user.bio) | safe }}</p>
+  <!-- ruleid: sast.js.template-safe-filter -->
+  <p>{{ user.bio | sanitize.later | safe }}</p>
+
+  <!-- ok: sast.js.template-safe-filter -->
+  <p>{{ sanitize(user.bio) | safe }}</p>
+  <!-- ok: sast.js.template-safe-filter -->
+  <p>{{ user.bio }}</p>
+  <!-- ok: sast.js.template-safe-filter -->
+  <p>{{ "<b>fixed</b>" | safe }}</p>
+  <!-- ok: sast.js.template-safe-filter -->
+  <p>{{ user.bio | escape | safe }}</p>
+  <!-- ok: sast.js.template-safe-filter -->
+  <p>{{ .Content | safeHTML }}</p>
+  <!-- ok: sast.js.template-safe-filter -->
+  <p>{{ items | length }}</p>
+</div>

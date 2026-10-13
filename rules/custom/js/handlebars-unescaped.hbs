@@ -1,0 +1,26 @@
+<div class="card">
+  <!-- ruleid: sast.js.handlebars-unescaped -->
+  <p>{{{ user.bio }}}</p>
+  <!-- ruleid: sast.js.handlebars-unescaped -->
+  <div>{{{comment}}}</div>
+  <!-- ruleid: sast.js.handlebars-unescaped -->
+  <script>var cfg = {{{ configJson }}};</script>
+
+  <!-- ruleid: sast.js.handlebars-unescaped -->
+  <p>{{{ unsanitized }}}</p>
+  <!-- ruleid: sast.js.handlebars-unescaped -->
+  <p>{{{ purifyUser }}}</p>
+  <!-- ruleid: sast.js.handlebars-unescaped -->
+  <p>{{{ escapeHtmlUser }}}</p>
+
+  <!-- ok: sast.js.handlebars-unescaped -->
+  <p>{{ user.bio }}</p>
+  <!-- ok: sast.js.handlebars-unescaped -->
+  <main>{{{body}}}</main>
+  <!-- ok: sast.js.handlebars-unescaped -->
+  <div>{{{ sanitize user.bio }}}</div>
+  <!-- ok: sast.js.handlebars-unescaped -->
+  {{#each items}}<li>{{this.name}}</li>{{/each}}
+  <!-- ok: sast.js.handlebars-unescaped -->
+  {{> header title="Home"}}
+</div>

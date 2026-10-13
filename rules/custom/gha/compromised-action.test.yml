@@ -1,0 +1,37 @@
+name: ci
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # ruleid: sast.gha.compromised-action
+      - uses: tj-actions/changed-files@v45
+      # ruleid: sast.gha.compromised-action
+      - uses: tj-actions/changed-files@main
+      - name: eslint
+        # ruleid: sast.gha.compromised-action
+        uses: tj-actions/eslint-changed-files@v21
+      # ruleid: sast.gha.compromised-action
+      - uses: reviewdog/action-setup@v1
+      # ruleid: sast.gha.compromised-action
+      - uses: "reviewdog/action-shellcheck@v1.20"
+      # ok: sast.gha.compromised-action
+      - uses: tj-actions/changed-files@a284dc1814e3fd07f2e34267fc8f81227ed29fb8
+      # ok: sast.gha.compromised-action
+      - uses: reviewdog/action-setup@3f401fe1d58fe77e10d665ab713057375e39b887 # v1.3.2
+      # ok: sast.gha.compromised-action
+      - uses: actions/checkout@v4
+      # ok: sast.gha.compromised-action
+      - uses: tj-actions/branch-names@v8
+      # ok: sast.gha.compromised-action
+      - uses: reviewdog/reviewdog-other@v1
+      # ruleid: sast.gha.compromised-action
+      - uses: tj-actions/changed-files@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-evil
+      # ruleid: sast.gha.compromised-action
+      - uses: "tj-actions/changed-files@a284dc1814e3fd07f2e34267fc8f81227ed29fb8.x"
+      # ruleid: sast.gha.compromised-action
+      - uses: TJ-Actions/Changed-Files@v45
+      # ruleid: sast.gha.compromised-action
+      - uses: &a tj-actions/changed-files@v45
+      # ruleid: sast.gha.compromised-action
+      - uses: !!str tj-actions/changed-files@v45

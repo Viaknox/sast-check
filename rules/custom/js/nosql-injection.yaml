@@ -1,0 +1,100 @@
+rules:
+  - id: sast.js.nosql-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A value taken from the request body or query string is used unchecked inside a MongoDB query filter. A client can send an object such as {"$ne": null} instead of a string and change the query. Cast the value to a primitive or sanitize it first.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-943"
+      category: security
+      fix: 'Cast request values to the expected primitive (String(x), Number(x)) or sanitize the object with mongo-sanitize before building the filter.'
+      references:
+        - https://cwe.mitre.org/data/definitions/943.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+    mode: taint
+    # labels: INPUT is request data; CAST marks INPUT run through a string cast / Mongo operator stripper. CAST stops
+    # operator objects ({"$ne": 1}) but NOT JavaScript injected into a $where expression.
+    pattern-sources:
+      - label: INPUT
+        pattern-either:
+          - pattern: req.query
+          - pattern: req.body
+          - pattern: req.param(...)
+          - pattern: request.query
+          - pattern: request.body
+          - pattern: ctx.query
+          - pattern: ctx.request.query
+          - pattern: ctx.request.body
+      # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
+      - label: INPUT
+        patterns:
+          - pattern-either:
+              - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+              - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+      - label: CAST
+        requires: INPUT
+        pattern-either:
+          - pattern: String(...)
+          - pattern: |
+              `${$X}`
+          - pattern: mongoSanitize(...)
+          - pattern: $S.toString()
+          - pattern: $S.trim()
+          - pattern: $S.toLowerCase()
+          - pattern: $S.toUpperCase()
+          - patterns:
+              - pattern: $SCH.$P(...)
+              - metavariable-regex:
+                  metavariable: $SCH
+                  regex: '(?i)(.*schema.*|z|.*validator.*)'
+              - metavariable-regex:
+                  metavariable: $P
+                  regex: '^(parse|validate|validateSync|safeParse|escape)$'
+    # numeric / boolean results cannot carry operators or code, so they sanitize everywhere
+    pattern-sanitizers:
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+      - pattern: Boolean(...)
+    pattern-sinks:
+      - requires: INPUT and not CAST
+        patterns:
+          - pattern: |
+              $M.$FN({..., $K: $X, ...}, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: '^(find|findOne|findOneAndUpdate|findOneAndDelete|findOneAndReplace|updateOne|updateMany|deleteOne|deleteMany|countDocuments|where|exists|replaceOne)$'
+          - metavariable-regex:
+              metavariable: $X
+              regex: '^[^{]'
+          - focus-metavariable: $X
+      - requires: INPUT and not CAST
+        patterns:
+          - pattern: $M.$FN($Q, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: '^(find|findOne|findOneAndUpdate|findOneAndDelete|findOneAndReplace|updateOne|updateMany|deleteOne|deleteMany|countDocuments|where|exists|replaceOne)$'
+          - pattern-not: $M.$FN({...}, ...)
+          # a callback is never a Mongo filter (e.g. Array.prototype.find); some engines taint closures
+          - pattern-not: $M.$FN((...) => $B, ...)
+          - pattern-not: $M.$FN(function (...) {...}, ...)
+          - focus-metavariable: $Q
+      # $where runs as JavaScript: a cast does not make request data safe there
+      - requires: INPUT
+        patterns:
+          - pattern: |
+              {..., $K: $X, ...}
+          - metavariable-regex:
+              metavariable: $K
+              regex: '^["'']?\$where["'']?$'
+          - focus-metavariable: $X

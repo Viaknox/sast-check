@@ -1,0 +1,90 @@
+rules:
+  - id: sast.js.location-xss
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A value taken from the query string, hash or a postMessage event is used as a navigation
+      target (location, location.href, assign, replace, window.open). A value such as
+      "javascript:..." would run script in your origin. Check the URL against an allowlist
+      (relative path or http/https only) before navigating.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-79"
+      category: security
+      fix: "Validate with an allowlist helper (relative path starting with a single '/', or http/https protocol) before assigning to location."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://owasp.org/www-community/attacks/DOM_Based_XSS
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: location.hash
+          - pattern: location.search
+          - pattern: window.location.hash
+          - pattern: window.location.search
+          - pattern: document.location.hash
+          - pattern: document.location.search
+          - pattern: window.name
+          - pattern: new URLSearchParams(...).get(...)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $W.addEventListener("message", function($E) { ... })
+              - pattern-inside: |
+                  $W.addEventListener("message", ($E) => { ... })
+              - pattern-inside: |
+                  $W.onmessage = function($E) { ... }
+              - pattern-inside: |
+                  $W.onmessage = ($E) => { ... }
+          - pattern: $E.data
+    pattern-sanitizers:
+      # the check only counts inside the branch it guards (or after an early return), not when its result is ignored
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  if (isSafeUrl($X)) { ... }
+              - pattern-inside: |
+                  if (isSafeRedirect($X)) { ... }
+              - pattern-inside: |
+                  if (!isSafeUrl($X)) { return ...; }
+                  ...
+              - pattern-inside: |
+                  if (!isSafeRedirect($X)) { return ...; }
+                  ...
+          - pattern: $X
+      - pattern: sanitizeUrl(...)
+      - pattern: sanitizeURL(...)
+      - pattern: safeRedirectTarget(...)
+      - pattern: encodeURIComponent(...)
+      # a literal prefix that fixes the start of the URL (path, query, fragment or http(s) origin) leaves
+      # no room for a "javascript:" scheme; any other literal ("javascript:" + x) does not
+      - patterns:
+          - pattern: $P + $X
+          - metavariable-regex:
+              metavariable: $P
+              regex: '^["''`](?:/(?!/)|\./|\?|#|https?://[^/"''`]+/)'
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: location = $X
+              - pattern: window.location = $X
+              - pattern: document.location = $X
+              - pattern: location.href = $X
+              - pattern: window.location.href = $X
+              - pattern: document.location.href = $X
+          - pattern-not: $L = `/...`
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-either:
+              - pattern: location.assign($X)
+              - pattern: window.location.assign($X)
+              - pattern: document.location.assign($X)
+              - pattern: location.replace($X)
+              - pattern: window.location.replace($X)
+              - pattern: document.location.replace($X)
+              - pattern: window.open($X, ...)
+              - pattern: window.open($X)
+              - pattern: open($X)
+          - pattern-not: $F(`/...`, ...)
+          - focus-metavariable: $X

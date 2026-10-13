@@ -1,0 +1,23 @@
+rules:
+  - id: sast.js.websocket-cleartext
+    languages: [javascript, typescript]
+    severity: INFO
+    message: >-
+      This code opens a WebSocket (or socket.io connection) to a remote host over plain ws:// or
+      http://. Messages travel unencrypted and can be read or tampered with in transit. Use
+      wss:// or https:// for anything that is not on the local machine.
+    metadata:
+      sast_severity: low
+      confidence: high
+      cwe: "CWE-319"
+      category: security
+      fix: "Change the URL scheme to wss:// (or https:// for socket.io) and serve the endpoint over TLS."
+      references:
+        - https://cwe.mitre.org/data/definitions/319.html
+        - https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_client_applications
+    pattern-either:
+      - pattern: new WebSocket("=~/^ws:\/\/(?!(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)([:\/]|$))/i", ...)
+      - pattern: new $NS.WebSocket("=~/^ws:\/\/(?!(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)([:\/]|$))/i", ...)
+      - pattern: io("=~/^http:\/\/(?!(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)([:\/]|$))/i", ...)
+      - pattern: io.connect("=~/^http:\/\/(?!(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)([:\/]|$))/i", ...)
+      - pattern: io("=~/^ws:\/\/(?!(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)([:\/]|$))/i", ...)

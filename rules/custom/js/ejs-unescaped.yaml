@@ -1,0 +1,23 @@
+rules:
+  - id: sast.js.ejs-unescaped
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      The EJS tag <%- prints its value without HTML escaping. If the value holds user or
+      database content, it is an XSS hole. Use <%= value %> so it is escaped, and keep <%- for
+      include() and pre-sanitized markup only.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-79"
+      category: security
+      fix: "Change <%- x %> to <%= x %>, or sanitize x on the server before printing it unescaped."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://ejs.co/#docs
+    paths:
+      include:
+        - "*.ejs"
+    # sanitizer only counts as a call at the start of the expression, never as part of an identifier
+    pattern-regex: >-
+      (?i)<%-(?!\s*include\s*\()(?!\s*body\s*-?%>)(?!\s*(?:'[^']*'|"[^"]*")\s*-?%>)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()\s*[^\s%][^%]*%>

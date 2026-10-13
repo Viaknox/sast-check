@@ -1,0 +1,25 @@
+rules:
+  - id: sast.js.handlebars-unescaped
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      A triple-brace tag {{{ value }}} prints the value without HTML escaping. If it holds user
+      or database content, it is an XSS hole. Use {{ value }} so it is escaped, and reserve
+      triple braces for markup you have already sanitized.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-79"
+      category: security
+      fix: "Replace {{{x}}} with {{x}}, or sanitize x on the server before rendering it unescaped."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://handlebarsjs.com/guide/expressions.html#html-escaping
+    paths:
+      include:
+        - "*.hbs"
+        - "*.handlebars"
+        - "*.mustache"
+    # sanitizer only counts as a helper call ("sanitize x" or "sanitize(x)") at the start, never as part of an identifier
+    pattern-regex: >-
+      (?i)\{\{\{(?!\s*body\s*\}\}\})(?!\s*>)(?!\s*\(?\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)(?:\s*\(|\s+[^\s}]))\s*[^\s}][^}]*\}\}\}

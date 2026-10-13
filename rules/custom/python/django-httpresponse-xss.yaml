@@ -1,0 +1,64 @@
+rules:
+  - id: sast.python.django-httpresponse-xss
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Request data (GET, POST, cookies, headers or body) is placed straight into an
+      HttpResponse body. HttpResponse defaults to text/html and does no escaping, so a crafted
+      value runs as script in the visitor's browser. Escape it first or render a template.
+    metadata:
+      sast_severity: high
+      confidence: high
+      cwe: "CWE-79"
+      category: security
+      fix: "Wrap the value with django.utils.html.escape(), build markup with format_html(), or use a template that auto-escapes."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://owasp.org/www-community/attacks/xss/
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.GET
+              - pattern: request.POST
+              - pattern: request.COOKIES
+              - pattern: request.META
+              - pattern: request.headers
+              - pattern: request.body
+              - pattern: request.FILES
+    pattern-sanitizers:
+      - pattern: django.utils.html.escape(...)
+      - pattern: escape(...)
+      - pattern: conditional_escape(...)
+      - pattern: django.utils.html.conditional_escape(...)
+      - pattern: format_html(...)
+      - pattern: django.utils.html.format_html(...)
+      - pattern: int(...)
+      - pattern: float(...)
+      - pattern: bool(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: HttpResponse($X, ...)
+              - pattern: HttpResponse(..., content=$X, ...)
+              - pattern: django.http.HttpResponse($X, ...)
+          - pattern-not: HttpResponse(..., content_type="application/json", ...)
+          - pattern-not: HttpResponse(..., content_type="text/plain", ...)
+          - focus-metavariable: $X
+      # body-carrying HttpResponse subclasses (same text/html default)
+      - patterns:
+          - pattern: $C($X, ...)
+          - metavariable-regex:
+              metavariable: $C
+              regex: '^(django\.http\.)?HttpResponse(BadRequest|NotFound|Forbidden|ServerError|Gone|NotAllowed)$'
+          - pattern-not: $C(..., content_type="application/json", ...)
+          - pattern-not: $C(..., content_type="text/plain", ...)
+          - focus-metavariable: $X
+      # marking request data as safe HTML disables escaping wherever it is later rendered
+      - patterns:
+          - pattern-either:
+              - pattern: mark_safe($X)
+              - pattern: SafeString($X)
+              - pattern: django.utils.safestring.mark_safe($X)
+              - pattern: django.utils.safestring.SafeString($X)
+          - focus-metavariable: $X

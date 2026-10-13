@@ -1,0 +1,22 @@
+rules:
+  - id: sast.js.grpc-insecure
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      gRPC is set up with createInsecure(), so traffic is sent in plain text with no server
+      identity check. This is acceptable for localhost-only services or inside a mesh that
+      enforces mTLS; otherwise switch to TLS credentials (createSsl).
+    metadata:
+      sast_severity: medium
+      confidence: medium
+      cwe: "CWE-319"
+      category: security
+      fix: "Use grpc.credentials.createSsl(rootCerts, key, cert) on clients and grpc.ServerCredentials.createSsl(...) on servers, or confirm a mesh provides mTLS."
+      references:
+        - https://cwe.mitre.org/data/definitions/319.html
+        - https://grpc.io/docs/guides/auth/
+    pattern-either:
+      - pattern: $G.credentials.createInsecure()
+      - pattern: credentials.createInsecure()
+      - pattern: $G.ServerCredentials.createInsecure()
+      - pattern: ServerCredentials.createInsecure()

@@ -1,0 +1,30 @@
+rules:
+  - id: sast.python.httpx-verify-false
+    languages: [python]
+    severity: INFO
+    message: >-
+      TLS certificate checking is switched off for this httpx, aiohttp or urllib3 client. Anyone
+      on the network path can impersonate the server and read or alter traffic. Leave
+      verification on and point to a CA bundle if you use a private certificate authority.
+    metadata:
+      sast_severity: low
+      confidence: high
+      cwe: "CWE-295"
+      category: security
+      fix: "Remove verify=False / ssl=False / CERT_NONE, or pass verify='/path/to/ca.pem' for private CAs."
+      references:
+        - https://cwe.mitre.org/data/definitions/295.html
+    pattern-either:
+      - pattern: httpx.Client(..., verify=False, ...)
+      - pattern: httpx.AsyncClient(..., verify=False, ...)
+      - pattern: httpx.$M(..., verify=False, ...)
+      - pattern: aiohttp.TCPConnector(..., ssl=False, ...)
+      - pattern: aiohttp.TCPConnector(..., verify_ssl=False, ...)
+      - patterns:
+          - pattern: $S.$M(..., ssl=False, ...)
+          - metavariable-regex:
+              metavariable: $S
+              regex: (?i).*(session|client|sess|connector)$
+      - pattern: urllib3.PoolManager(..., cert_reqs="CERT_NONE", ...)
+      - pattern: urllib3.HTTPSConnectionPool(..., cert_reqs="CERT_NONE", ...)
+      - pattern: urllib3.connection_from_url(..., cert_reqs="CERT_NONE", ...)

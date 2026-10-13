@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<body>
+<div id="out"></div>
+<script>
+  // positive cases
+</script>
+<!-- ruleid: sast.web.inline-script-dom-xss -->
+<script>document.write("Welcome " + location.hash.slice(1));</script>
+<script>
+  var el = document.getElementById("out");
+  // ruleid: sast.web.inline-script-dom-xss
+  el.innerHTML = "You came from " + document.referrer;
+</script>
+<script>
+  // ruleid: sast.web.inline-script-dom-xss
+  document.getElementById("out").innerHTML = decodeURIComponent(window.location.search);
+</script>
+<script>
+  // ruleid: sast.web.inline-script-dom-xss
+  document.writeln('<a href="' + document.URL + '">link</a>');
+</script>
+<script>
+  // ruleid: sast.web.inline-script-dom-xss
+  el.innerHTML = '<a href="' + encodeURIComponent(x) + '">' + location.hash;
+</script>
+
+<script>
+  // ruleid: sast.web.inline-script-dom-xss
+  el.innerHTML = location.hash + escapeHtml("x");
+</script>
+<script>
+  // ruleid: sast.web.inline-script-dom-xss
+  el.innerHTML = DOMPurify.sanitize("x") + location.hash;
+</script>
+
+<!-- safe look-alikes -->
+<script>
+  // ok: sast.web.inline-script-dom-xss
+  el.innerHTML = escapeHtml(location.hash);
+</script>
+<script>
+  // ok: sast.web.inline-script-dom-xss
+  document.write("<p>static content</p>");
+</script>
+<script>
+  // ok: sast.web.inline-script-dom-xss
+  document.getElementById("out").textContent = location.hash;
+</script>
+<script>
+  // ok: sast.web.inline-script-dom-xss
+  document.getElementById("out").innerHTML = DOMPurify.sanitize(location.hash);
+</script>
+<script>
+  // ok: sast.web.inline-script-dom-xss
+  if (location.hash === "#debug") { console.log("debug on"); }
+</script>
+<script>
+  // ok: sast.web.inline-script-dom-xss
+  el.innerHTML = "<b>" + user.name + "</b>";
+</script>
+</body>
+</html>

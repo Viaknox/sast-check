@@ -1,0 +1,113 @@
+rules:
+  - id: sast.js.prototype-pollution
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A property key (or a deep-merge source) derived from request data is used to write into an object. A key such as __proto__ or constructor.prototype lets an attacker change properties shared by every object in the process. Filter dangerous keys or use a Map or a null-prototype object.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-1321"
+      category: security
+      fix: 'Reject __proto__, constructor and prototype keys, build target objects with Object.create(null) or a Map, and avoid deep merge helpers on request data.'
+      references:
+        - https://cwe.mitre.org/data/definitions/1321.html
+        - https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.param(...)
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+              - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+      - pattern: ctx.query
+      - pattern: ctx.request.query
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sinks:
+      - patterns:
+          - pattern: $O[$K1][$K2] = $V
+          - focus-metavariable: $K1
+      - patterns:
+          - pattern: $O[$K1][$K2] = $V
+          - focus-metavariable: $K2
+      - patterns:
+          - pattern: $O[$K] = $V
+          - pattern-either:
+              - pattern-inside: for ($LV of $LI) { ... }
+              - pattern-inside: for ($LV in $LI) { ... }
+              - pattern-inside: for (...;...;...) { ... }
+              - pattern-inside: while (...) { ... }
+          - focus-metavariable: $K
+      - patterns:
+          - pattern: $A.forEach(($K) => { ... $O[$K] = $V; ... })
+          - focus-metavariable: $A
+      - patterns:
+          - pattern: $A.forEach(function ($K) { ... $O[$K] = $V; ... })
+          - focus-metavariable: $A
+      # the polluting source may be any argument after the target, not only the first
+      - patterns:
+          - pattern: $L.$F($T, ..., $SRC, ...)
+          - metavariable-regex:
+              metavariable: $L
+              regex: '^(_|lodash|lo)$'
+          - metavariable-regex:
+              metavariable: $F
+              regex: '^(merge|mergeWith|defaultsDeep)$'
+          - focus-metavariable: $SRC
+      - patterns:
+          - pattern: $F($T, ..., $SRC, ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: '^(merge|deepMerge|mergeDeep|defaultsDeep|deepExtend|deepAssign|mergeWith|deepmerge|mergeDeepRight)$'
+          - focus-metavariable: $SRC
+      - patterns:
+          - pattern: $JQ.extend(true, $T, ..., $SRC, ...)
+          - metavariable-regex:
+              metavariable: $JQ
+              regex: '^(\$|jQuery)$'
+          - focus-metavariable: $SRC
+      # npm "extend" package: deep only when the first argument is true
+      - patterns:
+          - pattern: extend(true, $T, ..., $SRC, ...)
+          - focus-metavariable: $SRC
+      - patterns:
+          - pattern: merge.recursive($T, ..., $SRC, ...)
+          - focus-metavariable: $SRC
+      - patterns:
+          - pattern: merge.recursive(true, $T, ..., $SRC, ...)
+          - focus-metavariable: $SRC
+      - patterns:
+          - pattern: $L.$F($O, $P, ...)
+          - metavariable-regex:
+              metavariable: $L
+              regex: '^(_|lodash|lo)$'
+          - metavariable-regex:
+              metavariable: $F
+              regex: '^(set|setWith|update|updateWith)$'
+          - focus-metavariable: $P
+      - patterns:
+          - pattern: $L.zipObjectDeep($P, ...)
+          - metavariable-regex:
+              metavariable: $L
+              regex: '^(_|lodash|lo)$'
+          - focus-metavariable: $P

@@ -1,0 +1,27 @@
+rules:
+  - id: sast.k8s.ingress-nginx-vulnerable
+    languages: [yaml]
+    severity: ERROR
+    message: >-
+      This references an ingress-nginx controller build (or Helm chart) older than the fixed
+      releases v1.11.5 / v1.12.1 (chart 4.11.5 / 4.12.1). Those versions carry IngressNightmare
+      (CVE-2025-1974 plus CVE-2025-1097, 1098 and 24514), where any pod that can reach the
+      admission webhook can run code in the controller and read cluster secrets. Upgrade now.
+      Also note that Kubernetes retired the ingress-nginx project (announced November 2025), so
+      plan a move to the Gateway API or another ingress controller.
+    metadata:
+      sast_severity: critical
+      confidence: medium
+      cwe: "CWE-94"
+      category: security
+      fix: "Upgrade to controller v1.11.5+ / v1.12.1+ (chart 4.11.5+ / 4.12.1+), or newer, and plan migration to the Gateway API or another controller."
+      references:
+        - https://nvd.nist.gov/vuln/detail/CVE-2025-1974
+        - https://kubernetes.io/blog/2025/03/24/ingress-nginx-cve-2025-1974/
+        - https://cwe.mitre.org/data/definitions/94.html
+    pattern-either:
+      - pattern-regex: '(?:ingress-nginx/controller|kubernetes-ingress-controller/nginx-ingress-controller):v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)(?![0-9])'
+      - pattern-regex: '(?m)^[ \t]*(?:-[ \t]+)?(?:image|repository):[ \t]*[\"'']?(?:[\w.:-]+/)*ingress-nginx/controller[\"'']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*tag:[ \t]*[\"'']?v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)(?![0-9])'
+      - pattern-regex: '(?m)^[ \t]*tag:[ \t]*[\"'']?v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)[\"'']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*(?:image|repository):[ \t]*[\"'']?(?:[\w.:-]+/)*ingress-nginx/controller(?![\w/.-])'
+      - pattern-regex: '(?m)^[ \t]*(?:-[ \t]+)?(?:chart|name):[ \t]*[\"'']?ingress-nginx[\"'']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*(?:version|targetRevision):[ \t]*[\"'']?v?(?:[0-3]\.\d+\.\d+|4\.(?:[0-9]|10)\.\d+|4\.11\.[0-4]|4\.12\.0)(?![0-9])'
+      - pattern-regex: '(?m)^[ \t]*(?:-[ \t]+)?(?:version|targetRevision):[ \t]*[\"'']?v?(?:[0-3]\.\d+\.\d+|4\.(?:[0-9]|10)\.\d+|4\.11\.[0-4]|4\.12\.0)[\"'']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*(?:chart|name):[ \t]*[\"'']?ingress-nginx[\"'']?[ \t]*(?:#[^\n]*)?$'

@@ -1,0 +1,23 @@
+rules:
+  - id: sast.js.vue-v-html
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      v-html renders its value as raw HTML with no escaping. If the bound expression can hold
+      user or API data, this is an XSS hole. Use normal {{ }} interpolation, or sanitize the
+      value (for example with DOMPurify) before binding.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-79"
+      category: security
+      fix: "Bind text with {{ value }} or v-text, or sanitize first: v-html=\"sanitize(value)\"."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://vuejs.org/guide/best-practices/security.html
+    paths:
+      include:
+        - "*.vue"
+    # sanitizer only counts as a call at the start of the expression, never as part of an identifier
+    pattern-regex: >-
+      (?i)\bv-html\s*=\s*(?:"(?!\s*'[^'"]*'\s*")(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()[^"]+"|'(?!\s*"[^"']*"\s*')(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()[^']+')

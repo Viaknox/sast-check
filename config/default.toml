@@ -1,0 +1,44 @@
+# sast-check defaults. Copy to `.sast-check.toml` in your repo root to override any key.
+
+[policy]
+# Findings at these severities FAIL the check. Everything else is reported as a warning.
+# Soft launch default: block critical only. Tighten later with ["critical", "high"].
+block_on = ["critical"]
+# "diff"  = only findings this PR introduces can block: on changed lines, or (code scanners) absent from
+#           the base branch's version of the touched file (recommended)
+# "full"  = every finding in the repo can block
+scope = "diff"
+# Findings with confidence "low" never block, even at a blocking severity.
+low_confidence_blocks = false
+# If an enabled, installed scanner crashes, fail the check (fail closed). Settings, diff and base-comparison
+# errors always fail, whatever this says.
+# A missing scanner is reported as "skipped", never silently ignored.
+fail_on_tool_error = true
+
+[tools]
+opengrep = true     # custom MIT rules (JS/TS, Python, GitHub Actions, Docker, K8s, Terraform)
+ruff = true         # Python security rules (S*)
+zizmor = true       # GitHub Actions security audits
+gitleaks = true     # secrets in the PR's commits
+osv = true          # known-vulnerable dependencies (lockfiles)
+trivy = false       # optional deep IaC scan (Docker/Terraform/K8s); needs trivy installed
+
+[deps]
+# Dependency CVEs are reported but do not block by default (they usually aren't caused by the PR).
+block = false
+
+[paths]
+# Never scanned (glob, matched against repo-relative paths)
+exclude = [
+  "node_modules/**", "vendor/**", "dist/**", "build/**", ".next/**", "coverage/**",
+  "**/*.min.js", "**/__snapshots__/**", "sast-results/**",
+]
+# Treated as tests: low-signal rules (e.g. S101 assert) are dropped here
+tests = ["test/**", "tests/**", "**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/test_*.py", "**/*_test.py"]
+
+# Ignore entries. Every entry needs a reason; `expires` (YYYY-MM-DD) is strongly recommended.
+# [[ignore]]
+# rule = "sast.js.express-no-helmet"
+# path = "examples/**"
+# reason = "Example apps, not deployed"
+# expires = "2027-01-01"

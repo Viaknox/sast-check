@@ -1,0 +1,27 @@
+rules:
+  - id: sast.js.template-safe-filter
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      The "safe" / "safeHTML" filter tells the template engine not to escape a value. If that
+      value holds user or database content, it is an XSS hole. Remove the filter, or escape or
+      sanitize the value on the server before marking it safe.
+    metadata:
+      sast_severity: high
+      confidence: low
+      cwe: "CWE-79"
+      category: security
+      fix: "Drop '| safe' so autoescaping applies, or sanitize the HTML (for example with sanitize-html) before marking it safe."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://mozilla.github.io/nunjucks/templating.html#safe
+    paths:
+      include:
+        - "*.njk"
+        - "*.html"
+        - "*.jinja"
+        - "*.jinja2"
+        - "*.j2"
+    # a sanitizer counts only as a call at the start of the expression or as a whole filter name, never as part of an identifier
+    pattern-regex: >-
+      (?i)\{\{-?(?!\s*(?:'[^']*'|"[^"]*")\s*\|)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()(?![^}]*\|\s*(?:escape|e|forceescape|striptags|sanitize|purify)\s*(?:[(|]|-?\}))(?![^}\n]*\.Content\b)[^}\n]*\|\s*(?:safe|safeHTML)\b[^}\n]*-?\}\}

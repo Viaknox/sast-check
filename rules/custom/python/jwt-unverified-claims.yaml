@@ -1,0 +1,27 @@
+rules:
+  - id: sast.python.jwt-unverified-claims
+    languages: [python]
+    severity: ERROR
+    message: >-
+      python-jose get_unverified_claims() hands back token contents without checking the
+      signature, so an attacker can put anything in them. Only use it to pick a key, and make
+      decisions from the output of a verified jwt.decode() call.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-347"
+      category: security
+      fix: "Verify with jose.jwt.decode(token, key, algorithms=[...]) and use those claims; limit get_unverified_header to reading the key id."
+      references:
+        - https://cwe.mitre.org/data/definitions/347.html
+    pattern-either:
+      - pattern: jwt.get_unverified_claims(...)
+      - pattern: jose.jwt.get_unverified_claims(...)
+      - pattern: |
+          $H = jwt.get_unverified_header(...)
+          ...
+          $H.get("alg")
+      - pattern: |
+          $H = jwt.get_unverified_header(...)
+          ...
+          $H["alg"]

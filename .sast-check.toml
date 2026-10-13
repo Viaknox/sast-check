@@ -1,0 +1,3 @@
+# sast-check scanning itself: rule fixtures are intentionally vulnerable code.
+[paths]
+exclude = ["rules/custom/**", "tests/**", "dist/**", "sast-results/**"]

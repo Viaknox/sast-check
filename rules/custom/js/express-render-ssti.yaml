@@ -1,0 +1,92 @@
+rules:
+  - id: sast.js.express-render-ssti
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request-controlled data chooses the template name for res.render, or the whole request query/body is passed as the render options. This can load unintended templates or set engine options such as layout paths, leading to file disclosure or code execution. Use a fixed template and copy only named fields.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-1336"
+      category: security
+      fix: 'Render a fixed template name (or one picked from an allow-list) and pass explicit fields as the data object.'
+      references:
+        - https://cwe.mitre.org/data/definitions/1336.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.headers
+      - pattern: req.cookies
+      - pattern: req.url
+      - pattern: req.originalUrl
+      - pattern: req.path
+      - pattern: req.get(...)
+      - pattern: req.header(...)
+      - pattern: req.param(...)
+      - pattern: req.signedCookies
+      - pattern: req.files
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      - pattern: request.headers
+      - pattern: request.cookies
+      # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+              - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+              - pattern: $REQ.url
+              - pattern: $REQ.originalUrl
+              - pattern: $REQ.path
+              - pattern: $REQ.get(...)
+              - pattern: $REQ.header(...)
+      - pattern: ctx.query
+      - pattern: ctx.request.query
+      - pattern: ctx.headers
+      - pattern: ctx.cookies.get(...)
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sanitizers:
+      - pattern: path.basename(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $R.render($X, ...)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(res|response|reply|ctx|resp)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $R.view($X, ...)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(reply|res|ctx)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$'
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: $R.render($T, $O, ...)
+          - metavariable-regex:
+              metavariable: $R
+              regex: '^(res|response|reply|ctx|resp)(\.(status|type|set|header|code|vary|cookie)\([^()]*\))*$'
+          - metavariable-regex:
+              metavariable: $O
+              regex: '^(req|request|ctx\.request)\.(query|body|params)$'
+          - focus-metavariable: $O

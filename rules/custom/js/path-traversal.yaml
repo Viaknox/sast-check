@@ -1,0 +1,96 @@
+rules:
+  - id: sast.js.path-traversal
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request-controlled data decides which file is read, written, listed or sent. With ../ sequences an attacker can reach files outside the intended folder. Use path.basename or verify the resolved path stays inside a base directory.
+    metadata:
+      sast_severity: high
+      confidence: high
+      cwe: "CWE-22"
+      category: security
+      fix: 'Reduce the input to a file name with path.basename, or resolve it against a base directory and reject results that leave it.'
+      references:
+        - https://cwe.mitre.org/data/definitions/22.html
+        - https://owasp.org/Top10/A01_2021-Broken_Access_Control/
+    mode: taint
+    pattern-sources:
+      - pattern: req.query
+      - pattern: req.body
+      - pattern: req.params
+      - pattern: req.headers
+      - pattern: req.cookies
+      - pattern: req.url
+      - pattern: req.originalUrl
+      - pattern: req.path
+      - pattern: req.get(...)
+      - pattern: req.header(...)
+      - pattern: req.param(...)
+      - pattern: req.signedCookies
+      - pattern: req.files
+      - pattern: request.query
+      - pattern: request.body
+      - pattern: request.params
+      - pattern: request.headers
+      - pattern: request.cookies
+      # the handler's own request parameter, whatever it is named: (r, res) => eval(r.query.x)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: $APP.$M($P, ..., ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })
+              - pattern-inside: $APP.$M($P, ..., function ($REQ, $RES, ...) { ... })
+              - pattern-inside: $APP.$M($P, ..., async function ($REQ, $RES, ...) { ... })
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+              - pattern: $REQ.url
+              - pattern: $REQ.originalUrl
+              - pattern: $REQ.path
+              - pattern: $REQ.get(...)
+              - pattern: $REQ.header(...)
+      - pattern: ctx.query
+      - pattern: ctx.request.query
+      - pattern: ctx.headers
+      - pattern: ctx.cookies.get(...)
+      - pattern: ctx.request.body
+      - pattern: ctx.params
+      - pattern: $U.searchParams.get(...)
+      - pattern: location.search
+      - pattern: location.hash
+    pattern-sanitizers:
+      - pattern: path.basename(...)
+      - pattern: basename(...)
+      - pattern: sanitizeFilename(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $FS.$M($P, ...)
+          - metavariable-regex:
+              metavariable: $FS
+              regex: '^(fs|fsp|fsPromises|promises|fs\.promises|fse|fsExtra)$'
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(readFile|readFileSync|writeFile|writeFileSync|appendFile|appendFileSync|createReadStream|createWriteStream|unlink|unlinkSync|readdir|readdirSync|rm|rmSync|rmdir|rmdirSync|open|openSync|copyFile|copyFileSync|remove|readJson|readJSON|outputFile|emptyDir|truncate|truncateSync)$'
+          - focus-metavariable: $P
+      - patterns:
+          - pattern: $M($P, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(readFile|readFileSync|createReadStream|createWriteStream|writeFile|writeFileSync|unlink|unlinkSync|readdir|readdirSync)$'
+          - focus-metavariable: $P
+      - patterns:
+          - pattern: $RES.$M($P, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(sendFile|sendfile|download)$'
+          - pattern-not: |
+              $RES.$M($P, {..., root: $R, ...}, ...)
+          - focus-metavariable: $P

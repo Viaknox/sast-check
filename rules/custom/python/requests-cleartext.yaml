@@ -1,0 +1,28 @@
+rules:
+  - id: sast.python.requests-cleartext
+    languages: [python]
+    severity: INFO
+    message: >-
+      This request goes to a plain http:// address on a non-local host, so the data and any
+      credentials travel unencrypted and can be read or changed in transit. Use an https://
+      URL instead.
+    metadata:
+      sast_severity: low
+      confidence: medium
+      cwe: "CWE-319"
+      category: security
+      fix: "Change the URL scheme to https://."
+      references:
+        - https://cwe.mitre.org/data/definitions/319.html
+    patterns:
+      - pattern-either:
+          - pattern: requests.$M("$URL", ...)
+          - pattern: requests.$M(..., url="$URL", ...)
+          - pattern: httpx.$M("$URL", ...)
+          - pattern: httpx.$M(..., url="$URL", ...)
+          - pattern: urllib.request.urlopen("$URL", ...)
+          - pattern: urllib.request.Request("$URL", ...)
+          - pattern: urlopen("$URL", ...)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '^http://(?!(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])([:/?#]|$))(?![^/:?#]*\.(local|internal)([:/?#]|$))'

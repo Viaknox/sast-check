@@ -1,0 +1,32 @@
+<html>
+<body>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <h1><%- title %></h1>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div class="bio"><%- user.bio %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <script>var data = <%- JSON.stringify(payload) %>;</script>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <p><%-comment.text-%></p>
+
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- unsanitizedBio %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- purifyUser %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- escapeHtmlUser %></div>
+
+  <!-- ok: sast.js.ejs-unescaped -->
+  <%- include('partials/header') %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <%- include("partials/footer", { year: 2024 }) %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <h1><%= title %></h1>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <main><%- body %></main>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- sanitize(user.bio) %></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <% items.forEach(function (i) { %><li><%= i %></li><% }) %>
+</body>
+</html>

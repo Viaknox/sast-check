@@ -1,0 +1,46 @@
+rules:
+  - id: sast.docker.remote-fetch-no-checksum
+    languages: [dockerfile]
+    severity: WARNING
+    message: >-
+      This Dockerfile step pulls something from the network and trusts it blindly: an ADD of
+      a URL with no --checksum, a download piped into a shell, or a downloaded archive or
+      binary that is unpacked or run with no hash check in the same RUN. A tampered download
+      ends up inside your image. Pin a sha256 (ADD --checksum=sha256:..., or sha256sum -c).
+    metadata:
+      sast_severity: medium
+      confidence: medium
+      cwe: "CWE-494"
+      category: security
+      fix: "Use ADD --checksum=sha256:<digest> URL dest, or download to a file and run sha256sum -c before extracting or executing."
+      references:
+        - https://cwe.mitre.org/data/definitions/494.html
+        - https://docs.docker.com/reference/dockerfile/#add
+    pattern-either:
+      - patterns:
+          - pattern-regex: '(?mi)^[ \t]*ADD[ \t]+(?P<FLAGS>(?:--\S+[ \t]+)*)https?://\S+'
+          - metavariable-regex:
+              metavariable: $FLAGS
+              regex: '(?is)^(?!.*--checksum).*$'
+      - patterns:
+          - pattern-regex: '(?mi)^[ \t]*RUN[ \t]+(?P<CMD>(?:[^\n\\]|\\\r?\n|\\.)*)'
+          - metavariable-regex:
+              metavariable: $CMD
+              # pipe into an interpreter, or process/command substitution fed to sh -c, eval, source or `.`; `python -m json.tool` only pretty-prints
+              regex: '(?s).*(?:\b(?:curl|wget)\b[^\n|]*\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:(?:ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)\b(?![ \t]+-m[ \t]+json\.tool)|(?:\b(?:(?:ba|z|da|k)?sh|source|eval)\b[ \t]+(?:-[A-Za-z]+[ \t]+)*[\"'']?(?:<\((?:curl|wget)\b|\$\((?:curl|wget)\b[^)]*\))|(?:^|[\s;&|])\.[ \t]+[\"'']?(?:<\(|\$\()(?:curl|wget)\b)).*'
+      - patterns:
+          - pattern-regex: '(?mi)^[ \t]*RUN[ \t]+(?P<CMD>(?:[^\n\\]|\\\r?\n|\\.)*)'
+          - metavariable-regex:
+              metavariable: $CMD
+              # fires when nothing is verified, or when a file saved with -o/-O is never named on a line
+              # that verifies it (a checksum of one artifact must not cover another download)
+              regex: '(?s)^(?:(?!.*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|''\"\\]+)(?!.*(?:(?P=F)[^\n]*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst)|(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst)[^\n]*(?P=F))).*)$'
+          - metavariable-regex:
+              metavariable: $CMD
+              regex: '(?s).*(?:\bcurl\b[^\n|]*[ \t](?:-[A-Za-z]*[oO]\b|--output\b|--remote-name\b)|\bwget\b[ \t]+(?![^\n]*(?:--spider|-[A-Za-z]*O[ \t]*-))).*https?://.*'
+          - metavariable-regex:
+              metavariable: $CMD
+              regex: '(?s).*(?:\btar\b|\bunzip\b|\bgunzip\b|\bbunzip2\b|\bchmod\b|\bdpkg[ \t]+-i\b|\brpm[ \t]+-i\b|\bsh[ \t]|\bbash[ \t]|[ \t;&]\./).*'
+          - metavariable-regex:
+              metavariable: $CMD
+              regex: '(?s)^(?!.*\|[ \t]*(?:sudo[ \t]+)?(?:(?:ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)\b(?![ \t]+-m[ \t]+json\.tool)).*'

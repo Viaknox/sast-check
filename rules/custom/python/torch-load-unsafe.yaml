@@ -1,0 +1,20 @@
+rules:
+  - id: sast.python.torch-load-unsafe
+    languages: [python]
+    severity: ERROR
+    message: >-
+      torch.load is called with weights_only=False, which falls back to Python pickle. A
+      tampered checkpoint file can run arbitrary code the moment it is loaded. Keep the safe
+      default, or load only files you created and trust.
+    metadata:
+      sast_severity: high
+      confidence: high
+      cwe: "CWE-502"
+      category: security
+      fix: "Drop weights_only=False (the default is True), or switch to safetensors for model weights."
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+        - https://pytorch.org/docs/stable/generated/torch.load.html
+    pattern-either:
+      - pattern: torch.load(..., weights_only=False, ...)
+      - pattern: torch.serialization.load(..., weights_only=False, ...)

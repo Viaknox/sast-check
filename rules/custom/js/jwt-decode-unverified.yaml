@@ -1,0 +1,173 @@
+rules:
+- id: sast.js.jwt-decode-unverified
+  languages:
+  - javascript
+  - typescript
+  severity: ERROR
+  message: The decoded token is not verified in a recognized context (verify() of the same token earlier in the block or anywhere in the function), or verify() allows the "none" algorithm. decode() does not check the signature, so a forged token passes as genuine. Verify the signature with a pinned algorithm before trusting any claim.
+  metadata:
+    sast_severity: high
+    confidence: medium
+    cwe: CWE-347
+    category: security
+    fix: 'Use jwt.verify(token, key, { algorithms: ["RS256"] }) for any decision; never allow the none algorithm.'
+    references:
+    - https://cwe.mitre.org/data/definitions/347.html
+    - https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: $J.decode($TOK, ...)
+      - pattern-inside: 'const $J = require("jsonwebtoken");
+
+          ...
+
+          '
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: '<... $J.verify($TOK, ...) ...>;
+
+          ...
+
+          '
+      - pattern-not-inside: 'const $X = <... $J.verify($TOK, ...) ...>;
+
+          ...
+
+          '
+    - patterns:
+      - pattern: $J.decode($TOK, ...)
+      - pattern-inside: 'import $J from "jsonwebtoken";
+
+          ...
+
+          '
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: '<... $J.verify($TOK, ...) ...>;
+
+          ...
+
+          '
+      - pattern-not-inside: 'const $X = <... $J.verify($TOK, ...) ...>;
+
+          ...
+
+          '
+    - patterns:
+      - pattern: $J.decode($TOK, ...)
+      - pattern-inside: 'import * as $J from "jsonwebtoken";
+
+          ...
+
+          '
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... $J.verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: '<... $J.verify($TOK, ...) ...>;
+
+          ...
+
+          '
+      - pattern-not-inside: 'const $X = <... $J.verify($TOK, ...) ...>;
+
+          ...
+
+          '
+    - patterns:
+      - pattern: decode($TOK, ...)
+      - pattern-inside: 'import { ..., decode, ... } from "jsonwebtoken";
+
+          ...
+
+          '
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: '<... verify($TOK, ...) ...>;
+
+          ...
+
+          '
+      - pattern-not-inside: 'const $X = <... verify($TOK, ...) ...>;
+
+          ...
+
+          '
+    - patterns:
+      - pattern: decode($TOK, ...)
+      - pattern-inside: 'const { ..., decode, ... } = require("jsonwebtoken");
+
+          ...
+
+          '
+      - pattern-not-inside: "function $F(...) {\n  ...\n  <... verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "function (...) {\n  ...\n  <... verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "(...) => {\n  ...\n  <... verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async (...) => {\n  ...\n  <... verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: "async function $F(...) {\n  ...\n  <... verify($TOK, ...) ...>\n  ...\n}\n"
+      - pattern-not-inside: '<... verify($TOK, ...) ...>;
+
+          ...
+
+          '
+      - pattern-not-inside: 'const $X = <... verify($TOK, ...) ...>;
+
+          ...
+
+          '
+    - patterns:
+      - pattern: '$J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+          '
+      - pattern-inside: 'const $J = require("jsonwebtoken");
+
+          ...
+
+          '
+    - patterns:
+      - pattern: '$J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+          '
+      - pattern-inside: 'import $J from "jsonwebtoken";
+
+          ...
+
+          '
+    - patterns:
+      - pattern: '$J.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+          '
+      - pattern-inside: 'import * as $J from "jsonwebtoken";
+
+          ...
+
+          '
+    - patterns:
+      - pattern: 'verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+          '
+      - pattern-inside: 'import { ..., verify, ... } from "jsonwebtoken";
+
+          ...
+
+          '
+    - patterns:
+      - pattern: 'verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+          '
+      - pattern-inside: 'const { ..., verify, ... } = require("jsonwebtoken");
+
+          ...
+
+          '

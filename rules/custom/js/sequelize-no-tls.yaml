@@ -1,0 +1,36 @@
+rules:
+  - id: sast.js.sequelize-no-tls
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      This database connection turns TLS off (ssl: false, sslmode=disable) or accepts any
+      certificate (rejectUnauthorized: false). Credentials and data can then be read or altered
+      on the network. Enable ssl and verify the server certificate, supplying the CA if needed.
+    metadata:
+      sast_severity: high
+      confidence: medium
+      cwe: "CWE-319"
+      category: security
+      fix: "Use ssl: { require: true, rejectUnauthorized: true, ca: <CA pem> } (or sslmode=verify-full in the URI)."
+      references:
+        - https://cwe.mitre.org/data/definitions/319.html
+        - https://sequelize.org/docs/v6/other-topics/dialect-specific-things/
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  { ..., ssl: false, ... }
+              - pattern: |
+                  { ..., ssl: { ..., rejectUnauthorized: false, ... }, ... }
+          - pattern-either:
+              - pattern-inside: new Sequelize(...)
+              - pattern-inside: new Pool(...)
+              - pattern-inside: new Client(...)
+              - pattern-inside: new $NS.Pool(...)
+              - pattern-inside: new $NS.Client(...)
+              - pattern-inside: $NS.createConnection(...)
+              - pattern-inside: $NS.createPool(...)
+              - pattern-inside: createConnection(...)
+              - pattern-inside: createPool(...)
+      - pattern-regex: (?i)postgres(?:ql)?://[^\s"'`]*[?&]sslmode=disable
+      - pattern-regex: (?i)mysql2?://[^\s"'`]*[?&]ssl-?mode=disabled?

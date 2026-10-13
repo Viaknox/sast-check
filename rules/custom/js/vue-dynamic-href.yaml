@@ -1,0 +1,23 @@
+rules:
+  - id: sast.js.vue-dynamic-href
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      A Vue template binds href or src to a variable. If that value can come from users, a
+      "javascript:" URL can run script when clicked. Check the scheme (allow only http, https,
+      mailto or relative paths) before binding.
+    metadata:
+      sast_severity: medium
+      confidence: low
+      cwe: "CWE-79"
+      category: security
+      fix: "Pass the value through a URL sanitizer (sanitizeUrl) or validate the scheme in a computed property."
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://vuejs.org/guide/best-practices/security.html#injecting-urls
+    paths:
+      include:
+        - "*.vue"
+    # sanitizer only counts as a call at the start of the expression, never as part of an identifier
+    pattern-regex: >-
+      (?i)(?:\s:|\sv-bind:)(?:href|src)\s*=\s*(?:"(?!\s*'[^'"]*'\s*")(?!\s*(?:[\w$]+\.)*(?:sanitize(?:Url)?|purify|safeUrl)\s*\()[^"]+"|'(?!\s*"[^"']*"\s*')(?!\s*(?:[\w$]+\.)*(?:sanitize(?:Url)?|purify|safeUrl)\s*\()[^']+')

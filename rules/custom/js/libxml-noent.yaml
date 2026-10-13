@@ -1,0 +1,24 @@
+rules:
+  - id: sast.js.libxml-noent
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      libxmljs is told to substitute entities while parsing (noent: true). External entities in untrusted XML can then read local files or reach internal hosts (XXE). Leave entity substitution off.
+    metadata:
+      sast_severity: medium
+      confidence: high
+      cwe: "CWE-611"
+      category: security
+      fix: 'Remove noent: true (keep the default of not expanding entities) and set nonet: true.'
+      references:
+        - https://cwe.mitre.org/data/definitions/611.html
+        - https://owasp.org/Top10/A05_2021-Security_Misconfiguration/
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $FN($X, {..., noent: true, ...}, ...)
+          - pattern: |
+              $L.$FN($X, {..., noent: true, ...}, ...)
+      - metavariable-regex:
+          metavariable: $FN
+          regex: '^(parseXml|parseXmlString|parseXmlAsync)$'

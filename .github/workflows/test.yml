@@ -1,0 +1,81 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: rules + e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Install tools
+        env:
+          OPENGREP_VERSION: v1.30.2
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet "pyyaml==6.0.3" "ruff==0.16.8" "zizmor==1.30.1" "semgrep==1.180.0"
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0   # same pin as action.yml
+          d="$RUNNER_TEMP/opengrep"; mkdir -p "$d"
+          base="https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/opengrep_manylinux_x86"
+          curl -fsSL --retry 3 -o "$d/opengrep" "$base"
+          curl -fsSL --retry 3 -o "$d/opengrep.sig" "$base.sig"
+          curl -fsSL --retry 3 -o "$d/opengrep.cert" "$base.cert"
+          cosign verify-blob --cert "$d/opengrep.cert" --signature "$d/opengrep.sig" \
+            --certificate-identity-regexp "^https://github.com/opengrep/opengrep/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" "$d/opengrep"
+          chmod +x "$d/opengrep"
+      - name: dist/rules.yaml is up to date; no shipped rule ID dropped
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          REPO: ${{ github.repository }}
+        run: |
+          # compare with the PR's base branch, or on a push with the commit before the push (main allows no
+          # force-push, so it exists); only a branch's first push has nothing to compare with
+          ref="$BASE_REF"
+          if [ -z "$ref" ] && [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then ref="$BEFORE"; fi
+          # fetch a file from that ref; only "not there yet" (404) may fall back to empty,
+          # any other error fails closed
+          base_file() {
+            : > "$2"
+            [ -n "$ref" ] || return 0
+            if ! gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/$1?ref=$ref" > "$2" 2> "$RUNNER_TEMP/gh.err"; then
+              if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then : > "$2"; else cat "$RUNNER_TEMP/gh.err" >&2; exit 1; fi
+            fi
+          }
+          base_file dist/rule-ids.lock "$RUNNER_TEMP/base-rule-ids.lock"
+          base_file rules/RETIRED.txt "$RUNNER_TEMP/base-retired.txt"
+          python scripts/build_rules.py --base-lock "$RUNNER_TEMP/base-rule-ids.lock" \
+            --base-retired "$RUNNER_TEMP/base-retired.txt" && git diff --exit-code dist/
+      - name: Rule tests (semgrep CE)
+        run: python tests/rules_test.py --engine "$(command -v semgrep)"
+      - name: Rule tests (opengrep - the CI engine)
+        run: python tests/rules_test.py --engine "$RUNNER_TEMP/opengrep/opengrep"
+      - name: End-to-end
+        env:
+          E2E_REQUIRE: zizmor osv-scanner   # CI must not silently skip these scanners' checks
+          E2E_NETWORK: "1"                  # run the checks that need the GitHub API
+        run: |
+          export PATH="$RUNNER_TEMP/opengrep:$(go env GOPATH)/bin:$PATH"
+          bash tests/e2e.sh
+      - name: Audit our own workflows and action
+        run: zizmor --offline action.yml .github/workflows/

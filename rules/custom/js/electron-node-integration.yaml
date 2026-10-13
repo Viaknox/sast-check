@@ -1,0 +1,75 @@
+rules:
+  - id: sast.js.electron-node-integration
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      An Electron window is created with a weakened security setting (nodeIntegration,
+      nodeIntegrationInWorker, contextIsolation: false, sandbox: false or webSecurity: false).
+      Any XSS or remote content loaded in that window can then reach Node.js and take over the
+      machine. Keep the secure defaults and expose a narrow API through a preload script.
+    metadata:
+      sast_severity: high
+      confidence: high
+      cwe: "CWE-94"
+      category: security
+      fix: "Use nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true and a contextBridge preload."
+      references:
+        - https://cwe.mitre.org/data/definitions/94.html
+        - https://www.electronjs.org/docs/latest/tutorial/security
+    pattern-either:
+      - pattern: |
+          { ..., webPreferences: { ..., nodeIntegration: true, ... }, ... }
+      - pattern: |
+          webPreferences = { ..., nodeIntegration: true, ... }
+      - pattern: |
+          { ..., webPreferences: { ..., nodeIntegrationInWorker: true, ... }, ... }
+      - pattern: |
+          webPreferences = { ..., nodeIntegrationInWorker: true, ... }
+      - pattern: |
+          { ..., webPreferences: { ..., contextIsolation: false, ... }, ... }
+      - pattern: |
+          webPreferences = { ..., contextIsolation: false, ... }
+      - pattern: |
+          { ..., webPreferences: { ..., sandbox: false, ... }, ... }
+      - pattern: |
+          webPreferences = { ..., sandbox: false, ... }
+      - pattern: |
+          { ..., webPreferences: { ..., webSecurity: false, ... }, ... }
+      - pattern: |
+          webPreferences = { ..., webSecurity: false, ... }
+      # the settings object is built in a variable and passed to a window later in the same scope
+      - patterns:
+          - pattern: |
+              $V = { ..., nodeIntegration: true, ... }
+          - pattern-inside: |
+              $V = { ... };
+              ...
+              <... new $W({ ..., webPreferences: $V, ... }) ...>;
+      - patterns:
+          - pattern: |
+              $V = { ..., nodeIntegrationInWorker: true, ... }
+          - pattern-inside: |
+              $V = { ... };
+              ...
+              <... new $W({ ..., webPreferences: $V, ... }) ...>;
+      - patterns:
+          - pattern: |
+              $V = { ..., contextIsolation: false, ... }
+          - pattern-inside: |
+              $V = { ... };
+              ...
+              <... new $W({ ..., webPreferences: $V, ... }) ...>;
+      - patterns:
+          - pattern: |
+              $V = { ..., sandbox: false, ... }
+          - pattern-inside: |
+              $V = { ... };
+              ...
+              <... new $W({ ..., webPreferences: $V, ... }) ...>;
+      - patterns:
+          - pattern: |
+              $V = { ..., webSecurity: false, ... }
+          - pattern-inside: |
+              $V = { ... };
+              ...
+              <... new $W({ ..., webPreferences: $V, ... }) ...>;
