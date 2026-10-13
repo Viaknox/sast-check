@@ -41,8 +41,13 @@ rules:
               - pattern: location.hash
               - pattern: location.search
           # a variable, parameter or prop that is itself called location is not the browser location
+          # (the function / arrow spellings overlap in Opengrep but are separate shapes in Semgrep CE)
           - pattern-not-inside: |
               function $F(..., location, ...) { ... }
+          - pattern-not-inside: |
+              function (..., location, ...) { ... }
+          - pattern-not-inside: |
+              (..., location, ...) => $B
           - pattern-not-inside: |
               var location = $E;
               ...
@@ -51,6 +56,8 @@ rules:
               ...
           - pattern-not-inside: |
               function $F(..., { ..., location, ... }, ...) { ... }
+          - pattern-not-inside: |
+              ({ ..., location, ... }) => { ... }
     pattern-sanitizers:
       # the check only counts inside the branch it guards (or after an early return), not when its result is ignored
       - patterns:
@@ -104,8 +111,13 @@ rules:
               - pattern: location.assign($X)
               - pattern: location.replace($X)
           # a variable, parameter or prop that is itself called location is not the browser location
+          # (the function / arrow spellings overlap in Opengrep but are separate shapes in Semgrep CE)
           - pattern-not-inside: |
               function $F(..., location, ...) { ... }
+          - pattern-not-inside: |
+              function (..., location, ...) { ... }
+          - pattern-not-inside: |
+              (..., location, ...) => $B
           - pattern-not-inside: |
               var location = $E;
               ...
@@ -114,4 +126,6 @@ rules:
               ...
           - pattern-not-inside: |
               function $F(..., { ..., location, ... }, ...) { ... }
+          - pattern-not-inside: |
+              ({ ..., location, ... }) => { ... }
           - focus-metavariable: $X
