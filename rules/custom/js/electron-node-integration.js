@@ -173,3 +173,63 @@ function qm() {
   const wp = { nodeIntegration: true };
   return new el.Tray({ webPreferences: wp });
 }
+
+// renamed constructors: bound from the electron module by a destructure with rename, or an import alias
+function ra() {
+  const { BrowserWindow: BW } = require("electron");
+  // ruleid: sast.js.electron-node-integration
+  return new BW({ webPreferences: { nodeIntegration: true } });
+}
+function rb() {
+  const { BrowserView: BV } = require("electron");
+  // ruleid: sast.js.electron-node-integration
+  const wp = { contextIsolation: false };
+  return new BV({ webPreferences: wp });
+}
+function rc() {
+  const { app, WebContentsView: WCV } = require("electron");
+  // ruleid: sast.js.electron-node-integration
+  return new WCV({ webPreferences: { sandbox: false } });
+}
+function rd() {
+  const { BrowserWindow: BW } = require("electron");
+  // ok: sast.js.electron-node-integration
+  return new BW({ webPreferences: { nodeIntegration: false, contextIsolation: true } });
+}
+function re() {
+  const { BrowserWindow: BW } = require("some-ui-kit");
+  // ok: sast.js.electron-node-integration
+  return new BW({ webPreferences: { nodeIntegration: true } });
+}
+function rf() {
+  const { BrowserView: BV } = require("some-ui-kit");
+  // ok: sast.js.electron-node-integration
+  const wp = { sandbox: false };
+  return new BV({ webPreferences: wp });
+}
+function rg() {
+  const { Tray: TR } = require("electron");
+  // ok: sast.js.electron-node-integration
+  return new TR({ webPreferences: { nodeIntegration: true } });
+}
+import { BrowserWindow as IBW, BrowserView as IBV } from "electron";
+function ri() {
+  // ruleid: sast.js.electron-node-integration
+  return new IBW({ webPreferences: { nodeIntegration: true } });
+}
+function rj() {
+  // ruleid: sast.js.electron-node-integration
+  const wp = { webSecurity: false };
+  return new IBV({ webPreferences: wp });
+}
+import { BrowserWindow as KBW } from "some-ui-kit";
+function rk() {
+  // ok: sast.js.electron-node-integration
+  return new KBW({ webPreferences: { nodeIntegration: true } });
+}
+function rh() {
+  const { Tray: TR } = require("electron");
+  // ok: sast.js.electron-node-integration
+  const wp = { nodeIntegration: true };
+  return new TR({ webPreferences: wp });
+}

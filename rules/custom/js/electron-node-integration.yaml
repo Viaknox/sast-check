@@ -37,6 +37,17 @@ rules:
                   - metavariable-regex:
                       metavariable: $W
                       regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              # a constructor renamed on import: bound from the electron module in this file (the import pattern also
+              # matches a require destructure with a rename, on both engines)
+              - patterns:
+                  - pattern-inside: |
+                      new $W(...)
+                  - pattern-inside: |
+                      import { ..., $C as $W, ... } from "electron";
+                      ...
+                  - metavariable-regex:
+                      metavariable: $C
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
               # a qualified constructor counts only when the qualifier is bound from the electron module in this file
               - patterns:
                   - pattern-inside: |
@@ -75,6 +86,17 @@ rules:
                       <... new $W({ ..., webPreferences: $V, ... }) ...>;
                   - metavariable-regex:
                       metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $W({ ..., webPreferences: $V, ... }) ...>;
+                  - pattern-inside: |
+                      import { ..., $C as $W, ... } from "electron";
+                      ...
+                  - metavariable-regex:
+                      metavariable: $C
                       regex: ^(BrowserWindow|BrowserView|WebContentsView)$
               - patterns:
                   - pattern-inside: |
