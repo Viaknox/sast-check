@@ -57,6 +57,19 @@
   <!-- ruleid: sast.web.malicious-cdn-domain -->
   <link rel="preload" as="image" imagesrcset="https://cdn.staticfile.org/a.png 1x, /b.png 2x">
   <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <img srcset="https://safe.example/a.png 1x, https://polyfill.io/b.png 2x">
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <link rel="preload" as="image" imagesrcset="/a.png 1x,//cdn.staticfile.org/b.png 2x">
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <img srcset="/a.png 480w, /b.png 800w,
+    https://cdn.bootcdn.net/c.png 1200w">
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <img srcset=/a.png,//polyfill.io/b.png>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <img srcset="https://safe.example/a.png 1x, https://safe.example/b.png 2x">
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <img srcset="/a.png 1x, /b.png 2x" alt="polyfill.io is mentioned in this alt text">
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
   <table background="https://cdn.bootcdn.net/bg.png"></table>
   <!-- ruleid: sast.web.malicious-cdn-domain -->
   <object data=https://polyfill.io/payload.html type="text/html"></object>
