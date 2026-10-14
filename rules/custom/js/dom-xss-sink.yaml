@@ -37,9 +37,9 @@ rules:
               - pattern: new URLSearchParams(...).get(...)
               - pattern: new URLSearchParams(...).getAll(...)
           - pattern-not: new URLSearchParams("...").get(...)
-          - pattern-not: new URLSearchParams({...}).get(...)
           - pattern-not: new URLSearchParams("...").getAll(...)
-          - pattern-not: new URLSearchParams({...}).getAll(...)
+          # an object literal is constant only when every value is a plain string literal
+          - pattern-not-regex: 'new URLSearchParams\(\{(\s*\w+\s*:\s*("[^"\\]*"|''[^''\\]*'')\s*,?)+\s*\}\)\.get(All)?\([^)]*\)'
       - patterns:
           - pattern-either:
               - pattern-inside: |

@@ -85,3 +85,28 @@ function t9() {
   // ruleid: sast.js.dom-xss-sink
   el.innerHTML = p;
 }
+function t10(raw) {
+  const tags = new URLSearchParams({ tag: raw }).getAll("tag");
+  // ruleid: sast.js.dom-xss-sink
+  el.innerHTML = tags;
+}
+function t11(raw) {
+  const tag = new URLSearchParams({ kind: "x", tag: raw }).get("tag");
+  // ruleid: sast.js.dom-xss-sink
+  el.innerHTML = tag;
+}
+function ok9() {
+  const tag = new URLSearchParams({ kind: "x", tag: "y" }).get("tag");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = tag;
+}
+function ok10() {
+  const tags = new URLSearchParams({ kind: "x", tag: "y" }).getAll("tag");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = tags;
+}
+function ok11() {
+  const tag = new URLSearchParams({ tag: "y" }).get("tag");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = tag;
+}
