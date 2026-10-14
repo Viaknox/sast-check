@@ -95,6 +95,13 @@ app.get('/ldapjs-esm-plain', (req, res) => {
   res.end();
 });
 
+// the sink comes first, the plain named import binds the client below it
+function lateNamed(req) {
+  // ruleid: sast.js.ldap-injection
+  lateE.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+}
+const lateE = createClient({ url: 'ldap://a' });
+
 import { createClient as makeClient } from 'ldapjs';
 app.get('/ldapjs-esm-alias', (req, res) => {
   const viaAlias = makeClient({ url: 'ldap://a' });
@@ -102,6 +109,13 @@ app.get('/ldapjs-esm-alias', (req, res) => {
   viaAlias.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
   res.end();
 });
+
+// the sink comes first, the aliased import binds the client below it
+function lateAlias(req) {
+  // ruleid: sast.js.ldap-injection
+  lateF.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+}
+const lateF = makeClient({ url: 'ldap://a' });
 
 import * as ldapNs from 'ldapjs';
 app.get('/ldapjs-esm-ns', (req, res) => {
@@ -144,6 +158,13 @@ app.get('/ldapts-esm-plain', async (req, res) => {
   res.end();
 });
 
+// the sink comes first, the plain named import binds the client below it
+async function lateTsNamed(req) {
+  // ruleid: sast.js.ldap-injection
+  await lateI.search('dc=ex', { filter: '(uid=' + req.query.u + ')' });
+}
+const lateI = new Client({ url: 'ldap://a' });
+
 import { Client as TsClient } from 'ldapts';
 app.get('/ldapts-esm-alias', async (req, res) => {
   const g = new TsClient({ url: 'ldap://a' });
@@ -151,6 +172,13 @@ app.get('/ldapts-esm-alias', async (req, res) => {
   await g.search('dc=ex', { filter: '(uid=' + req.query.u + ')' });
   res.end();
 });
+
+// the sink comes first, the aliased import binds the client below it
+async function lateTsAlias(req) {
+  // ruleid: sast.js.ldap-injection
+  await lateJ.search('dc=ex', { filter: '(uid=' + req.query.u + ')' });
+}
+const lateJ = new TsClient({ url: 'ldap://a' });
 
 import * as ldaptsNs from 'ldapts';
 app.get('/ldapts-esm-ns', async (req, res) => {
@@ -248,6 +276,16 @@ app.get('/esc-esm-ns', async (req, res) => {
   res.end();
 });
 
+app.get('/esc-extract-ns', (req, res) => {
+  const viaNsOnly = escNs.filter;
+  // ok: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + viaNsOnly(req.query.name) + ')' }, () => {});
+  // a raw value next to an escaped one is still reported
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(&(uid=' + viaNsOnly(req.query.name) + ')(cn=' + req.query.cn + '))' }, () => {});
+  res.end();
+});
+
 import escDefault from 'ldap-escape';
 app.get('/esc-esm-default', async (req, res) => {
   // ok: sast.js.ldap-injection
@@ -339,3 +377,148 @@ app.get('/shadowed', (req, res) => {
   client.search('dc=ex,dc=com', { filter: ldapEscape.filter`(uid=${req.query.uid})` }, () => {});
   res.end();
 });
+
+// ---- sanitizer extracted as a property of the package (#6 PR 11 review 3) ----
+app.get('/esc-extract-require', (req, res) => {
+  const escapeFilter = require('ldap-escape').filter;
+  // ok: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + escapeFilter(req.query.name) + ')' }, () => {});
+  // ok: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: escapeFilter`(uid=${req.query.name})` }, () => {});
+  res.end();
+});
+
+app.get('/esc-extract-from-binding', (req, res) => {
+  const viaRequire = ldapEscape.filter;
+  // ok: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + viaRequire(req.query.name) + ')' }, () => {});
+  const viaNs = escNs.filter;
+  // ok: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + viaNs(req.query.name) + ')' }, () => {});
+  const viaDefault = escDefault.filter;
+  // ok: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + viaDefault(req.query.name) + ')' }, () => {});
+  res.end();
+});
+
+app.get('/esc-extract-not-the-package', (req, res) => {
+  const helper = makeHelper();
+  const escapeFilter = helper.filter;
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + escapeFilter(req.query.name) + ')' }, () => {});
+  const other = require('other-lib');
+  const viaOther = other.filter;
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + viaOther(req.query.name) + ')' }, () => {});
+  const fromOther = require('other-lib').filter;
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + fromOther(req.query.name) + ')' }, () => {});
+  res.end();
+});
+
+app.get('/esc-extract-wrong-position', (req, res) => {
+  // the DN escaper does not protect a filter
+  const escapeDn = require('ldap-escape').dn;
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + escapeDn(req.query.name) + ')' }, () => {});
+  const viaDn = ldapEscape.dn;
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + viaDn(req.query.name) + ')' }, () => {});
+  res.end();
+});
+
+app.get('/esc-extract-mixed', (req, res) => {
+  const escapeFilter = require('ldap-escape').filter;
+  // a raw value next to an escaped one is still reported
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(&(uid=' + escapeFilter(req.query.name) + ')(cn=' + req.query.cn + '))' }, () => {});
+  res.end();
+});
+
+app.get('/esc-extract-scope', (req, res) => {
+  // the extraction above lives in another handler, so this same-named function is a local one
+  function escapeFilter(v) { return v; }
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + escapeFilter(req.query.name) + ')' }, () => {});
+  res.end();
+});
+
+app.get('/esc-extract-from-binding-mixed', (req, res) => {
+  const viaRequire2 = ldapEscape.filter;
+  // a raw value next to an escaped one is still reported
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(&(uid=' + viaRequire2(req.query.name) + ')(cn=' + req.query.cn + '))' }, () => {});
+  const viaNs2 = escNs.filter;
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(&(uid=' + viaNs2(req.query.name) + ')(cn=' + req.query.cn + '))' }, () => {});
+  const viaDefault2 = escDefault.filter;
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(&(uid=' + viaDefault2(req.query.name) + ')(cn=' + req.query.cn + '))' }, () => {});
+  res.end();
+});
+
+app.get('/esc-extract-shadowed', (req, res) => {
+  // inside this handler ldapEscape is a local object again, so a function pulled out of it is not the package's
+  const ldapEscape = { filter: (x) => x };
+  const viaFake = ldapEscape.filter;
+  // ruleid: sast.js.ldap-injection
+  client.search('dc=ex,dc=com', { filter: '(uid=' + viaFake(req.query.name) + ')' }, () => {});
+  res.end();
+});
+
+// ---- the sink is in a function that comes BEFORE the client binding (#6 PR 11 review 3) ----
+function lateRequire(req) {
+  // ruleid: sast.js.ldap-injection
+  lateA.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+}
+const lateA = ldap.createClient({ url: 'ldap://a' });
+
+function lateNs(req) {
+  // ruleid: sast.js.ldap-injection
+  lateB.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+}
+const lateB = ldapNs.createClient({ url: 'ldap://a' });
+
+function lateDefault(req) {
+  // ruleid: sast.js.ldap-injection
+  lateC.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+}
+const lateC = ldapDefault.createClient({ url: 'ldap://a' });
+
+function lateChain(req) {
+  // ruleid: sast.js.ldap-injection
+  lateD.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+}
+const lateD = require('ldapjs').createClient({ url: 'ldap://a' });
+
+async function lateTsNs(req) {
+  // ruleid: sast.js.ldap-injection
+  await lateG.search('dc=ex', { filter: '(uid=' + req.query.u + ')' });
+}
+const lateG = new ldaptsNs.Client({ url: 'ldap://a' });
+
+async function lateTsCjs(req) {
+  // ruleid: sast.js.ldap-injection
+  await lateH.search('dc=ex', { filter: '(uid=' + req.query.u + ')' });
+}
+const lateH = new lt.Client({ url: 'ldap://a' });
+
+function lateOpts(req) {
+  const opts = { filter: '(uid=' + req.query.u + ')' };
+  // ruleid: sast.js.ldap-injection
+  lateK.search('dc=ex', opts, () => {});
+}
+const lateK = ldap.createClient({ url: 'ldap://a' });
+
+// a late binding that is not an LDAP client does not make the receiver one
+function lateNotLdap(req) {
+  // ok: sast.js.ldap-injection
+  lateL.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+  // ok: sast.js.ldap-injection
+  lateM.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+  // ok: sast.js.ldap-injection
+  lateN.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
+}
+const lateL = makeCache().createClient({});
+const lateM = new SearchApi();
+const lateN = new someNs.Client({});
