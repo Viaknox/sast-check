@@ -3783,17 +3783,9 @@
   "element": "pattern: django.http.HttpResponse($X, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@25a1d105": {
-  "element": "focus-metavariable: $X",
-  "why": "Same focus-metavariable as the earlier baselined entry (ids moved when the MIME regex next to it changed): removing it does not change the flagged line, so no fixture can kill it."
- },
  "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@7f4b49ad": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@9668097f": {
-  "element": "focus-metavariable: $X",
-  "why": "Same focus-metavariable as the earlier baselined entry (ids moved when the MIME regex next to it changed): removing it does not change the flagged line, so no fixture can kill it."
  },
  "sast.python.django-httpresponse-xss:.pattern-sources.patterns.pattern-either:522f3e06": {
   "element": "pattern: request.headers",

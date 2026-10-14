@@ -487,20 +487,26 @@ rules:
             metavariable: $F
             regex: ^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$
       - patterns:
-        - pattern: '$CP.$F($C, $X, {..., shell: true, ...})
+        - pattern: '$CP.$F($C, $X, {..., shell: $SV, ...})
 
             '
+        - metavariable-regex:
+            metavariable: $SV
+            regex: ^(true|["'`].+["'`])$
         - metavariable-regex:
             metavariable: $F
             regex: ^(spawn|spawnSync|execFile|execFileSync)$
       - patterns:
-        - pattern: $CP.$F($SH, [..., "-c", $X, ...], ...)
+        - pattern: $CP.$F($SH, [..., $FLAG, $X, ...], ...)
         - metavariable-regex:
             metavariable: $F
             regex: ^(spawn|spawnSync|execFile|execFileSync)$
         - metavariable-regex:
             metavariable: $SH
-            regex: ^["'](/bin/|/usr/bin/)?(ba|z|da)?sh["']$
+            regex: ^["'](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["']$
+        - metavariable-regex:
+            metavariable: $FLAG
+            regex: ^["'](-c|-e|--eval|-Command|-r)["']$
     - pattern-either:
       - patterns:
         - pattern-inside: '$CP = require($MOD);
@@ -510,7 +516,7 @@ rules:
             '
         - metavariable-regex:
             metavariable: $MOD
-            regex: ^["']((node:)?child_process)["']$
+            regex: ^["']((node:)?child_process|shelljs)["']$
       - pattern-inside: 'import $CP from "child_process";
 
           ...
@@ -531,6 +537,16 @@ rules:
           ...
 
           '
+      - pattern-inside: 'import $CP from "shelljs";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $CP from "shelljs";
+
+          ...
+
+          '
     - focus-metavariable: $X
   - patterns:
     - pattern-either:
@@ -540,20 +556,26 @@ rules:
             metavariable: $F
             regex: ^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$
       - patterns:
-        - pattern: '$F($C, $X, {..., shell: true, ...})
+        - pattern: '$F($C, $X, {..., shell: $SV, ...})
 
             '
+        - metavariable-regex:
+            metavariable: $SV
+            regex: ^(true|["'`].+["'`])$
         - metavariable-regex:
             metavariable: $F
             regex: ^(spawn|spawnSync|execFile|execFileSync)$
       - patterns:
-        - pattern: $F($SH, [..., "-c", $X, ...], ...)
+        - pattern: $F($SH, [..., $FLAG, $X, ...], ...)
         - metavariable-regex:
             metavariable: $F
             regex: ^(spawn|spawnSync|execFile|execFileSync)$
         - metavariable-regex:
             metavariable: $SH
-            regex: ^["'](/bin/|/usr/bin/)?(ba|z|da)?sh["']$
+            regex: ^["'](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["']$
+        - metavariable-regex:
+            metavariable: $FLAG
+            regex: ^["'](-c|-e|--eval|-Command|-r)["']$
     - pattern-either:
       - pattern-inside: 'import { $F } from "child_process";
 
@@ -571,14 +593,20 @@ rules:
       - patterns:
         - pattern: $K($X, ...)
       - patterns:
-        - pattern: '$K($C, $X, {..., shell: true, ...})
+        - pattern: '$K($C, $X, {..., shell: $SV, ...})
 
             '
+        - metavariable-regex:
+            metavariable: $SV
+            regex: ^(true|["'`].+["'`])$
       - patterns:
-        - pattern: $K($SH, [..., "-c", $X, ...], ...)
+        - pattern: $K($SH, [..., $FLAG, $X, ...], ...)
         - metavariable-regex:
             metavariable: $SH
-            regex: ^["'](/bin/|/usr/bin/)?(ba|z|da)?sh["']$
+            regex: ^["'](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["']$
+        - metavariable-regex:
+            metavariable: $FLAG
+            regex: ^["'](-c|-e|--eval|-Command|-r)["']$
     - pattern-either:
       - pattern-inside: 'import { $O as $K } from "child_process";
 
@@ -599,14 +627,20 @@ rules:
       - patterns:
         - pattern: $K($X, ...)
       - patterns:
-        - pattern: '$K($C, $X, {..., shell: true, ...})
+        - pattern: '$K($C, $X, {..., shell: $SV, ...})
 
             '
+        - metavariable-regex:
+            metavariable: $SV
+            regex: ^(true|["'`].+["'`])$
       - patterns:
-        - pattern: $K($SH, [..., "-c", $X, ...], ...)
+        - pattern: $K($SH, [..., $FLAG, $X, ...], ...)
         - metavariable-regex:
             metavariable: $SH
-            regex: ^["'](/bin/|/usr/bin/)?(ba|z|da)?sh["']$
+            regex: ^["'](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["']$
+        - metavariable-regex:
+            metavariable: $FLAG
+            regex: ^["'](-c|-e|--eval|-Command|-r)["']$
     - pattern-either:
       - pattern-inside: '$K = require("child_process").$O;
 
@@ -618,9 +652,17 @@ rules:
           ...
 
           '
+      - pattern-inside: '$K = require("shelljs").$O;
+
+          ...
+
+          '
     - metavariable-regex:
         metavariable: $O
         regex: ^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$
+    - focus-metavariable: $X
+  - patterns:
+    - pattern: require("shelljs").exec($X, ...)
     - focus-metavariable: $X
 - id: sast.js.dom-xss-sink
   languages:
@@ -4072,7 +4114,7 @@ rules:
         - pattern: HttpResponse(..., content_type=$CT, ...)
         - metavariable-regex:
             metavariable: $CT
-            regex: ^f?["'](text/plain|application/json)(["';]|$)
+            regex: ^f?["'](text/plain|application/json)(;[^"']*)?["'](\s*%\s*[\w.]+|\.format\([^()]*\))?$
     - focus-metavariable: $X
   - patterns:
     - pattern: $C($X, ...)
@@ -4084,7 +4126,7 @@ rules:
         - pattern: $C(..., content_type=$CT, ...)
         - metavariable-regex:
             metavariable: $CT
-            regex: ^f?["'](text/plain|application/json)(["';]|$)
+            regex: ^f?["'](text/plain|application/json)(;[^"']*)?["'](\s*%\s*[\w.]+|\.format\([^()]*\))?$
     - focus-metavariable: $X
   - patterns:
     - pattern-either:
@@ -4540,6 +4582,7 @@ rules:
   pattern-either:
   - pattern-regex: "(?i)(?:\\b(?:src|href|srcset|imagesrcset|data|data-src|data-href|poster|background|action|formaction|xlink:href)[ \\t\\r\\n]*=[ \\t\\r\\n]*\\{?[ \\t]*[\"'`]?[ \t]*)(?:https?:)?[/\\\\]{2}(?:(?:[a-z0-9-]|%[0-9a-f]{2})+(?:\\.|%2e))*(?:(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:i|%69|%49)(?:o|%6f|%4f)|(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:l|%6c|%4c)(?:i|%69|%49)(?:n|%6e|%4e)(?:k|%6b|%4b)(?:\\.|%2e)(?:c|%63|%43)(?:n|%6e|%4e)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:d|%64|%44)(?:n|%6e|%4e)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\\
       .|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\.|%2e)(?:o|%6f|%4f)(?:r|%72|%52)(?:g|%67|%47))(?:\\.|%2e)?(?=[/:?#\\\\\\\"'`\\s)>,;]|%2f|%3a|%3f|%23|$)"
+  - pattern-regex: (?i)(?:\b(?:srcset|imagesrcset)[ \t\r\n]*=[ \t\r\n]*["'`]?[^"'`>]*?,[ \t\r\n]*)(?:https?:)?[/\\]{2}(?:(?:[a-z0-9-]|%[0-9a-f]{2})+(?:\.|%2e))*(?:(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\.|%2e)(?:i|%69|%49)(?:o|%6f|%4f)|(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:l|%6c|%4c)(?:i|%69|%49)(?:n|%6e|%4e)(?:k|%6b|%4b)(?:\.|%2e)(?:c|%63|%43)(?:n|%6e|%4e)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:d|%64|%44)(?:n|%6e|%4e)(?:\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\.|%2e)(?:o|%6f|%4f)(?:r|%72|%52)(?:g|%67|%47))(?:\.|%2e)?(?=[/:?#\\\"'`\s)>,;]|%2f|%3a|%3f|%23|$)
   - pattern-regex: "(?i)(?:(?:\\burl\\([ \\t\\r\\n]*[\"'`]?|@import[ \\t\\r\\n]+[\"'`])[ \t]*)(?:https?:)?[/\\\\]{2}(?:(?:[a-z0-9-]|%[0-9a-f]{2})+(?:\\.|%2e))*(?:(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:i|%69|%49)(?:o|%6f|%4f)|(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:l|%6c|%4c)(?:i|%69|%49)(?:n|%6e|%4e)(?:k|%6b|%4b)(?:\\.|%2e)(?:c|%63|%43)(?:n|%6e|%4e)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:d|%64|%44)(?:n|%6e|%4e)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\\
       .|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\.|%2e)(?:o|%6f|%4f)(?:r|%72|%52)(?:g|%67|%47))(?:\\.|%2e)?(?=[/:?#\\\\\\\"'`\\s)>,;]|%2f|%3a|%3f|%23|$)"
   - pattern-regex: "(?i)(?:(?:\\b(?:from|import)[ \\t\\r\\n]*[\"'`]|\\b(?:import|require|fetch|importScripts|getScript|\\w*(?:load|Load|inject|Inject|append|Append|add|Add)\\w*(?:Script|Style|Stylesheet|JS|Js|CSS|Css|Module)s?)[ \\t\\r\\n]*\\([ \\t\\r\\n]*[\"'`]|\\.(?:src|href)[ \\t]*=(?!=)[ \\t]*[\"'`]|setAttribute\\([ \\t]*[\\\"'](?:src|href)[\\\"'][ \\t]*,[ \\t]*[\"'`])[ \t]*)(?:https?:)?[/\\\\]{2}(?:(?:[a-z0-9-]|%[0-9a-f]{2})+(?:\\.|%2e))*(?:(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:i|%69|%49)(?:o|%6f|%4f)|(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:l|%6c|%4c)(?:i|%69|%49)(?:n|%6e|%4e)(?:k|%6b|%4b)(?:\\.|%2e)(?:c|%63|%43)(?:n|%6e|%4e)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:d|%64|%44)(?:n|%6e|%4e)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\\
