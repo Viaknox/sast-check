@@ -345,3 +345,51 @@ def ok_template_autoescape_on(request):
 def ok_template_context_autoescape_true(request):
     # ok: sast.python.django-httpresponse-xss
     return HttpResponse(Template("<p>{{ q }}</p>").render(Context({"q": request.GET["q"]}, autoescape=True)))
+
+
+# a constant format string, bound once to a literal (PR #11 review 3)
+ROW = "<p>{}</p>"
+ROW_B = "<p>{} {}</p>"
+FROM_REQUEST = ""
+
+
+def ok_format_html_module_constant(request):
+    # ok: sast.python.django-httpresponse-xss
+    return HttpResponse(format_html(ROW, request.GET["name"]))
+
+
+def ok_format_html_local_constant(request):
+    row = "<li>{}</li>"
+    # ok: sast.python.django-httpresponse-xss
+    return HttpResponse(format_html(row, request.GET["name"]))
+
+
+def ok_format_html_qualified_local_constant(request):
+    row = "<li>{}</li>"
+    # ok: sast.python.django-httpresponse-xss
+    return HttpResponse(django.utils.html.format_html(row, request.GET["name"]))
+
+
+def bad_format_html_local_from_request(request):
+    row = request.GET["fmt"]
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(format_html(row, "x"))
+
+
+def bad_format_html_local_fstring(request):
+    row = f"<p>{request.GET['a']}</p>{{}}"
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(format_html(row, "x"))
+
+
+def bad_format_html_local_percent(request):
+    row = "<p>%s</p>{}" % request.GET["a"]
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(format_html(row, "x"))
+
+
+def bad_format_html_reassigned_local(request):
+    row = "<p>{}</p>"
+    row = request.GET["fmt"]
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(format_html(row, "x"))
