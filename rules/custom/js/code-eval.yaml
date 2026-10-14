@@ -193,3 +193,19 @@ rules:
               metavariable: $O
               regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction|Script)$'
           - focus-metavariable: $X
+      # vm functions taken off a require and bound to any name: const run = require("vm").runInThisContext
+      - patterns:
+          - pattern-either:
+              - pattern: $K($X, ...)
+              - pattern: new $K($X, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  $K = require("vm").$O;
+                  ...
+              - pattern-inside: |
+                  $K = require("node:vm").$O;
+                  ...
+          - metavariable-regex:
+              metavariable: $O
+              regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction|Script)$'
+          - focus-metavariable: $X

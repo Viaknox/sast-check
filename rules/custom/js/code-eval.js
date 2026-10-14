@@ -72,6 +72,40 @@ app.post('/vm-aliased', (req, res) => {
   res.end();
 });
 
+// ---- vm functions taken straight off a require (item 3, PR #11 review 4) ----
+const evalInSandbox = require('vm').runInNewContext;
+const evalNode = require('node:vm').runInThisContext;
+const run = require('vm').runInThisContext;
+const VmScriptCjs = require('node:vm').Script;
+const buildCtx = require('vm').createContext;
+const otherRun = require('some-sandbox').runInNewContext;
+const OtherScript = require('some-sandbox').Script;
+app.post('/vm-require-property', (req, res) => {
+  // ruleid: sast.js.code-eval
+  evalInSandbox(req.body.code, {});
+  // ruleid: sast.js.code-eval
+  evalNode(req.body.code);
+  // ruleid: sast.js.code-eval
+  run(req.body.code);
+  // ruleid: sast.js.code-eval
+  new VmScriptCjs(req.body.code);
+  // not an evaluator
+  // ok: sast.js.code-eval
+  buildCtx(req.body.sandbox);
+  // the same property taken from another module
+  // ok: sast.js.code-eval
+  otherRun(req.body.code);
+  // ok: sast.js.code-eval
+  new OtherScript(req.body.code);
+  // fixed text
+  // ok: sast.js.code-eval
+  run('1 + 1');
+  // only the code argument is a sink, not the sandbox
+  // ok: sast.js.code-eval
+  run('1 + 1', req.body.sandbox);
+  res.end();
+});
+
 // ---- namespace and default imports of vm ----
 import * as vmNodeNs from 'node:vm';
 app.post('/vm-ns-node', (req, res) => {
