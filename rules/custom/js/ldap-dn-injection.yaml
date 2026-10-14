@@ -95,6 +95,30 @@ rules:
           - pattern-inside: |
               import { dn as $K } from "ldap-escape";
               ...
+      # the sanitizer pulled out of the package into a variable: const f = require("ldap-escape").dn
+      - patterns:
+          - pattern: $K(...)
+          - pattern-inside: |
+              $K = require("ldap-escape").dn;
+              ...
+      - patterns:
+          - pattern: $K(...)
+          - pattern-inside: |
+              $K = $E.dn;
+              ...
+          - pattern-either:
+              - pattern-inside: |
+                  $E = require("ldap-escape");
+                  ...
+              - pattern-inside: |
+                  import $E from "ldap-escape";
+                  ...
+              - pattern-inside: |
+                  import * as $E from "ldap-escape";
+                  ...
+          - pattern-not-inside: |
+              $E = {...};
+              ...
     pattern-sinks:
       # the search base, or the entry DN of bind/modify/del/compare/add, on a client built by ldapjs or ldapts in this file
       - patterns:
@@ -120,26 +144,50 @@ rules:
                       - pattern-inside: |
                           import * as $L from "ldapjs";
                           ...
+                  - pattern-either:
+                      - pattern-inside: |
+                          $C = $L.createClient(...);
+                          ...
+                      # the same binding when the function holding the sink comes first in the file
+                      - pattern-inside: |
+                          function $F(...) { ... }
+                          ...
+                          $C = $L.createClient(...);
+              - pattern-either:
                   - pattern-inside: |
-                      $C = $L.createClient(...);
+                      $C = require("ldapjs").createClient(...);
                       ...
-              - pattern-inside: |
-                  $C = require("ldapjs").createClient(...);
-                  ...
+                  # the same binding when the function holding the sink comes first in the file
+                  - pattern-inside: |
+                      function $F(...) { ... }
+                      ...
+                      $C = require("ldapjs").createClient(...);
               - patterns:
                   - pattern-inside: |
                       import { createClient } from "ldapjs";
                       ...
-                  - pattern-inside: |
-                      $C = createClient(...);
-                      ...
+                  - pattern-either:
+                      - pattern-inside: |
+                          $C = createClient(...);
+                          ...
+                      # the same binding when the function holding the sink comes first in the file
+                      - pattern-inside: |
+                          function $F(...) { ... }
+                          ...
+                          $C = createClient(...);
               - patterns:
                   - pattern-inside: |
                       import { createClient as $K } from "ldapjs";
                       ...
-                  - pattern-inside: |
-                      $C = $K(...);
-                      ...
+                  - pattern-either:
+                      - pattern-inside: |
+                          $C = $K(...);
+                          ...
+                      # the same binding when the function holding the sink comes first in the file
+                      - pattern-inside: |
+                          function $F(...) { ... }
+                          ...
+                          $C = $K(...);
               - patterns:
                   - pattern-either:
                       - pattern-inside: |
@@ -148,23 +196,41 @@ rules:
                       - pattern-inside: |
                           import * as $L from "ldapts";
                           ...
-                  - pattern-inside: |
-                      $C = new $L.Client(...);
-                      ...
+                  - pattern-either:
+                      - pattern-inside: |
+                          $C = new $L.Client(...);
+                          ...
+                      # the same binding when the function holding the sink comes first in the file
+                      - pattern-inside: |
+                          function $F(...) { ... }
+                          ...
+                          $C = new $L.Client(...);
               - patterns:
                   - pattern-inside: |
                       import { Client } from "ldapts";
                       ...
-                  - pattern-inside: |
-                      $C = new Client(...);
-                      ...
+                  - pattern-either:
+                      - pattern-inside: |
+                          $C = new Client(...);
+                          ...
+                      # the same binding when the function holding the sink comes first in the file
+                      - pattern-inside: |
+                          function $F(...) { ... }
+                          ...
+                          $C = new Client(...);
               - patterns:
                   - pattern-inside: |
                       import { Client as $K } from "ldapts";
                       ...
-                  - pattern-inside: |
-                      $C = new $K(...);
-                      ...
+                  - pattern-either:
+                      - pattern-inside: |
+                          $C = new $K(...);
+                          ...
+                      # the same binding when the function holding the sink comes first in the file
+                      - pattern-inside: |
+                          function $F(...) { ... }
+                          ...
+                          $C = new $K(...);
       # fallback for a client built in another module (const ldapClient = require("./ldap-client"), this.ldap, a parameter):
       # the receiver's own name must say ldap. Names like client, conn or directory prove nothing and are not trusted.
       - patterns:
