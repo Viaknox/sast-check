@@ -284,3 +284,100 @@ data "aws_ami" "empty_default_but_owner_filter_literal" {
     values = ["123456789012"]
   }
 }
+
+# an empty default that a validation rejects can never reach the data source: the caller must supply owners
+variable "validated_gt0_owners" {
+  type    = list(string)
+  default = []
+
+  validation {
+    condition     = length(var.validated_gt0_owners) > 0
+    error_message = "Give at least one AMI owner."
+  }
+}
+
+# ok: sast.terraform.aws-ami-no-owner
+data "aws_ami" "validated_gt0_before" {
+  most_recent = true
+  owners      = var.validated_gt0_owners
+}
+
+# ok: sast.terraform.aws-ami-no-owner
+data "aws_ami" "validated_ge1_after" {
+  most_recent = true
+  owners      = var.validated_ge1_owners
+}
+
+variable "validated_ge1_owners" {
+  type    = list(string)
+  default = []
+
+  validation {
+    condition     = length(var.validated_ge1_owners) >= 1
+    error_message = "Give at least one AMI owner."
+  }
+}
+
+variable "validated_ne0_owners" {
+  type    = list(string)
+  default = []
+
+  validation {
+    condition     = length(var.validated_ne0_owners) != 0 && alltrue([for o in var.validated_ne0_owners : can(regex("^[0-9]{12}$", o))])
+    error_message = "Give at least one 12-digit AMI owner."
+  }
+}
+
+# ok: sast.terraform.aws-ami-no-owner
+data "aws_ami" "validated_ne0_before" {
+  most_recent = true
+  owners      = var.validated_ne0_owners
+}
+
+variable "unrelated_validation_owners" {
+  type    = list(string)
+  default = []
+
+  validation {
+    condition     = length(var.unrelated_validation_owners) < 5
+    error_message = "At most four owners."
+  }
+}
+
+# ruleid: sast.terraform.aws-ami-no-owner
+data "aws_ami" "unrelated_validation_before" {
+  most_recent = true
+  owners      = var.unrelated_validation_owners
+}
+
+# ruleid: sast.terraform.aws-ami-no-owner
+data "aws_ami" "unrelated_validation_after" {
+  most_recent = true
+  owners      = var.unrelated_validation_late
+}
+
+variable "unrelated_validation_late" {
+  type    = list(string)
+  default = []
+
+  validation {
+    condition     = length(var.unrelated_validation_late) < 5
+    error_message = "At most four owners."
+  }
+}
+
+variable "or_validation_owners" {
+  type    = list(string)
+  default = []
+
+  validation {
+    condition     = length(var.or_validation_owners) > 0 || var.allow_empty
+    error_message = "Give owners or allow empty."
+  }
+}
+
+# ruleid: sast.terraform.aws-ami-no-owner
+data "aws_ami" "or_validation_before" {
+  most_recent = true
+  owners      = var.or_validation_owners
+}

@@ -151,10 +151,10 @@ rules:
               }
       # var default is an empty list, defined before the data source
       - patterns:
-          - pattern-regex: '(?s)\bvariable[ \t]+"(?P<V>[A-Za-z_][\w-]*)"[ \t]*\{(?:(?!\n\}).)*?\bdefault[ \t]*=[ \t]*\[[ \t\r\n]*\](?:(?!\n\}).)*\n\}.*?(?P<D>data[ \t]+"aws_ami"[ \t]+"[^"]+")[ \t]*\{(?=(?:(?!\n\}).)*?\bmost_recent[ \t]*=[ \t]*true\b)(?!(?:(?!\n\}).)*?\bname[ \t]*=[ \t]*\"owner-)(?=(?:(?!\n\}).)*?\bowners[ \t]*=[ \t]*var\.(?P=V)(?![\w.\[-]))'
+          - pattern-regex: '(?s)\bvariable[ \t]+"(?P<V>[A-Za-z_][\w-]*)"[ \t]*\{(?!(?:(?!\n\}).)*?\bcondition[ \t]*=[ \t]*length\(var\.(?P=V)\)[ \t]*(?:>[ \t]*0|>=[ \t]*1|!=[ \t]*0)\b(?![^\n]*\|\|))(?:(?!\n\}).)*?\bdefault[ \t]*=[ \t]*\[[ \t\r\n]*\](?:(?!\n\}).)*\n\}.*?(?P<D>data[ \t]+"aws_ami"[ \t]+"[^"]+")[ \t]*\{(?=(?:(?!\n\}).)*?\bmost_recent[ \t]*=[ \t]*true\b)(?!(?:(?!\n\}).)*?\bname[ \t]*=[ \t]*\"owner-)(?=(?:(?!\n\}).)*?\bowners[ \t]*=[ \t]*var\.(?P=V)(?![\w.\[-]))'
           - focus-metavariable: $D
       # var default is an empty list, defined after the data source
-      - pattern-regex: '(?s)(?P<D>data[ \t]+"aws_ami"[ \t]+"[^"]+")[ \t]*\{(?=(?:(?!\n\}).)*?\bmost_recent[ \t]*=[ \t]*true\b)(?!(?:(?!\n\}).)*?\bname[ \t]*=[ \t]*\"owner-)(?=(?:(?!\n\}).)*?\bowners[ \t]*=[ \t]*var\.(?P<V>[A-Za-z_][\w-]*)(?![\w.\[-]))(?=(?:(?!\n\}).)*?\n\}.*?\bvariable[ \t]+"(?P=V)"[ \t]*\{(?:(?!\n\}).)*?\bdefault[ \t]*=[ \t]*\[[ \t\r\n]*\](?:(?!\n\}).)*\n\})'
+      - pattern-regex: '(?s)(?P<D>data[ \t]+"aws_ami"[ \t]+"[^"]+")[ \t]*\{(?=(?:(?!\n\}).)*?\bmost_recent[ \t]*=[ \t]*true\b)(?!(?:(?!\n\}).)*?\bname[ \t]*=[ \t]*\"owner-)(?=(?:(?!\n\}).)*?\bowners[ \t]*=[ \t]*var\.(?P<V>[A-Za-z_][\w-]*)(?![\w.\[-]))(?=(?:(?!\n\}).)*?\n\}.*?\bvariable[ \t]+"(?P=V)"[ \t]*\{(?!(?:(?!\n\}).)*?\bcondition[ \t]*=[ \t]*length\(var\.(?P=V)\)[ \t]*(?:>[ \t]*0|>=[ \t]*1|!=[ \t]*0)\b(?![^\n]*\|\|))(?:(?!\n\}).)*?\bdefault[ \t]*=[ \t]*\[[ \t\r\n]*\](?:(?!\n\}).)*\n\})'
       # local default is an empty list, defined before the data source
       - patterns:
           - pattern-regex: '(?s)\blocals[ \t]*\{(?:(?!\n\}).)*?\b(?P<V>[A-Za-z_][\w-]*)[ \t]*=[ \t]*\[[ \t\r\n]*\](?:(?!\n\}).)*\n\}.*?(?P<D>data[ \t]+"aws_ami"[ \t]+"[^"]+")[ \t]*\{(?=(?:(?!\n\}).)*?\bmost_recent[ \t]*=[ \t]*true\b)(?!(?:(?!\n\}).)*?\bname[ \t]*=[ \t]*\"owner-)(?=(?:(?!\n\}).)*?\bowners[ \t]*=[ \t]*local\.(?P=V)(?![\w.\[-]))'
