@@ -116,3 +116,54 @@ rules:
                       - pattern-inside: |
                           import $X from "electron";
                           ...
+      # the whole options object is built in a variable and passed to a window later in the same scope
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  $V = { ..., webPreferences: { ..., nodeIntegration: true, ... }, ... }
+              - pattern: |
+                  $V = { ..., webPreferences: { ..., nodeIntegrationInWorker: true, ... }, ... }
+              - pattern: |
+                  $V = { ..., webPreferences: { ..., contextIsolation: false, ... }, ... }
+              - pattern: |
+                  $V = { ..., webPreferences: { ..., sandbox: false, ... }, ... }
+              - pattern: |
+                  $V = { ..., webPreferences: { ..., webSecurity: false, ... }, ... }
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $W($V) ...>;
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $W($V) ...>;
+                  - pattern-inside: |
+                      import { ..., $C as $W, ... } from "electron";
+                      ...
+                  - metavariable-regex:
+                      metavariable: $C
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $X.$W($V) ...>;
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+                  - pattern-either:
+                      - pattern-inside: |
+                          $X = require("electron");
+                          ...
+                      - pattern-inside: |
+                          import * as $X from "electron";
+                          ...
+                      - pattern-inside: |
+                          import $X from "electron";
+                          ...

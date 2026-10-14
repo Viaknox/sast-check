@@ -233,3 +233,81 @@ function rh() {
   const wp = { nodeIntegration: true };
   return new TR({ webPreferences: wp });
 }
+
+// the whole options object is built in a variable and passed to the window
+function wa() {
+  // ruleid: sast.js.electron-node-integration
+  const opts = { webPreferences: { nodeIntegration: true } };
+  return new BrowserWindow(opts);
+}
+function wb() {
+  // ruleid: sast.js.electron-node-integration
+  const opts = { width: 400, webPreferences: { contextIsolation: false, preload: p } };
+  loadSettings();
+  return new BrowserView(opts);
+}
+function wc() {
+  const el = require("electron");
+  // ruleid: sast.js.electron-node-integration
+  const opts = { webPreferences: { sandbox: false } };
+  return new el.BrowserWindow(opts);
+}
+function wd() {
+  const { BrowserWindow: BW } = require("electron");
+  // ruleid: sast.js.electron-node-integration
+  const opts = { webPreferences: { webSecurity: false } };
+  return new BW(opts);
+}
+function we() {
+  // ruleid: sast.js.electron-node-integration
+  const opts = { webPreferences: { nodeIntegrationInWorker: true } };
+  return new WebContentsView(opts);
+}
+function wf() {
+  // ok: sast.js.electron-node-integration
+  const opts = { webPreferences: { nodeIntegration: false, contextIsolation: true } };
+  return new BrowserWindow(opts);
+}
+function wg() {
+  // ok: sast.js.electron-node-integration
+  const opts = { webPreferences: { nodeIntegration: true } };
+  return new Panel(opts);
+}
+function wh() {
+  const other = require("some-ui-kit");
+  // ok: sast.js.electron-node-integration
+  const opts = { webPreferences: { sandbox: false } };
+  return new other.BrowserWindow(opts);
+}
+function wi() {
+  // ok: sast.js.electron-node-integration
+  const opts = { webPreferences: { nodeIntegration: true } };
+  return opts;
+}
+function wj() {
+  // ruleid: sast.js.electron-node-integration
+  const opts = { webPreferences: { nodeIntegration: true } };
+  return new elNs.BrowserWindow(opts);
+}
+function wk() {
+  // ruleid: sast.js.electron-node-integration
+  const opts = { webPreferences: { sandbox: false } };
+  return new elDefault.BrowserView(opts);
+}
+function wl() {
+  // ruleid: sast.js.electron-node-integration
+  const opts = { webPreferences: { webSecurity: false } };
+  return new IBW(opts);
+}
+function wm() {
+  const el = require("electron");
+  // ok: sast.js.electron-node-integration
+  const opts = { webPreferences: { nodeIntegration: true } };
+  return new el.Tray(opts);
+}
+import { Tray as ITR } from "electron";
+function wn() {
+  // ok: sast.js.electron-node-integration
+  const opts = { webPreferences: { nodeIntegration: true } };
+  return new ITR(opts);
+}
