@@ -732,11 +732,39 @@ rules:
         <%- $X -%>
 
         '
+    - pattern-not-inside: '$X = include(''...'', ...);
+
+        ...
+
+        <%- $X %>
+
+        '
+    - pattern-not-inside: '$X = include(''...'', ...);
+
+        ...
+
+        <%- $X -%>
+
+        '
+    - pattern-not-inside: '$X = include("...", ...);
+
+        ...
+
+        <%- $X %>
+
+        '
+    - pattern-not-inside: '$X = include("...", ...);
+
+        ...
+
+        <%- $X -%>
+
+        '
   - patterns:
     - pattern-either:
       - pattern: <%- $X %>
       - pattern: <%- $X -%>
-    - pattern-regex: (?s)<%\s*(?:(?:var|let|const)\s+)?([A-Za-z_$][\w$]*)\s*=(?!=)(?!\s*(?:'[^'\n]*'|"[^"\n]*")\s*;\s*%>)(?!\s*include\s*\(\s*(?:'[^'\n]*'|"[^"\n]*")\s*(?:,\s*\{[^{}]*\}\s*)?\)\s*;\s*%>)[^;]*;\s*%>(?:(?!<%\s*(?:(?:var|let|const)\s+)?\1\s*=(?!=)).)*<%-\s*\1\s*-?%>
+    - pattern-regex: (?s)<%\s*(?:(?:var|let|const)\s+)?([A-Za-z_$][\w$]*)\s*=(?!=)(?!\s*(?:'[^'\n]*'|"[^"\n]*")\s*;\s*%>)(?!\s*include\s*\(\s*(?:'[^'\n]*'|"[^"\n]*")\s*(?:,(?:[^;()]|\((?:[^;()]|\((?:[^;()]|\([^;()]*\))*\))*\))*)?\)\s*;\s*%>)[^;]*;\s*%>(?:(?!<%\s*(?:(?:var|let|const)\s+)?\1\s*=(?!=)).)*<%-\s*\1\s*-?%>
 - id: sast.js.electron-node-integration
   languages:
   - javascript
@@ -770,12 +798,37 @@ rules:
       - pattern: '{ ..., webPreferences: { ..., webSecurity: false, ... }, ... }
 
           '
-    - pattern-inside: 'new $W(...)
+    - pattern-either:
+      - patterns:
+        - pattern-inside: 'new $W(...)
 
-        '
-    - metavariable-regex:
-        metavariable: $W
-        regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+            '
+        - metavariable-regex:
+            metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+      - patterns:
+        - pattern-inside: 'new $X.$W(...)
+
+            '
+        - metavariable-regex:
+            metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+        - pattern-either:
+          - pattern-inside: '$X = require("electron");
+
+              ...
+
+              '
+          - pattern-inside: 'import * as $X from "electron";
+
+              ...
+
+              '
+          - pattern-inside: 'import $X from "electron";
+
+              ...
+
+              '
   - patterns:
     - pattern-either:
       - pattern: '$V = { ..., nodeIntegration: true, ... }
@@ -793,16 +846,45 @@ rules:
       - pattern: '$V = { ..., webSecurity: false, ... }
 
           '
-    - pattern-inside: '$V = { ... };
+    - pattern-either:
+      - patterns:
+        - pattern-inside: '$V = { ... };
 
-        ...
+            ...
 
-        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+            <... new $W({ ..., webPreferences: $V, ... }) ...>;
 
-        '
-    - metavariable-regex:
-        metavariable: $W
-        regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+            '
+        - metavariable-regex:
+            metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+      - patterns:
+        - pattern-inside: '$V = { ... };
+
+            ...
+
+            <... new $X.$W({ ..., webPreferences: $V, ... }) ...>;
+
+            '
+        - metavariable-regex:
+            metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+        - pattern-either:
+          - pattern-inside: '$X = require("electron");
+
+              ...
+
+              '
+          - pattern-inside: 'import * as $X from "electron";
+
+              ...
+
+              '
+          - pattern-inside: 'import $X from "electron";
+
+              ...
+
+              '
 - id: sast.js.express-error-leak
   languages:
   - javascript
@@ -823,27 +905,27 @@ rules:
     - patterns:
       - pattern: $R.$M($E)
       - pattern-not-inside: fastify.$V(...)
-      - pattern-not-inside: '$S = Fastify(...);
+      - pattern-not-inside:
+          patterns:
+          - pattern-either:
+            - pattern: $S.$V(..., function (...) {...}, ...)
+            - pattern: $S.$V({...}, ...)
+          - pattern-either:
+            - pattern-inside: '$S = Fastify(...);
 
-          ...
+                ...
 
-          <... $S.$V(...) ...>;
+                '
+            - pattern-inside: '$S = fastify(...);
 
-          '
-      - pattern-not-inside: '$S = fastify(...);
+                ...
 
-          ...
+                '
+            - pattern-inside: '$S = require("fastify")(...);
 
-          <... $S.$V(...) ...>;
+                ...
 
-          '
-      - pattern-not-inside: '$S = require("fastify")(...);
-
-          ...
-
-          <... $S.$V(...) ...>;
-
-          '
+                '
     - pattern: $R.$M($E.stack)
     - pattern: $R.$M($E.message)
     - pattern: '$R.$M({..., $K: $E, ...})
@@ -1549,6 +1631,41 @@ rules:
         ...
 
         '
+  - patterns:
+    - pattern: $K(...)
+    - pattern-inside: '$K = require("ldap-escape").dn;
+
+        ...
+
+        '
+  - patterns:
+    - pattern: $K(...)
+    - pattern-inside: '$K = $E.dn;
+
+        ...
+
+        '
+    - pattern-either:
+      - pattern-inside: '$E = require("ldap-escape");
+
+          ...
+
+          '
+      - pattern-inside: 'import $E from "ldap-escape";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $E from "ldap-escape";
+
+          ...
+
+          '
+    - pattern-not-inside: '$E = {...};
+
+        ...
+
+        '
   pattern-sinks:
   - patterns:
     - pattern-either:
@@ -1767,6 +1884,41 @@ rules:
   - patterns:
     - pattern: $K(...)
     - pattern-inside: 'import { filter as $K } from "ldap-escape";
+
+        ...
+
+        '
+  - patterns:
+    - pattern: $K(...)
+    - pattern-inside: '$K = require("ldap-escape").filter;
+
+        ...
+
+        '
+  - patterns:
+    - pattern: $K(...)
+    - pattern-inside: '$K = $E.filter;
+
+        ...
+
+        '
+    - pattern-either:
+      - pattern-inside: '$E = require("ldap-escape");
+
+          ...
+
+          '
+      - pattern-inside: 'import $E from "ldap-escape";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $E from "ldap-escape";
+
+          ...
+
+          '
+    - pattern-not-inside: '$E = {...};
 
         ...
 
