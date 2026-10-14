@@ -176,6 +176,50 @@ app.get('/renamed', async (req, res) => {
   res.end();
 });
 
+// ---- a page taken from browser.pages() is a page too ----
+app.get('/pages-destructure', async (req, res) => {
+  const browser = await puppeteer.launch();
+  const [first] = await browser.pages();
+  // ruleid: sast.js.puppeteer-ssrf
+  await first.goto(req.query.url);
+  // ruleid: sast.js.puppeteer-ssrf
+  await first.setContent(req.body.html);
+  // ruleid: sast.js.puppeteer-ssrf
+  await first.addScriptTag({ url: req.query.src });
+  res.end();
+});
+app.get('/pages-destructure-rest', async (req, res) => {
+  const browser = await puppeteer.launch();
+  const [main, extra] = await browser.pages();
+  // ruleid: sast.js.puppeteer-ssrf
+  await main.goto(req.query.url);
+  res.end();
+});
+app.get('/pages-index', async (req, res) => {
+  const browser = await puppeteer.launch();
+  const tab0 = (await browser.pages())[0];
+  // ruleid: sast.js.puppeteer-ssrf
+  await tab0.goto(req.query.url);
+  // ruleid: sast.js.puppeteer-ssrf
+  await tab0.evaluate(req.body.script);
+  // ruleid: sast.js.puppeteer-ssrf
+  await tab0.addScriptTag({ content: req.body.code });
+  res.end();
+});
+app.get('/pages-safe', async (req, res) => {
+  const browser = await puppeteer.launch();
+  const [first] = await browser.pages();
+  // ok: sast.js.puppeteer-ssrf
+  await first.goto('https://example.com/report');
+  const [other] = await getTabs();
+  // ok: sast.js.puppeteer-ssrf
+  await other.goto(req.query.url);
+  const second = (await getTabs())[0];
+  // ok: sast.js.puppeteer-ssrf
+  await second.setContent(req.body.html);
+  res.end();
+});
+
 // ---- setContent / evaluate / goto on something that is not a page (#6 item 14) ----
 app.get('/not-a-page', async (req, res) => {
   const tab = makeTab();

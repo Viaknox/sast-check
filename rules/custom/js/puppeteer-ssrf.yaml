@@ -95,6 +95,12 @@ rules:
                       - pattern-inside: |
                           $PAGE = await $B.newPage(...);
                           ...
+                      - pattern-inside: |
+                          [$PAGE, ...] = await $B.pages();
+                          ...
+                      - pattern-inside: |
+                          $PAGE = (await $B.pages())[0];
+                          ...
                       - patterns:
                           - pattern-either:
                               - pattern-inside: |
@@ -137,6 +143,12 @@ rules:
                   - pattern-either:
                       - pattern-inside: |
                           $PAGE = await $B.newPage(...);
+                          ...
+                      - pattern-inside: |
+                          [$PAGE, ...] = await $B.pages();
+                          ...
+                      - pattern-inside: |
+                          $PAGE = (await $B.pages())[0];
                           ...
                       - patterns:
                           - pattern-either:
