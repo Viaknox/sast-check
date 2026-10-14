@@ -168,6 +168,43 @@ app.get('/rel13b', (req, res) => {
   // ruleid: sast.js.open-redirect
   res.redirect(BASE_URL + '/' + req.query.next);
 });
+// an UPPER_CASE name is trusted only while it is not bound from request data
+app.get('/rel15', (req, res) => {
+  const BASE_URL = req.query.base;
+  // ruleid: sast.js.open-redirect
+  res.redirect(BASE_URL + '/items/' + req.params.id);
+});
+app.get('/rel16', (req, res) => {
+  const BASE_URL = req.query.base;
+  // ruleid: sast.js.open-redirect
+  res.redirect(BASE_URL + '/items/' + 'x');
+});
+app.get('/rel17', (req, res) => {
+  const BASE_URL = req.query.base;
+  // known gap (not asserted): a template literal that starts with an UPPER_CASE base is still cleared as a
+  // whole, so this request-bound base is missed; the "+" form above is caught
+  res.redirect(`${BASE_URL}/items/${req.params.id}`);
+});
+app.get('/rel17b', (req, res) => {
+  // a base that is neither configuration nor a constant name does not clear the tail
+  // ruleid: sast.js.open-redirect
+  res.redirect(getBase() + '/items/' + req.params.id);
+});
+app.get('/rel18', (req, res) => {
+  const BASE_URL = 'https://app.example.com';
+  // ok: sast.js.open-redirect
+  res.redirect(BASE_URL + '/items/' + req.params.id);
+});
+app.get('/rel19', (req, res) => {
+  const BASE_URL = process.env.BASE_URL;
+  // ok: sast.js.open-redirect
+  res.redirect(BASE_URL + '/items/' + req.params.id);
+});
+app.get('/rel20', (req, res) => {
+  const BASE_URL = 'https://app.example.com';
+  // ok: sast.js.open-redirect
+  res.redirect(`${BASE_URL}/items/${req.params.id}`);
+});
 app.get('/rel14', (req, res) => {
   const id = req.params.id;
   if (/^[\d/]+$/.test(id)) {
