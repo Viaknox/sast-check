@@ -24,6 +24,123 @@ app.get('/not-child-process', (req, res) => {
   res.end();
 });
 
+// ---- direct calls on the module, no binding in between (PR #11 review, round 7) ----
+app.get('/direct-require', (req, res) => {
+  // ruleid: sast.js.command-injection
+  require('child_process').exec(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('child_process').execSync(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('child_process').spawn(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('child_process').spawnSync(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('child_process').execFile(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('child_process').execFileSync(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').exec(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execSync(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').spawn(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').spawnSync(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execFile(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execFileSync(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('child_process').spawn('ls', [req.query.dir], { shell: true });
+  // ruleid: sast.js.command-injection
+  require('child_process').spawn('ls', [req.query.dir], { shell: '/bin/sh' });
+  // ruleid: sast.js.command-injection
+  require('child_process').spawnSync('ls', [req.query.dir], { shell: true });
+  // ruleid: sast.js.command-injection
+  require('child_process').spawnSync('ls', [req.query.dir], { shell: '/bin/sh' });
+  // ruleid: sast.js.command-injection
+  require('child_process').execFile('ls', [req.query.dir], { shell: true });
+  // ruleid: sast.js.command-injection
+  require('child_process').execFile('ls', [req.query.dir], { shell: '/bin/sh' });
+  // ruleid: sast.js.command-injection
+  require('child_process').execFileSync('ls', [req.query.dir], { shell: true });
+  // ruleid: sast.js.command-injection
+  require('child_process').execFileSync('ls', [req.query.dir], { shell: '/bin/sh' });
+  // ruleid: sast.js.command-injection
+  require('node:child_process').spawn('ls', [req.query.dir], { shell: true });
+  // ruleid: sast.js.command-injection
+  require('node:child_process').spawn('ls', [req.query.dir], { shell: '/bin/sh' });
+  // ruleid: sast.js.command-injection
+  require('node:child_process').spawnSync('ls', [req.query.dir], { shell: true });
+  // ruleid: sast.js.command-injection
+  require('node:child_process').spawnSync('ls', [req.query.dir], { shell: '/bin/sh' });
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execFile('ls', [req.query.dir], { shell: true });
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execFile('ls', [req.query.dir], { shell: '/bin/sh' });
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execFileSync('ls', [req.query.dir], { shell: true });
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execFileSync('ls', [req.query.dir], { shell: '/bin/sh' });
+  // ruleid: sast.js.command-injection
+  require('child_process').spawn('/bin/sh', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('child_process').spawn(process.execPath, ['--eval', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('child_process').spawnSync('/bin/sh', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('child_process').spawnSync(process.execPath, ['--eval', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('child_process').execFile('/bin/sh', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('child_process').execFile(process.execPath, ['--eval', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('child_process').execFileSync('/bin/sh', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('child_process').execFileSync(process.execPath, ['--eval', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').spawn('/bin/sh', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').spawn(process.execPath, ['--eval', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').spawnSync('/bin/sh', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').spawnSync(process.execPath, ['--eval', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execFile('/bin/sh', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execFile(process.execPath, ['--eval', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execFileSync('/bin/sh', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('node:child_process').execFileSync(process.execPath, ['--eval', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('child_process').spawn('node', ['-e', req.body.script]);
+  // ruleid: sast.js.command-injection
+  require('child_process').spawn(process.execPath, ['-e', req.body.script]);
+  // ok: sast.js.command-injection
+  require('child_process').spawn('ls', [req.query.dir], { shell: false });
+  // ok: sast.js.command-injection
+  require('child_process').spawn('ls', [req.query.dir], { shell: '' });
+  // ok: sast.js.command-injection
+  require('child_process').execFile('ls', [req.query.dir]);
+  // ok: sast.js.command-injection
+  require('child_process').spawn('git', ['-c', req.body.cfg]);
+  // ok: sast.js.command-injection
+  require('child_process').spawn(process.execPath, ['script.js', req.query.arg]);
+  // ok: sast.js.command-injection
+  require('child_process').spawn(process.execPath, ['--eval', 'console.log(1)']);
+  // ok: sast.js.command-injection
+  require('child_process').fork(req.query.module);
+  // ok: sast.js.command-injection
+  require('child_process').fork('sh', ['-c', req.body.script]);
+  // ok: sast.js.command-injection
+  require('lodash').exec(req.query.cmd);
+  // ok: sast.js.command-injection
+  require('./db').exec(req.query.cmd);
+  res.end();
+});
+
 // ---- a function taken off the module and bound to any name ----
 app.get('/extract-exec', (req, res) => {
   const exec = require('child_process').exec;
@@ -81,6 +198,37 @@ app.get('/extract-other', (req, res) => {
   require('shelljs').exec('ls ' + req.query.dir);
   // ok: sast.js.command-injection
   require('lodash').exec(req.query.cmd);
+  res.end();
+});
+
+// ---- ShellJS named import, plain and aliased (PR #11 review, round 7) ----
+import { exec } from 'shelljs';
+app.get('/shelljs-destructured', (req, res) => {
+  // ruleid: sast.js.command-injection
+  exec(req.query.cmd);
+  res.end();
+});
+
+import { exec as other } from './local-runner';
+app.get('/not-shelljs', (req, res) => {
+  // ok: sast.js.command-injection
+  other(req.query.cmd);
+  res.end();
+});
+
+import { exec as shRun } from 'shelljs';
+app.get('/shelljs-alias', (req, res) => {
+  // ruleid: sast.js.command-injection
+  shRun(req.query.cmd);
+  // ok: sast.js.command-injection
+  other(req.query.cmd);
+  res.end();
+});
+
+const { exec: shRun2 } = require('shelljs');
+app.get('/shelljs-destructured-alias', (req, res) => {
+  // ruleid: sast.js.command-injection
+  shRun2(req.query.cmd);
   res.end();
 });
 
@@ -222,6 +370,14 @@ app.get('/required', (req, res) => {
   cp.spawn('python3', ['-c', req.body.script]);
   // ruleid: sast.js.command-injection
   cp.execFileSync('ruby', ['-e', req.body.script]);
+  // ruleid: sast.js.command-injection
+  cp.spawn(process.execPath, ['--eval', req.body.script]);
+  // ruleid: sast.js.command-injection
+  cp.spawn(process.execPath, ['-e', req.body.script]);
+  // ok: sast.js.command-injection
+  cp.spawn(process.execPath, ['--eval', 'console.log(1)']);
+  // ok: sast.js.command-injection
+  cp.spawn(process.execPath, [req.query.script]);
   // ok: sast.js.command-injection
   cp.spawn('python3', ['-c', 'print(1)']);
   // ok: sast.js.command-injection
