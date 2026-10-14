@@ -142,3 +142,65 @@ const viteCfg = {
   // ruleid: sast.js.vite-loadenv-all-vars
   define: { __ALL__: JSON.stringify(envViaVar) },
 };
+
+// a default-exported config function: the object it returns is the config (PR #11 review 4)
+export default ({ mode }) => ({
+  // ruleid: sast.js.vite-loadenv-all-vars
+  define: { __ALL__: loadEnv(mode, '.', '') },
+});
+
+export default function (cfg) {
+  const fnEnv = loadEnv(cfg.mode, '.', '');
+  return {
+    // ruleid: sast.js.vite-loadenv-all-vars
+    define: { __ALL__: JSON.stringify(fnEnv) },
+  };
+}
+
+export default async function ({ mode }) {
+  return {
+    // ruleid: sast.js.vite-loadenv-all-vars
+    define: { ...loadEnv(mode, '.', '') },
+  };
+}
+
+// NOT FIXED: a named default-exported function; the engines read `export default function f` like `export function f`
+export default function namedConfig({ mode }) {
+  return {
+    // (not matched today, so no annotation here)
+    define: { ...loadEnv(mode, '.', '') },
+  };
+}
+
+export default async ({ mode }) => {
+  const asyncEnv = loadEnv(mode, '.', '');
+  return {
+    // ruleid: sast.js.vite-loadenv-all-vars
+    define: { __ALL__: JSON.stringify(asyncEnv) },
+  };
+};
+
+// a default-exported config function that picks specific variables stays quiet
+export default ({ mode }) => {
+  const okFnEnv = loadEnv(mode, '.', '');
+  return {
+    // ok: sast.js.vite-loadenv-all-vars
+    define: { __API_URL__: JSON.stringify(okFnEnv.API_URL) },
+  };
+};
+
+export default function (cfg) {
+  const okFnEnv2 = loadEnv(cfg.mode, '.', '');
+  return {
+    // ok: sast.js.vite-loadenv-all-vars
+    define: { __API_URL__: JSON.stringify(okFnEnv2.API_URL) },
+  };
+}
+
+// a function that is not the default export is not a config
+export function helper({ mode }) {
+  return {
+    // ok: sast.js.vite-loadenv-all-vars
+    define: { __ALL__: loadEnv(mode, '.', '') },
+  };
+}
