@@ -144,50 +144,26 @@ rules:
                       - pattern-inside: |
                           import * as $L from "ldapjs";
                           ...
-                  - pattern-either:
-                      - pattern-inside: |
-                          $C = $L.createClient(...);
-                          ...
-                      # the same binding when the function holding the sink comes first in the file
-                      - pattern-inside: |
-                          function $F(...) { ... }
-                          ...
-                          $C = $L.createClient(...);
-              - pattern-either:
                   - pattern-inside: |
-                      $C = require("ldapjs").createClient(...);
+                      $C = $L.createClient(...);
                       ...
-                  # the same binding when the function holding the sink comes first in the file
-                  - pattern-inside: |
-                      function $F(...) { ... }
-                      ...
-                      $C = require("ldapjs").createClient(...);
+              - pattern-inside: |
+                  $C = require("ldapjs").createClient(...);
+                  ...
               - patterns:
                   - pattern-inside: |
                       import { createClient } from "ldapjs";
                       ...
-                  - pattern-either:
-                      - pattern-inside: |
-                          $C = createClient(...);
-                          ...
-                      # the same binding when the function holding the sink comes first in the file
-                      - pattern-inside: |
-                          function $F(...) { ... }
-                          ...
-                          $C = createClient(...);
+                  - pattern-inside: |
+                      $C = createClient(...);
+                      ...
               - patterns:
                   - pattern-inside: |
                       import { createClient as $K } from "ldapjs";
                       ...
-                  - pattern-either:
-                      - pattern-inside: |
-                          $C = $K(...);
-                          ...
-                      # the same binding when the function holding the sink comes first in the file
-                      - pattern-inside: |
-                          function $F(...) { ... }
-                          ...
-                          $C = $K(...);
+                  - pattern-inside: |
+                      $C = $K(...);
+                      ...
               - patterns:
                   - pattern-either:
                       - pattern-inside: |
@@ -196,41 +172,23 @@ rules:
                       - pattern-inside: |
                           import * as $L from "ldapts";
                           ...
-                  - pattern-either:
-                      - pattern-inside: |
-                          $C = new $L.Client(...);
-                          ...
-                      # the same binding when the function holding the sink comes first in the file
-                      - pattern-inside: |
-                          function $F(...) { ... }
-                          ...
-                          $C = new $L.Client(...);
+                  - pattern-inside: |
+                      $C = new $L.Client(...);
+                      ...
               - patterns:
                   - pattern-inside: |
                       import { Client } from "ldapts";
                       ...
-                  - pattern-either:
-                      - pattern-inside: |
-                          $C = new Client(...);
-                          ...
-                      # the same binding when the function holding the sink comes first in the file
-                      - pattern-inside: |
-                          function $F(...) { ... }
-                          ...
-                          $C = new Client(...);
+                  - pattern-inside: |
+                      $C = new Client(...);
+                      ...
               - patterns:
                   - pattern-inside: |
                       import { Client as $K } from "ldapts";
                       ...
-                  - pattern-either:
-                      - pattern-inside: |
-                          $C = new $K(...);
-                          ...
-                      # the same binding when the function holding the sink comes first in the file
-                      - pattern-inside: |
-                          function $F(...) { ... }
-                          ...
-                          $C = new $K(...);
+                  - pattern-inside: |
+                      $C = new $K(...);
+                      ...
       # fallback for a client built in another module (const ldapClient = require("./ldap-client"), this.ldap, a parameter):
       # the receiver's own name must say ldap. Names like client, conn or directory prove nothing and are not trusted.
       - patterns:

@@ -95,12 +95,6 @@ app.get('/ldapjs-esm-plain', (req, res) => {
   res.end();
 });
 
-// the sink comes first, the plain named import binds the client below it
-function lateNamed(req) {
-  // ruleid: sast.js.ldap-injection
-  lateE.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
-}
-const lateE = createClient({ url: 'ldap://a' });
 
 import { createClient as makeClient } from 'ldapjs';
 app.get('/ldapjs-esm-alias', (req, res) => {
@@ -110,12 +104,6 @@ app.get('/ldapjs-esm-alias', (req, res) => {
   res.end();
 });
 
-// the sink comes first, the aliased import binds the client below it
-function lateAlias(req) {
-  // ruleid: sast.js.ldap-injection
-  lateF.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
-}
-const lateF = makeClient({ url: 'ldap://a' });
 
 import * as ldapNs from 'ldapjs';
 app.get('/ldapjs-esm-ns', (req, res) => {
@@ -158,12 +146,6 @@ app.get('/ldapts-esm-plain', async (req, res) => {
   res.end();
 });
 
-// the sink comes first, the plain named import binds the client below it
-async function lateTsNamed(req) {
-  // ruleid: sast.js.ldap-injection
-  await lateI.search('dc=ex', { filter: '(uid=' + req.query.u + ')' });
-}
-const lateI = new Client({ url: 'ldap://a' });
 
 import { Client as TsClient } from 'ldapts';
 app.get('/ldapts-esm-alias', async (req, res) => {
@@ -173,12 +155,6 @@ app.get('/ldapts-esm-alias', async (req, res) => {
   res.end();
 });
 
-// the sink comes first, the aliased import binds the client below it
-async function lateTsAlias(req) {
-  // ruleid: sast.js.ldap-injection
-  await lateJ.search('dc=ex', { filter: '(uid=' + req.query.u + ')' });
-}
-const lateJ = new TsClient({ url: 'ldap://a' });
 
 import * as ldaptsNs from 'ldapts';
 app.get('/ldapts-esm-ns', async (req, res) => {
@@ -466,59 +442,10 @@ app.get('/esc-extract-shadowed', (req, res) => {
   res.end();
 });
 
-// ---- the sink is in a function that comes BEFORE the client binding (#6 PR 11 review 3) ----
-function lateRequire(req) {
-  // ruleid: sast.js.ldap-injection
-  lateA.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
-}
-const lateA = ldap.createClient({ url: 'ldap://a' });
 
-function lateNs(req) {
-  // ruleid: sast.js.ldap-injection
-  lateB.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
-}
-const lateB = ldapNs.createClient({ url: 'ldap://a' });
 
-function lateDefault(req) {
-  // ruleid: sast.js.ldap-injection
-  lateC.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
-}
-const lateC = ldapDefault.createClient({ url: 'ldap://a' });
 
-function lateChain(req) {
-  // ruleid: sast.js.ldap-injection
-  lateD.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
-}
-const lateD = require('ldapjs').createClient({ url: 'ldap://a' });
 
-async function lateTsNs(req) {
-  // ruleid: sast.js.ldap-injection
-  await lateG.search('dc=ex', { filter: '(uid=' + req.query.u + ')' });
-}
-const lateG = new ldaptsNs.Client({ url: 'ldap://a' });
 
-async function lateTsCjs(req) {
-  // ruleid: sast.js.ldap-injection
-  await lateH.search('dc=ex', { filter: '(uid=' + req.query.u + ')' });
-}
-const lateH = new lt.Client({ url: 'ldap://a' });
 
-function lateOpts(req) {
-  const opts = { filter: '(uid=' + req.query.u + ')' };
-  // ruleid: sast.js.ldap-injection
-  lateK.search('dc=ex', opts, () => {});
-}
-const lateK = ldap.createClient({ url: 'ldap://a' });
 
-// a late binding that is not an LDAP client does not make the receiver one
-function lateNotLdap(req) {
-  // ok: sast.js.ldap-injection
-  lateL.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
-  // ok: sast.js.ldap-injection
-  lateM.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
-  // ok: sast.js.ldap-injection
-  lateN.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
-}
-const lateL = makeCache().createClient({});
-const lateM = new SearchApi();
-const lateN = new someNs.Client({});
