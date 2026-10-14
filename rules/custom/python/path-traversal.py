@@ -2,12 +2,16 @@ import glob
 import os
 import pathlib
 import shutil
+import pathlib as pl
 from pathlib import Path, PurePosixPath
+from pathlib import Path as FilePath
+from pathlib import PurePosixPath as PosixFile
 
 from flask import request, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 
 from uploads import Upload
+from uploads import Upload as OtherFile
 
 BASE = "/srv/uploads"
 
@@ -139,6 +143,52 @@ def ok_path_name_direct():
 def ok_path_name_variable():
     p = Path(request.args["f"])
     # ok: sast.python.path-traversal
+    return open(os.path.join(BASE, p.name)).read()
+
+
+def ok_aliased_path_name_variable():
+    p = FilePath(request.args["f"])
+    # ok: sast.python.path-traversal
+    return open(os.path.join(BASE, p.name)).read()
+
+
+def ok_aliased_path_name_direct():
+    # ok: sast.python.path-traversal
+    return open(os.path.join(BASE, PosixFile(request.form["f"]).name)).read()
+
+
+def ok_module_aliased_path_name_variable():
+    p = pl.Path(request.args["f"])
+    # ok: sast.python.path-traversal
+    return open(os.path.join(BASE, p.name)).read()
+
+
+def bad_aliased_path_name_listdir():
+    p = FilePath(request.args["f"])
+    # ruleid: sast.python.path-traversal
+    return os.listdir(os.path.join(BASE, p.name))
+
+
+def bad_aliased_path_unreduced():
+    p = FilePath(request.args["f"])
+    # ruleid: sast.python.path-traversal
+    return open(p).read()
+
+
+def bad_module_alias_non_path_name_direct():
+    # ruleid: sast.python.path-traversal
+    return open(os.path.join(BASE, pl.load_name(request.args["f"]).name)).read()
+
+
+def bad_module_alias_non_path_name_variable():
+    p = pl.load_name(request.args["f"])
+    # ruleid: sast.python.path-traversal
+    return open(os.path.join(BASE, p.name)).read()
+
+
+def bad_other_alias_name_variable():
+    p = OtherFile(request.args["f"])
+    # ruleid: sast.python.path-traversal
     return open(os.path.join(BASE, p.name)).read()
 
 

@@ -45,10 +45,10 @@ rules:
           - pattern-not-inside: $Q.iterdir()
       # .name is only a safe basename on a pathlib object; any other object's .name is not
       - patterns:
-          - pattern: $C(...).name
+          - pattern: pathlib.$C(...).name
           - metavariable-regex:
               metavariable: $C
-              regex: '^(pathlib\.)?(Path|PurePath|PurePosixPath|PureWindowsPath)$'
+              regex: '^(Path|PurePath|PurePosixPath|PureWindowsPath)$'
           # a basename can still be ".." and a directory sink then climbs out of the base
           - pattern-not-inside:
               patterns:
@@ -60,11 +60,11 @@ rules:
       - patterns:
           - pattern: $P.name
           - pattern-inside: |
-              $P = $C(...)
+              $P = pathlib.$C(...)
               ...
           - metavariable-regex:
               metavariable: $C
-              regex: '^(pathlib\.)?(Path|PurePath|PurePosixPath|PureWindowsPath)$'
+              regex: '^(Path|PurePath|PurePosixPath|PureWindowsPath)$'
           # a basename can still be ".." and a directory sink then climbs out of the base
           - pattern-not-inside:
               patterns:
