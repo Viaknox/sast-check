@@ -29,7 +29,7 @@ app.get('/lookalikes', (req, res) => {
 
 // ---- a client built in another module: only a receiver name that says ldap counts ----
 const ldapClient = require('./ldap-client');
-const client = makeHttpClient();
+const httpClient = makeHttpClient();
 app.get('/other-module', (req, res) => {
   // ruleid: sast.js.ldap-injection
   ldapClient.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
@@ -55,9 +55,9 @@ app.get('/other-module', (req, res) => {
   // ok: sast.js.ldap-injection
   this.ldap.search('dc=ex', { filter: '(objectClass=*)', attributes: req.query.a }, () => {});
   // ok: sast.js.ldap-injection
-  client.search('products', { filter: req.query.q }, () => {});
+  httpClient.search('products', { filter: req.query.q }, () => {});
   // ok: sast.js.ldap-injection
-  client.search('products', opts, () => {});
+  httpClient.search('products', opts, () => {});
   // ok: sast.js.ldap-injection
   conn.search('dc=ex', { filter: '(uid=' + req.query.u + ')' }, () => {});
   res.end();
