@@ -130,5 +130,41 @@
   <% okinc = include('partials/b', { user: 1 }); %>
   <!-- ok: sast.js.ejs-unescaped -->
   <div><%- okinc %></div>
+
+  <!-- include() with a literal path renders a partial that escapes its own output: its locals do not matter (PR #11 review 3) -->
+  <% var incA = include('partials/a', user.data); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incA %></div>
+  <% var incB = include("partials/b", { u: user.id, n: fmt(user.name) }); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incB -%></div>
+  <% var incC = include('partials/c', fmt(clean(user.data))); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incC %></div>
+  <% var incI = include('partials/i', user.data); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incI -%></div>
+  <% var incJ = include("partials/j", user.data); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incJ %></div>
+  <% var incD = include('partials/a'); %>
+  <% incD = include('partials/d', user.data); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incD %></div>
+  <% var incE = include('partials/e'); %>
+  <% incE = include('partials/e', user.data) + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- incE %></div>
+  <% var incF = include('partials/f'); %>
+  <% incF = include('partials/f', user.data) + fmt(req.query.q); %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- incF %></div>
+  <% var incG = include('partials/g'); %>
+  <% incG = include(req.query.p, user.data); %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- incG %></div>
+  <% let incH = include('partials/h', user.data) + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- incH %></div>
 </body>
 </html>

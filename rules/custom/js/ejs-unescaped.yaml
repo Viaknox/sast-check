@@ -62,6 +62,23 @@ rules:
               $X = include("...");
               ...
               <%- $X -%>
+          # include() of a literal path with any locals: the partial escapes its own output
+          - pattern-not-inside: |
+              $X = include('...', ...);
+              ...
+              <%- $X %>
+          - pattern-not-inside: |
+              $X = include('...', ...);
+              ...
+              <%- $X -%>
+          - pattern-not-inside: |
+              $X = include("...", ...);
+              ...
+              <%- $X %>
+          - pattern-not-inside: |
+              $X = include("...", ...);
+              ...
+              <%- $X -%>
       # the name was set from something other than a literal, and not set again before it is printed:
       # a literal set earlier does not make this print safe (the regex range runs from the non-literal
       # assignment to the last print before the next assignment, so every such print is inside it)
@@ -70,4 +87,4 @@ rules:
               - pattern: <%- $X %>
               - pattern: <%- $X -%>
           - pattern-regex: >-
-              (?s)<%\s*(?:(?:var|let|const)\s+)?([A-Za-z_$][\w$]*)\s*=(?!=)(?!\s*(?:'[^'\n]*'|"[^"\n]*")\s*;\s*%>)(?!\s*include\s*\(\s*(?:'[^'\n]*'|"[^"\n]*")\s*(?:,\s*\{[^{}]*\}\s*)?\)\s*;\s*%>)[^;]*;\s*%>(?:(?!<%\s*(?:(?:var|let|const)\s+)?\1\s*=(?!=)).)*<%-\s*\1\s*-?%>
+              (?s)<%\s*(?:(?:var|let|const)\s+)?([A-Za-z_$][\w$]*)\s*=(?!=)(?!\s*(?:'[^'\n]*'|"[^"\n]*")\s*;\s*%>)(?!\s*include\s*\(\s*(?:'[^'\n]*'|"[^"\n]*")\s*(?:,(?:[^;()]|\((?:[^;()]|\((?:[^;()]|\([^;()]*\))*\))*\))*)?\)\s*;\s*%>)[^;]*;\s*%>(?:(?!<%\s*(?:(?:var|let|const)\s+)?\1\s*=(?!=)).)*<%-\s*\1\s*-?%>
