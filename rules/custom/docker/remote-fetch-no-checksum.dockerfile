@@ -121,3 +121,15 @@ RUN curl -fsSLo /tmp/tool.tgz https://example.com/tool.tgz && \
 RUN curl -fsSLo /tmp/tool.tgz https://example.com/tool.tgz && \
     echo "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  /tmp/tool.tgz" | sha256sum -c - && \
     tar -xzf /tmp/tool.tgz -C /usr/local/bin
+
+# a signature check against a public key is an integrity check
+# ok: sast.docker.remote-fetch-no-checksum
+RUN curl -fsSLo /tmp/tool.tgz https://example.com/tool.tgz && \
+    openssl dgst -sha256 -verify /etc/keys/public.pem -signature /tmp/tool.sig /tmp/tool.tgz && \
+    tar -xzf /tmp/tool.tgz -C /usr/local/bin
+
+# printing a digest without comparing it verifies nothing
+# ruleid: sast.docker.remote-fetch-no-checksum
+RUN curl -fsSLo /tmp/tool.tgz https://example.com/tool.tgz && \
+    openssl dgst -sha256 /tmp/tool.tgz && \
+    tar -xzf /tmp/tool.tgz -C /usr/local/bin
