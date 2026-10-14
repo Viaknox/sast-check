@@ -62,6 +62,14 @@ async function afterDefaultImport(page, req) {
   await page.setContent(req.body.html);
 }
 
+// the reviewer's shape: a default import and a helper that takes the page (PR #11 review 3). Checked ALONE in a
+// scratch copy (default import first, no other puppeteer binding above) on opengrep 1.30.2 and semgrep: it matched,
+// so `import { ... } from $M` does read default imports. It sits here because an import covers the rest of the file.
+function visit(page, req) {
+  // ruleid: sast.js.puppeteer-ssrf
+  return page.goto(req.query.url);
+}
+
 import { launch } from 'puppeteer';
 async function afterNamedImport(page, req) {
   // ruleid: sast.js.puppeteer-ssrf
