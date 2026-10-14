@@ -48,12 +48,32 @@ rules:
               function (..., location, ...) { ... }
           - pattern-not-inside: |
               (..., location, ...) => $B
+          # lexical (let / const) declarations never touch window.location; a var does only inside a function,
+          # because a top-level var in a classic script leaves the browser location in place
           - pattern-not-inside: |
-              var location = $E;
+              const location = $E;
               ...
           - pattern-not-inside: |
-              var { ..., location, ... } = $E;
+              let location = $E;
               ...
+          - pattern-not-inside: |
+              const { ..., location, ... } = $E;
+              ...
+          - pattern-not-inside: |
+              let { ..., location, ... } = $E;
+              ...
+          - pattern-not-inside: |
+              function $F(...) { var location = $E; ... }
+          - pattern-not-inside: |
+              function (...) { var location = $E; ... }
+          - pattern-not-inside: |
+              (...) => { var location = $E; ... }
+          - pattern-not-inside: |
+              function $F(...) { var { ..., location, ... } = $E; ... }
+          - pattern-not-inside: |
+              function (...) { var { ..., location, ... } = $E; ... }
+          - pattern-not-inside: |
+              (...) => { var { ..., location, ... } = $E; ... }
           - pattern-not-inside: |
               function $F(..., { ..., location, ... }, ...) { ... }
           - pattern-not-inside: |
@@ -118,12 +138,32 @@ rules:
               function (..., location, ...) { ... }
           - pattern-not-inside: |
               (..., location, ...) => $B
+          # lexical (let / const) declarations never touch window.location; a var does only inside a function,
+          # because a top-level var in a classic script leaves the browser location in place
           - pattern-not-inside: |
-              var location = $E;
+              const location = $E;
               ...
           - pattern-not-inside: |
-              var { ..., location, ... } = $E;
+              let location = $E;
               ...
+          - pattern-not-inside: |
+              const { ..., location, ... } = $E;
+              ...
+          - pattern-not-inside: |
+              let { ..., location, ... } = $E;
+              ...
+          - pattern-not-inside: |
+              function $F(...) { var location = $E; ... }
+          - pattern-not-inside: |
+              function (...) { var location = $E; ... }
+          - pattern-not-inside: |
+              (...) => { var location = $E; ... }
+          - pattern-not-inside: |
+              function $F(...) { var { ..., location, ... } = $E; ... }
+          - pattern-not-inside: |
+              function (...) { var { ..., location, ... } = $E; ... }
+          - pattern-not-inside: |
+              (...) => { var { ..., location, ... } = $E; ... }
           - pattern-not-inside: |
               function $F(..., { ..., location, ... }, ...) { ... }
           - pattern-not-inside: |

@@ -207,3 +207,88 @@ function m5(location) {
   // ruleid: sast.js.location-xss
   window.location.href = window.location.search;
 }
+// var inside a function is local; function-scoped declarations shadow the browser location
+function f1() {
+  var location = getPlace();
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+}
+const f2 = function () {
+  var location = getPlace();
+  // ok: sast.js.location-xss
+  window.location.href = location.hash;
+};
+const f3 = () => {
+  var location = getPlace();
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.href = v;
+};
+function f4(props) {
+  var { location } = props;
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+}
+// lexical declarations are local wherever they sit in the block
+function g1() {
+  init();
+  const location = getPlace();
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+}
+function g2() {
+  init();
+  let location = getPlace();
+  // ok: sast.js.location-xss
+  window.location.href = location.hash;
+}
+function g3(props) {
+  init();
+  const { location } = props;
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+}
+function g4(props) {
+  init();
+  let { location } = props;
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+}
+function g5() {
+  init();
+  const location = getPlace();
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.href = v;
+}
+function g6() {
+  init();
+  let location = getPlace();
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.href = v;
+}
+function g7(props) {
+  init();
+  const { location } = props;
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.href = v;
+}
+function g8(props) {
+  init();
+  let { location } = props;
+  const v = new URLSearchParams(window.location.search).get("v");
+  // ok: sast.js.location-xss
+  location.href = v;
+}
+// let and const are lexical, so even at the top level they are not window.location
+{
+  let location = getPlace();
+  // ok: sast.js.location-xss
+  window.location.href = location.search;
+}
+// a top-level var in a classic script does not shadow window.location
+var location = window.location;
+// ruleid: sast.js.location-xss
+location.href = location.hash.slice(1);
