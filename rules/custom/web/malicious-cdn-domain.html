@@ -49,6 +49,28 @@
   <!-- ok: sast.web.malicious-cdn-domain -->
   <script src="https://%6eotpolyfill.io/x.js"></script>
 
+  <!-- other attributes the browser fetches: object data, preload image sets, legacy background images -->
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <object data="https://polyfill.io/payload.html" type="text/html"></object>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <object type="text/html" data='//cdn.bootcss.com/widget.html'></object>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <link rel="preload" as="image" imagesrcset="https://cdn.staticfile.org/a.png 1x, /b.png 2x">
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <table background="https://cdn.bootcdn.net/bg.png"></table>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <object data=https://polyfill.io/payload.html type="text/html"></object>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <link rel=preload as=image imagesrcset=//cdn.staticfile.org/a.png>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <table background=https://cdn.bootcdn.net/bg.png></table>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <object data=/local/payload.html type="text/html"></object>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <object data="/local/payload.html" type="text/html"></object>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <object data="https://cdnjs.cloudflare.com/payload.html" type="text/html"></object>
+
   <style>
     /* ruleid: sast.web.malicious-cdn-domain */
     @import "https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css";
