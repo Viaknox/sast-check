@@ -91,6 +91,11 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **Redirect checks** trust a variable that passed a validation test, even if it is reassigned inside the validated branch before the redirect.
 - **Download-then-verify order**: in a `run` step or Dockerfile `RUN`, any extraction or execution between the download and its checksum counts as using the download, even when it touches a different file.
 - **Vite config as a named function**: `export default function namedConfig(...)` is not treated as a Vite config; anonymous functions and arrows are.
+- **Reassigned options and values**: a JWT options variable, a validated path, or a validated redirect target that is reassigned before use is judged by its first assignment. Choosing the last reaching assignment needs data-flow analysis.
+- **Redirect bases in template literals**: `` `${BASE_URL}/items/${id}` `` trusts an upper-case base even when it is bound from request data. The `+` form checks where the base came from.
+- **`var location` shadowing** counts only as the first statement of a function; `let`/`const` count anywhere.
+- **Kubernetes images in block scalars** (`image: >-` with the value on the next line) are not matched.
+- **Python `.name` sanitizing** needs `Path` to come from a `pathlib` import (direct or aliased).
 - **Binding order**: an LDAP client or js-yaml binding must appear above the code that uses it. A helper function declared before `const client = ldap.createClient(...)` is not checked. The either-order form made those rules about 45x slower on large files, so they would time out and skip the file.
 - **EJS reassignment** is seen only when it starts a `<% ... %>` tag; a reassignment inside a block (`<% if (c) { x = req.query.q } %>`) is not.
 - **Prototype pollution** through `Array.prototype.reduce` merge helpers is not caught: Semgrep and Opengrep disagree on that pattern, so it was left out rather than ship an engine-specific rule.

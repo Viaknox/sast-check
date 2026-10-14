@@ -455,10 +455,6 @@
   "element": "pattern: document.location.hash",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.dom-xss-sink:.pattern-sources.patterns.pattern-either:20658e06": {
-  "element": "pattern: new URLSearchParams(...).getAll(...)",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
  "sast.js.dom-xss-sink:.pattern-sources.patterns.pattern-either:23dfb2ac": {
   "element": "pattern: document.URL",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -509,10 +505,6 @@
  },
  "sast.js.dom-xss-sink:.pattern-sources.patterns:6d268449": {
   "element": "pattern: $E.data",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
- },
- "sast.js.dom-xss-sink:.pattern-sources.patterns:7cf714e3": {
-  "element": "pattern-not: new URLSearchParams({...}).get(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
  "sast.js.dom-xss-sink:.pattern-sources.patterns:7d24bdd1": {
@@ -1699,6 +1691,14 @@
   "element": "pattern-not-inside: 'function (..., location, ...) { ... }\n\n  '",
   "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
  },
+ "sast.js.location-xss:.pattern-sinks.patterns:120822ff": {
+  "element": "pattern-not-inside: 'function $F(...) { var location = $E; ... }\n\n  '",
+  "why": "Opengrep reads `function $F(...)`, `function (...)` and arrow bodies as overlapping shapes, so removing one of these shadowing exclusions is covered by another; each shape has its own ok fixture and Semgrep CE needs the separate spellings."
+ },
+ "sast.js.location-xss:.pattern-sinks.patterns:30d4c558": {
+  "element": "pattern-not-inside: 'function (...) { var location = $E; ... }\n\n  '",
+  "why": "Opengrep reads `function $F(...)`, `function (...)` and arrow bodies as overlapping shapes, so removing one of these shadowing exclusions is covered by another; each shape has its own ok fixture and Semgrep CE needs the separate spellings."
+ },
  "sast.js.location-xss:.pattern-sinks.patterns:59514ec2@1f894a47": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -1711,9 +1711,21 @@
   "element": "pattern-not: $L = `/...`",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
+ "sast.js.location-xss:.pattern-sinks.patterns:63a04d2c": {
+  "element": "pattern-not-inside: 'function (...) { var { ..., location, ... } = $E; ... }\n\n  '",
+  "why": "Opengrep reads `function $F(...)`, `function (...)` and arrow bodies as overlapping shapes, so removing one of these shadowing exclusions is covered by another; each shape has its own ok fixture and Semgrep CE needs the separate spellings."
+ },
  "sast.js.location-xss:.pattern-sinks.patterns:7802098e": {
   "element": "pattern-not-inside: '(..., location, ...) => $B\n\n  '",
   "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+ },
+ "sast.js.location-xss:.pattern-sinks.patterns:821ad262": {
+  "element": "pattern-not-inside: '(...) => { var location = $E; ... }\n\n  '",
+  "why": "Opengrep reads `function $F(...)`, `function (...)` and arrow bodies as overlapping shapes, so removing one of these shadowing exclusions is covered by another; each shape has its own ok fixture and Semgrep CE needs the separate spellings."
+ },
+ "sast.js.location-xss:.pattern-sinks.patterns:b14afea3": {
+  "element": "pattern-not-inside: 'function $F(...) { var { ..., location, ... } = $E; ... }\n\n  '",
+  "why": "Opengrep reads `function $F(...)`, `function (...)` and arrow bodies as overlapping shapes, so removing one of these shadowing exclusions is covered by another; each shape has its own ok fixture and Semgrep CE needs the separate spellings."
  },
  "sast.js.location-xss:.pattern-sinks.patterns:b621e5cf": {
   "element": "pattern-not-inside: '({ ..., location, ... }) => { ... }\n\n  '",
@@ -1722,6 +1734,10 @@
  "sast.js.location-xss:.pattern-sinks.patterns:c0bf623c": {
   "element": "pattern-not: $F(`/...`, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+ },
+ "sast.js.location-xss:.pattern-sinks.patterns:e9a65eb9": {
+  "element": "pattern-not-inside: '(...) => { var { ..., location, ... } = $E; ... }\n\n  '",
+  "why": "Opengrep reads `function $F(...)`, `function (...)` and arrow bodies as overlapping shapes, so removing one of these shadowing exclusions is covered by another; each shape has its own ok fixture and Semgrep CE needs the separate spellings."
  },
  "sast.js.location-xss:.pattern-sources.pattern-either:1437caba": {
   "element": "pattern: document.location.hash",
@@ -1763,6 +1779,14 @@
   "element": "pattern-not-inside: 'function (..., location, ...) { ... }\n\n  '",
   "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
  },
+ "sast.js.location-xss:.pattern-sources.patterns:30d4c558": {
+  "element": "pattern-not-inside: 'function (...) { var location = $E; ... }\n\n  '",
+  "why": "Opengrep reads `function $F(...)`, `function (...)` and arrow bodies as overlapping shapes, so removing one of these shadowing exclusions is covered by another; each shape has its own ok fixture and Semgrep CE needs the separate spellings."
+ },
+ "sast.js.location-xss:.pattern-sources.patterns:63a04d2c": {
+  "element": "pattern-not-inside: 'function (...) { var { ..., location, ... } = $E; ... }\n\n  '",
+  "why": "Opengrep reads `function $F(...)`, `function (...)` and arrow bodies as overlapping shapes, so removing one of these shadowing exclusions is covered by another; each shape has its own ok fixture and Semgrep CE needs the separate spellings."
+ },
  "sast.js.location-xss:.pattern-sources.patterns:6d268449": {
   "element": "pattern: $E.data",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
@@ -1775,9 +1799,17 @@
   "element": "pattern-either:\n- pattern-inside: '$W.addEventListener(\"message\", function($E) { ... })\n\n    '\n- pattern-inside: '$W.addEventListener(\"message\", ($E) => { ... }",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
+ "sast.js.location-xss:.pattern-sources.patterns:821ad262": {
+  "element": "pattern-not-inside: '(...) => { var location = $E; ... }\n\n  '",
+  "why": "Opengrep reads `function $F(...)`, `function (...)` and arrow bodies as overlapping shapes, so removing one of these shadowing exclusions is covered by another; each shape has its own ok fixture and Semgrep CE needs the separate spellings."
+ },
  "sast.js.location-xss:.pattern-sources.patterns:b621e5cf": {
   "element": "pattern-not-inside: '({ ..., location, ... }) => { ... }\n\n  '",
   "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+ },
+ "sast.js.location-xss:.pattern-sources.patterns:e9a65eb9": {
+  "element": "pattern-not-inside: '(...) => { var { ..., location, ... } = $E; ... }\n\n  '",
+  "why": "Opengrep reads `function $F(...)`, `function (...)` and arrow bodies as overlapping shapes, so removing one of these shadowing exclusions is covered by another; each shape has its own ok fixture and Semgrep CE needs the separate spellings."
  },
  "sast.js.nosql-injection:.pattern-sanitizers:8b8dbf98": {
   "element": "pattern: parseInt(...)",
@@ -2583,21 +2615,21 @@
   "element": "pattern: Number(...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:0bca6323@750afefc": {
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:0bca6323@72447f1a": {
   "element": "pattern-inside: '($PAGE, ...) => { ... }\n\n  '",
-  "why": "Opengrep also reads an arrow as `function $F(...)`, so the function form covers it there; Semgrep CE needs this arrow form (its arrow fixtures fail without it). Survives on Opengrep only."
+  "why": "Same element as the earlier baselined entry (ids moved when the pages() receivers were added): Opengrep reads arrows as `function $F(...)`, and an import's region covers the rest of the file, so one fixture cannot isolate this binding form; each form was checked alone on both engines."
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:0bca6323@9d35ddf1": {
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:0bca6323@bdd0f1af": {
   "element": "pattern-inside: '($PAGE, ...) => { ... }\n\n  '",
-  "why": "Opengrep also reads an arrow as `function $F(...)`, so the function form covers it there; Semgrep CE needs this arrow form (its arrow fixtures fail without it). Survives on Opengrep only."
+  "why": "Same element as the earlier baselined entry (ids moved when the pages() receivers were added): Opengrep reads arrows as `function $F(...)`, and an import's region covers the rest of the file, so one fixture cannot isolate this binding form; each form was checked alone on both engines."
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:77efb962@7f586581": {
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:77efb962@137fd568": {
   "element": "pattern-inside: 'import { ... } from $M;\n\n  ...\n\n  '",
-  "why": "An import's region covers the rest of the file, so an earlier binding form always stands in for this one in a single fixture; each form was checked alone in separate files on both engines."
+  "why": "Same element as the earlier baselined entry (ids moved when the pages() receivers were added): Opengrep reads arrows as `function $F(...)`, and an import's region covers the rest of the file, so one fixture cannot isolate this binding form; each form was checked alone on both engines."
  },
- "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:77efb962@9afc1c5d": {
+ "sast.js.puppeteer-ssrf:.pattern-sinks.patterns.pattern-either.patterns.pattern-either.patterns.pattern-either:77efb962@f06b63e4": {
   "element": "pattern-inside: 'import { ... } from $M;\n\n  ...\n\n  '",
-  "why": "An import's region covers the rest of the file, so an earlier binding form always stands in for this one in a single fixture; each form was checked alone in separate files on both engines."
+  "why": "Same element as the earlier baselined entry (ids moved when the pages() receivers were added): Opengrep reads arrows as `function $F(...)`, and an import's region covers the rest of the file, so one fixture cannot isolate this binding form; each form was checked alone on both engines."
  },
  "sast.js.puppeteer-ssrf:.pattern-sources.pattern-either:010cc1c7": {
   "element": "pattern: ctx.query",
@@ -3751,17 +3783,17 @@
   "element": "pattern: django.http.HttpResponse($X, ...)",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@47822d70": {
+ "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@25a1d105": {
   "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+  "why": "Same focus-metavariable as the earlier baselined entry (ids moved when the MIME regex next to it changed): removing it does not change the flagged line, so no fixture can kill it."
  },
  "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@7f4b49ad": {
   "element": "focus-metavariable: $X",
   "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
  },
- "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@ca489917": {
+ "sast.python.django-httpresponse-xss:.pattern-sinks.patterns:59514ec2@9668097f": {
   "element": "focus-metavariable: $X",
-  "why": "pre-existing at introduction (2026-10-13); kill with a fixture line"
+  "why": "Same focus-metavariable as the earlier baselined entry (ids moved when the MIME regex next to it changed): removing it does not change the flagged line, so no fixture can kill it."
  },
  "sast.python.django-httpresponse-xss:.pattern-sources.patterns.pattern-either:522f3e06": {
   "element": "pattern: request.headers",
