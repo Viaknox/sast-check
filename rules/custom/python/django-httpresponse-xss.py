@@ -252,6 +252,52 @@ def bad_plain_prefix_content_type(request):
     return HttpResponse(request.GET["x"], content_type="text/plainish")
 
 
+def bad_plain_replaced_to_html(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(request.GET["x"], content_type="text/plain".replace("plain", "html"))
+
+
+def bad_plain_concatenated(request, extra):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(request.GET["x"], content_type="text/plain" + extra)
+
+
+def bad_json_charset_replaced(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(request.GET["x"], content_type="application/json; charset=utf-8".replace("application/json", "text/html"))
+
+
+def bad_subclass_plain_replaced_to_html(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponseBadRequest(request.GET["x"], content_type="text/plain".replace("plain", "html"))
+
+
+def bad_subclass_json_concatenated(request, extra):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponseNotFound(request.GET["x"], content_type="application/json" + extra)
+
+
+def bad_percent_before_parameter(request, kind):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(request.GET["x"], content_type="text/%s" % kind)
+
+
+def bad_plain_replaced_multiline(request):
+    return HttpResponse(
+        # ruleid: sast.python.django-httpresponse-xss
+        request.GET["x"],
+        content_type="text/plain".replace("plain", "html"),
+    )
+
+
+def bad_subclass_plain_replaced_multiline(request):
+    return HttpResponseBadRequest(
+        # ruleid: sast.python.django-httpresponse-xss
+        request.GET["x"],
+        content_type="text/plain".replace("plain", "html"),
+    )
+
+
 def bad_subclass_jsonp_content_type(request):
     # ruleid: sast.python.django-httpresponse-xss
     return HttpResponseBadRequest(request.GET["cb"], content_type="application/jsonp")
