@@ -2,6 +2,15 @@
 // The rule decides what a name means from the require/import that comes BEFORE it in the file, and a require
 // is stronger than an import. So each binding form is tested in its own region, weakest binding first.
 
+// ---- helper declared BEFORE its module binding (reverse source order, PR #11 review 3) ----
+// Each name below is bound to js-yaml (or to something else) only AFTER the function that uses it.
+// The arrow-function pair comes first, with its binding right after, so no earlier function covers it.
+const revArrow = (text) => {
+  // ruleid: sast.js.unsafe-yaml-load
+  return revYamlC.load(text, { schema: revYamlC.FULL_SCHEMA });
+};
+const revYamlC = require("js-yaml");
+
 // ---- look-alikes that are not js-yaml, above every js-yaml binding (#6 item 16) ----
 const otherYaml = require('some-yaml-lib');
 
@@ -28,6 +37,24 @@ function otherD(text, SchemaThing) {
   return parse(text, { schema: SchemaThing.FULL_SCHEMA });
 }
 
+function revForeign(text) {
+  // ok: sast.js.unsafe-yaml-load
+  return revForeignLib.load(text, { schema: revForeignLib.FULL_SCHEMA });
+}
+const revForeignLib = require("some-yaml-lib");
+
+function revForeignImport(text) {
+  // ok: sast.js.unsafe-yaml-load
+  return revForeignB.load(text, { schema: revForeignB.FULL_SCHEMA });
+}
+import revForeignB from "not-js-yaml";
+
+function revForeignNamed(text) {
+  // ok: sast.js.unsafe-yaml-load
+  return foreignLoad(text, { schema: someNs.FULL_SCHEMA });
+}
+import { foreignLoad } from "other-yaml";
+
 // ---- each way of reaching js-yaml, one region each ----
 function chain(text) {
   // ruleid: sast.js.unsafe-yaml-load
@@ -38,6 +65,30 @@ function chainAll(text) {
   // ruleid: sast.js.unsafe-yaml-load
   return require('js-yaml').loadAll(text, null, { schema: require('js-yaml').FULL_SCHEMA });
 }
+
+function revNamedPlain(text) {
+  // ruleid: sast.js.unsafe-yaml-load
+  return safeLoadAll(text, null, { schema: someNs.FULL_SCHEMA });
+}
+import { safeLoadAll } from "js-yaml";
+
+function revNamedPlainTwoArgs(text) {
+  // ruleid: sast.js.unsafe-yaml-load
+  return safeLoad(text, { schema: someNs.FULL_SCHEMA });
+}
+import { safeLoad } from "js-yaml";
+
+function revNamedAliasThirdArg(text) {
+  // ruleid: sast.js.unsafe-yaml-load
+  return revLoadB(text, null, { schema: someNs.FULL_SCHEMA });
+}
+import { safeLoadAll as revLoadB } from "js-yaml";
+
+function revNamedImport(text) {
+  // ruleid: sast.js.unsafe-yaml-load
+  return revLoadAll(text, { schema: someNs.FULL_SCHEMA });
+}
+import { loadAll as revLoadAll } from "js-yaml";
 
 import { loadAll } from 'js-yaml';
 function namedPlain(text) {
@@ -66,17 +117,41 @@ function namedAliasThirdArgSafe(text) {
   return parseYaml(text, null, { schema: jsYamlNs.CORE_SCHEMA });
 }
 
+function revNsImport(text) {
+  // ruleid: sast.js.unsafe-yaml-load
+  return revYamlE.load(text, { schema: revYamlE.FULL_SCHEMA });
+}
+import * as revYamlE from "js-yaml";
+
 import * as jsYamlNs from 'js-yaml';
 function nsImport(text) {
   // ruleid: sast.js.unsafe-yaml-load
   return jsYamlNs.load(text, { schema: jsYamlNs.DEFAULT_FULL_SCHEMA });
 }
 
+function revDefaultImport(text) {
+  // ruleid: sast.js.unsafe-yaml-load
+  return revYamlD.safeLoad(text, { schema: revYamlD.FULL_SCHEMA });
+}
+import revYamlD from "js-yaml";
+
 import jsYamlDefault from 'js-yaml';
 function defaultImport(text) {
   // ruleid: sast.js.unsafe-yaml-load
   return jsYamlDefault.safeLoadAll(text, null, { schema: jsYamlDefault.FULL_SCHEMA });
 }
+
+function revRequire(text) {
+  // ruleid: sast.js.unsafe-yaml-load
+  return revYaml.load(text, { schema: revYaml.FULL_SCHEMA });
+}
+const revYaml = require("js-yaml");
+
+function revRequireThird(text) {
+  // ruleid: sast.js.unsafe-yaml-load
+  return revYamlB.loadAll(text, null, { schema: revYamlB.DEFAULT_FULL_SCHEMA });
+}
+const revYamlB = require("js-yaml");
 
 // ---- the classic requires ----
 const yaml = require('js-yaml');
