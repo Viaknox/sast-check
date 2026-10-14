@@ -30,11 +30,30 @@ rules:
                   { ..., webPreferences: { ..., sandbox: false, ... }, ... }
               - pattern: |
                   { ..., webPreferences: { ..., webSecurity: false, ... }, ... }
-          - pattern-inside: |
-              new $W(...)
-          - metavariable-regex:
-              metavariable: $W
-              regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      new $W(...)
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              # a qualified constructor counts only when the qualifier is bound from the electron module in this file
+              - patterns:
+                  - pattern-inside: |
+                      new $X.$W(...)
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+                  - pattern-either:
+                      - pattern-inside: |
+                          $X = require("electron");
+                          ...
+                      - pattern-inside: |
+                          import * as $X from "electron";
+                          ...
+                      - pattern-inside: |
+                          import $X from "electron";
+                          ...
       # the settings object is built in a variable and passed to a window later in the same scope
       - patterns:
           - pattern-either:
@@ -48,10 +67,30 @@ rules:
                   $V = { ..., sandbox: false, ... }
               - pattern: |
                   $V = { ..., webSecurity: false, ... }
-          - pattern-inside: |
-              $V = { ... };
-              ...
-              <... new $W({ ..., webPreferences: $V, ... }) ...>;
-          - metavariable-regex:
-              metavariable: $W
-              regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $W({ ..., webPreferences: $V, ... }) ...>;
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $X.$W({ ..., webPreferences: $V, ... }) ...>;
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+                  - pattern-either:
+                      - pattern-inside: |
+                          $X = require("electron");
+                          ...
+                      - pattern-inside: |
+                          import * as $X from "electron";
+                          ...
+                      - pattern-inside: |
+                          import $X from "electron";
+                          ...

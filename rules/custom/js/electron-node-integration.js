@@ -102,3 +102,74 @@ function l() {
   const wp = { sandbox: false };
   return new WebContentsView({ webPreferences: wp });
 }
+
+// qualified constructors: they count only when the qualifier is bound from the electron module
+function qa() {
+  const electron = require("electron");
+  // ruleid: sast.js.electron-node-integration
+  return new electron.BrowserWindow({ webPreferences: { nodeIntegration: true } });
+}
+function qb() {
+  const el = require("electron");
+  // ruleid: sast.js.electron-node-integration
+  const wp = { contextIsolation: false };
+  return new el.BrowserView({ webPreferences: wp });
+}
+function qc() {
+  const el = require("electron");
+  // ruleid: sast.js.electron-node-integration
+  return new el.WebContentsView({ webPreferences: { sandbox: false } });
+}
+function qd() {
+  const el = require("electron");
+  // ok: sast.js.electron-node-integration
+  return new el.BrowserWindow({ webPreferences: { nodeIntegration: false, contextIsolation: true } });
+}
+function qe() {
+  const other = require("some-ui-kit");
+  // ok: sast.js.electron-node-integration
+  return new other.BrowserWindow({ webPreferences: { nodeIntegration: true } });
+}
+function qf() {
+  const other = require("some-ui-kit");
+  // ok: sast.js.electron-node-integration
+  const wp = { sandbox: false };
+  return new other.BrowserView({ webPreferences: wp });
+}
+function qg(host) {
+  // a qualifier that is a parameter, not bound from electron
+  // ok: sast.js.electron-node-integration
+  return new host.BrowserWindow({ webPreferences: { nodeIntegration: true } });
+}
+function qh() {
+  const el = require("electron");
+  // ok: sast.js.electron-node-integration
+  return new el.Notification({ webPreferences: { nodeIntegration: true } });
+}
+
+import * as elNs from "electron";
+function qi() {
+  // ruleid: sast.js.electron-node-integration
+  return new elNs.BrowserWindow({ webPreferences: { nodeIntegration: true } });
+}
+function qj() {
+  // ruleid: sast.js.electron-node-integration
+  const wp = { webSecurity: false };
+  return new elNs.BrowserWindow({ webPreferences: wp });
+}
+import elDefault from "electron";
+function qk() {
+  // ruleid: sast.js.electron-node-integration
+  return new elDefault.BrowserView({ webPreferences: { sandbox: false } });
+}
+function ql() {
+  // ruleid: sast.js.electron-node-integration
+  const wp = { nodeIntegrationInWorker: true };
+  return new elDefault.WebContentsView({ webPreferences: wp });
+}
+function qm() {
+  const el = require("electron");
+  // ok: sast.js.electron-node-integration
+  const wp = { nodeIntegration: true };
+  return new el.Tray({ webPreferences: wp });
+}
