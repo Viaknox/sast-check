@@ -51,8 +51,20 @@ app.get('/extract-spawn', (req, res) => {
   launch('sh', ['-c', req.body.script]);
   // ok: sast.js.command-injection
   launch('git', ['log', req.query.ref]);
-  // ok: sast.js.command-injection
+  // ruleid: sast.js.command-injection
   launch('python3', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  launch('node', ['--eval', req.query.js]);
+  // ruleid: sast.js.command-injection
+  launch('git', ['log', req.query.ref], { shell: '/bin/sh' });
+  // ok: sast.js.command-injection
+  launch('python3', ['-c', 'print(1)']);
+  // ok: sast.js.command-injection
+  launch('git', ['-c', req.body.cfg]);
+  // ok: sast.js.command-injection
+  launch('python3', ['--version', req.query.v]);
+  // ok: sast.js.command-injection
+  launch('git', ['log', req.query.ref], { shell: false });
   res.end();
 });
 app.get('/extract-other', (req, res) => {
@@ -63,8 +75,12 @@ app.get('/extract-other', (req, res) => {
   // ok: sast.js.command-injection
   fork(req.query.module);
   const sh = require('shelljs').exec;
-  // ok: sast.js.command-injection
+  // ruleid: sast.js.command-injection
   sh(req.query.cmd);
+  // ruleid: sast.js.command-injection
+  require('shelljs').exec('ls ' + req.query.dir);
+  // ok: sast.js.command-injection
+  require('lodash').exec(req.query.cmd);
   res.end();
 });
 
@@ -86,8 +102,16 @@ app.get('/named', (req, res) => {
   spawnSync('sh', ['-c', req.body.script]);
   // ok: sast.js.command-injection
   spawnSync('git', ['log', req.query.ref]);
-  // ok: sast.js.command-injection
+  // ruleid: sast.js.command-injection
   spawnSync('python3', ['-c', req.body.script]);
+  // ok: sast.js.command-injection
+  spawnSync('python3', ['-c', 'print(1)']);
+  // ok: sast.js.command-injection
+  spawnSync('python3', ['--version', req.query.v]);
+  // ok: sast.js.command-injection
+  spawnSync('git', ['-c', req.body.cfg]);
+  // ruleid: sast.js.command-injection
+  spawnSync('git', ['log', req.query.ref], { shell: '/bin/sh' });
   // ok: sast.js.command-injection
   fork(req.query.module);
   // fork runs a script with node, not a shell: the shell option and -c mean nothing to it
@@ -111,8 +135,14 @@ app.get('/aliased', (req, res) => {
   launch('sh', ['-c', req.body.script]);
   // ok: sast.js.command-injection
   launch('git', ['log', req.query.ref]);
-  // ok: sast.js.command-injection
+  // ruleid: sast.js.command-injection
   launch('python3', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  launch('git', ['log', req.query.ref], { shell: '/bin/sh' });
+  // ok: sast.js.command-injection
+  launch('python3', ['--version', req.query.v]);
+  // ok: sast.js.command-injection
+  launch('git', ['-c', req.body.cfg]);
   // ok: sast.js.command-injection
   forkIt(req.query.module);
   // ok: sast.js.command-injection
@@ -151,6 +181,20 @@ app.get('/default-node', (req, res) => {
   res.end();
 });
 
+import * as shNs from 'shelljs';
+app.get('/shelljs-ns', (req, res) => {
+  // ruleid: sast.js.command-injection
+  shNs.exec('ls ' + req.query.dir);
+  res.end();
+});
+
+import shDefault from 'shelljs';
+app.get('/shelljs-default', (req, res) => {
+  // ruleid: sast.js.command-injection
+  shDefault.exec('ls ' + req.query.dir);
+  res.end();
+});
+
 import cpDefault from 'child_process';
 app.get('/default', (req, res) => {
   // ruleid: sast.js.command-injection
@@ -163,6 +207,7 @@ const { exec, spawn, execFile } = require('child_process');
 const cp = require('child_process');
 const cpNode = require('node:child_process');
 const shelljs = require('shelljs');
+const lo = require('lodash');
 
 app.get('/required', (req, res) => {
   // ruleid: sast.js.command-injection
@@ -173,16 +218,32 @@ app.get('/required', (req, res) => {
   cp.execFile('git', ['log', req.query.ref], { shell: true });
   // ok: sast.js.command-injection
   cp.execFile('git', ['log', req.query.ref]);
-  // ok: sast.js.command-injection
+  // ruleid: sast.js.command-injection
   cp.spawn('python3', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  cp.execFileSync('ruby', ['-e', req.body.script]);
+  // ok: sast.js.command-injection
+  cp.spawn('python3', ['-c', 'print(1)']);
+  // ok: sast.js.command-injection
+  cp.spawn('git', ['-c', req.body.cfg]);
+  // ok: sast.js.command-injection
+  cp.spawn('python3', ['--version', req.query.v]);
+  // ruleid: sast.js.command-injection
+  cp.execFile('git', ['log', req.query.ref], { shell: '/bin/sh' });
+  // ok: sast.js.command-injection
+  cp.execFile('git', ['log', req.query.ref], { shell: false });
   // ok: sast.js.command-injection
   cp.fork(req.query.module);
   // ok: sast.js.command-injection
   cp.fork('worker.js', [req.query.arg], { shell: true });
   // ok: sast.js.command-injection
   cp.fork('sh', ['-c', req.body.script]);
-  // ok: sast.js.command-injection
+  // ruleid: sast.js.command-injection
   shelljs.exec('ls ' + req.query.dir);
+  // ok: sast.js.command-injection
+  proc.exec(req.query.cmd);
+  // ok: sast.js.command-injection
+  lo.exec(req.query.cmd);
   res.end();
 });
 
@@ -196,6 +257,11 @@ app.get('/multiline', (req, res) => {
     // ruleid: sast.js.command-injection
     req.query.cmd,
     () => {}
+  );
+  require('shelljs').exec(
+    // ruleid: sast.js.command-injection
+    req.query.cmd,
+    { silent: true }
   );
   res.end();
 });
@@ -225,6 +291,8 @@ app.get('/sp', (req, res) => {
   spawn(req.query.program, ['--version']);
   // ruleid: sast.js.command-injection
   spawn('sh', ['-c', req.body.script]);
+  // ruleid: sast.js.command-injection
+  spawn('git', ['log', req.query.ref], { shell: '/bin/sh' });
   res.end();
 });
 

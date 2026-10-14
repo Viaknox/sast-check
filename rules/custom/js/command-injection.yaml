@@ -76,6 +76,7 @@ rules:
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
+    # (ShellJS is bound the same way: its exec() also runs its string in a shell.)
     # The function must come from the child_process module: a variable assigned from require("child_process" or
     # "node:child_process"), an import of it, or a named import. db.exec(), shell.exec() and /re/.exec() do not count.
     pattern-sinks:
@@ -89,18 +90,24 @@ rules:
                       regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
               - patterns:
                   - pattern: |
-                      $CP.$F($C, $X, {..., shell: true, ...})
+                      $CP.$F($C, $X, {..., shell: $SV, ...})
+                  - metavariable-regex:
+                      metavariable: $SV
+                      regex: '^(true|["''`].+["''`])$'
                   - metavariable-regex:
                       metavariable: $F
                       regex: '^(spawn|spawnSync|execFile|execFileSync)$'
               - patterns:
-                  - pattern: $CP.$F($SH, [..., "-c", $X, ...], ...)
+                  - pattern: $CP.$F($SH, [..., $FLAG, $X, ...], ...)
                   - metavariable-regex:
                       metavariable: $F
                       regex: '^(spawn|spawnSync|execFile|execFileSync)$'
                   - metavariable-regex:
                       metavariable: $SH
-                      regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+                      regex: '^["''](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["'']$'
+                  - metavariable-regex:
+                      metavariable: $FLAG
+                      regex: '^["''](-c|-e|--eval|-Command|-r)["'']$'
           - pattern-either:
               - patterns:
                   - pattern-inside: |
@@ -108,7 +115,7 @@ rules:
                       ...
                   - metavariable-regex:
                       metavariable: $MOD
-                      regex: '^["'']((node:)?child_process)["'']$'
+                      regex: '^["'']((node:)?child_process|shelljs)["'']$'
               - pattern-inside: |
                   import $CP from "child_process";
                   ...
@@ -121,6 +128,12 @@ rules:
               - pattern-inside: |
                   import * as $CP from "node:child_process";
                   ...
+              - pattern-inside: |
+                  import $CP from "shelljs";
+                  ...
+              - pattern-inside: |
+                  import * as $CP from "shelljs";
+                  ...
           - focus-metavariable: $X
       # called by name after a named import: const { exec } = require("child_process") reads as the same import
       - patterns:
@@ -132,18 +145,24 @@ rules:
                       regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
               - patterns:
                   - pattern: |
-                      $F($C, $X, {..., shell: true, ...})
+                      $F($C, $X, {..., shell: $SV, ...})
+                  - metavariable-regex:
+                      metavariable: $SV
+                      regex: '^(true|["''`].+["''`])$'
                   - metavariable-regex:
                       metavariable: $F
                       regex: '^(spawn|spawnSync|execFile|execFileSync)$'
               - patterns:
-                  - pattern: $F($SH, [..., "-c", $X, ...], ...)
+                  - pattern: $F($SH, [..., $FLAG, $X, ...], ...)
                   - metavariable-regex:
                       metavariable: $F
                       regex: '^(spawn|spawnSync|execFile|execFileSync)$'
                   - metavariable-regex:
                       metavariable: $SH
-                      regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+                      regex: '^["''](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["'']$'
+                  - metavariable-regex:
+                      metavariable: $FLAG
+                      regex: '^["''](-c|-e|--eval|-Command|-r)["'']$'
           - pattern-either:
               - pattern-inside: |
                   import { $F } from "child_process";
@@ -159,12 +178,18 @@ rules:
                   - pattern: $K($X, ...)
               - patterns:
                   - pattern: |
-                      $K($C, $X, {..., shell: true, ...})
+                      $K($C, $X, {..., shell: $SV, ...})
+                  - metavariable-regex:
+                      metavariable: $SV
+                      regex: '^(true|["''`].+["''`])$'
               - patterns:
-                  - pattern: $K($SH, [..., "-c", $X, ...], ...)
+                  - pattern: $K($SH, [..., $FLAG, $X, ...], ...)
                   - metavariable-regex:
                       metavariable: $SH
-                      regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+                      regex: '^["''](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["'']$'
+                  - metavariable-regex:
+                      metavariable: $FLAG
+                      regex: '^["''](-c|-e|--eval|-Command|-r)["'']$'
           - pattern-either:
               - pattern-inside: |
                   import { $O as $K } from "child_process";
@@ -183,12 +208,18 @@ rules:
                   - pattern: $K($X, ...)
               - patterns:
                   - pattern: |
-                      $K($C, $X, {..., shell: true, ...})
+                      $K($C, $X, {..., shell: $SV, ...})
+                  - metavariable-regex:
+                      metavariable: $SV
+                      regex: '^(true|["''`].+["''`])$'
               - patterns:
-                  - pattern: $K($SH, [..., "-c", $X, ...], ...)
+                  - pattern: $K($SH, [..., $FLAG, $X, ...], ...)
                   - metavariable-regex:
                       metavariable: $SH
-                      regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+                      regex: '^["''](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["'']$'
+                  - metavariable-regex:
+                      metavariable: $FLAG
+                      regex: '^["''](-c|-e|--eval|-Command|-r)["'']$'
           - pattern-either:
               - pattern-inside: |
                   $K = require("child_process").$O;
@@ -196,7 +227,14 @@ rules:
               - pattern-inside: |
                   $K = require("node:child_process").$O;
                   ...
+              - pattern-inside: |
+                  $K = require("shelljs").$O;
+                  ...
           - metavariable-regex:
               metavariable: $O
               regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
+          - focus-metavariable: $X
+      # ShellJS runs the whole string through the system shell: require("shelljs").exec(cmd)
+      - patterns:
+          - pattern: require("shelljs").exec($X, ...)
           - focus-metavariable: $X
