@@ -209,6 +209,60 @@ app.get('/root6', (req: Request, res: Response) => {
   // ruleid: sast.js.path-traversal
   res.send(fs.readFileSync(other));
 });
+// a prefix test on a path that was only concatenated is not canonical: ../ still passes it
+app.get('/root7', (req: Request, res: Response) => {
+  const full = BASE + path.sep + req.query.f;
+  if (full.startsWith(BASE + path.sep)) {
+    // ruleid: sast.js.path-traversal
+    fs.readFile(full, () => {});
+  }
+});
+app.get('/root8', (req: Request, res: Response) => {
+  const full = path.normalize(BASE + path.sep + String(req.query.f));
+  if (!full.startsWith(BASE + path.sep)) {
+    throw new Error('outside');
+  }
+  // ok: sast.js.path-traversal
+  res.send(fs.readFileSync(full));
+});
+app.get('/root9', (req: Request, res: Response) => {
+  const full = path.join(BASE, String(req.query.f));
+  if (!full.startsWith(BASE + path.sep)) {
+    return;
+  }
+  // ok: sast.js.path-traversal
+  res.send(fs.readFileSync(full));
+});
+app.get('/root10', (req: Request, res: Response) => {
+  const full = path.join(BASE, String(req.query.f));
+  if (full.startsWith(BASE + path.sep)) {
+    // ok: sast.js.path-traversal
+    res.send(fs.readFileSync(full));
+  }
+});
+app.get('/root11', (req: Request, res: Response) => {
+  const full = path.join(BASE, String(req.query.f));
+  if (!full.startsWith(BASE + path.sep)) {
+    throw new Error('outside');
+  }
+  // ok: sast.js.path-traversal
+  res.send(fs.readFileSync(full));
+});
+app.get('/root12', (req: Request, res: Response) => {
+  const full = path.normalize(BASE + path.sep + String(req.query.f));
+  if (full.startsWith(BASE + path.sep)) {
+    // ok: sast.js.path-traversal
+    res.send(fs.readFileSync(full));
+  }
+});
+app.get('/root13', (req: Request, res: Response) => {
+  const full = path.normalize(BASE + path.sep + String(req.query.f));
+  if (!full.startsWith(BASE + path.sep)) {
+    return;
+  }
+  // ok: sast.js.path-traversal
+  res.send(fs.readFileSync(full));
+});
 // a prefix test without a separator also accepts sibling folders such as /srv/files-private
 app.get('/root4', (req: Request, res: Response) => {
   const full = path.resolve(BASE, String(req.query.f));
