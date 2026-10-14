@@ -187,3 +187,116 @@ server.post('/c', async (request, reply) => {
     reply.send({ detail: err.message });
   }
 });
+
+// A module that creates a Fastify instance AND has an Express path: only the sink inside a callback registered on the
+// Fastify instance is exempt, not every sink that sits between the instance and a later call on it
+const fx = Fastify();
+app.get('/between-1', async (req, res) => {
+  try {
+    await work();
+  } catch (err) {
+    // ruleid: sast.js.express-error-leak
+    res.status(500).send(err);
+  }
+});
+app.use((err, req, res, next) => {
+  // ruleid: sast.js.express-error-leak
+  res.status(500).send(err);
+});
+fx.get('/ok-1', async (request, reply) => {
+  try {
+    await work();
+  } catch (err) {
+    // ok: sast.js.express-error-leak
+    reply.send(err);
+  }
+});
+fx.route({
+  method: 'GET',
+  url: '/ok-2',
+  handler: async (request, reply) => {
+    try {
+      await work();
+    } catch (err) {
+      // ok: sast.js.express-error-leak
+      reply.send(err);
+    }
+  },
+});
+fx.setErrorHandler(async (error, request, reply) => {
+  try {
+    await work();
+  } catch (err) {
+    // ok: sast.js.express-error-leak
+    reply.send(err);
+  }
+});
+fx.get('/ok-3', function (request, reply) {
+  work().catch(function (err) {
+    // ok: sast.js.express-error-leak
+    reply.send(err);
+  });
+});
+fx.addHook('onRequest', (request, reply, done) => {
+  work().catch((err) => reply.send(err));
+});
+// ok: sast.js.express-error-leak
+fx.get('/ok-7', async (request, reply) => work().catch((err) => reply.send(err)));
+fx.listen({ port: 3000 });
+
+const fy = fastify();
+app.get('/between-2', (req, res) => {
+  // ruleid: sast.js.express-error-leak
+  work().catch((err) => res.send(err));
+});
+fy.get('/ok-4', async (request, reply) => {
+  try {
+    await work();
+  } catch (err) {
+    // ok: sast.js.express-error-leak
+    reply.send(err);
+  }
+});
+fy.listen({ port: 3001 });
+
+const fz = require('fastify')();
+app.get('/between-3', async (req, res) => {
+  try {
+    await work();
+  } catch (err) {
+    // ruleid: sast.js.express-error-leak
+    res.send(err);
+  }
+});
+fz.get('/ok-5', async (request, reply) => {
+  try {
+    await work();
+  } catch (err) {
+    // ok: sast.js.express-error-leak
+    reply.send(err);
+  }
+});
+fz.listen({ port: 3002 });
+
+// a plugin registered on the Fastify instance gets its own instance object
+fx.register(async (instance) => {
+  instance.get('/ok-6', async (request, reply) => {
+    try {
+      await work();
+    } catch (err) {
+      // ok: sast.js.express-error-leak
+      reply.send(err);
+    }
+  });
+});
+
+// a non-Fastify object with a get() method does not get the exemption just because a Fastify instance exists
+const router2 = makeRouter();
+router2.get('/not-fastify', async (request, reply) => {
+  try {
+    await work();
+  } catch (err) {
+    // ruleid: sast.js.express-error-leak
+    reply.send(err);
+  }
+});
