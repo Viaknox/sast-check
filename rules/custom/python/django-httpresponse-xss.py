@@ -242,6 +242,41 @@ def ok_subclass_plain_text_charset(request, enc):
     return HttpResponseBadRequest(request.GET["n"], content_type=f"text/plain; charset={enc}")
 
 
+def bad_jsonp_content_type(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(request.GET["cb"], content_type="application/jsonp")
+
+
+def bad_plain_prefix_content_type(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(request.GET["x"], content_type="text/plainish")
+
+
+def bad_subclass_jsonp_content_type(request):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponseBadRequest(request.GET["cb"], content_type="application/jsonp")
+
+
+def ok_json_charset(request):
+    # ok: sast.python.django-httpresponse-xss
+    return HttpResponse(request.GET["x"], content_type="application/json; charset=utf-8")
+
+
+def ok_json_exact(request):
+    # ok: sast.python.django-httpresponse-xss
+    return HttpResponse(request.GET["x"], content_type='application/json')
+
+
+def ok_subclass_json_charset(request):
+    # ok: sast.python.django-httpresponse-xss
+    return HttpResponseNotFound(request.GET["x"], content_type="application/json; charset=utf-8")
+
+
+def ok_subclass_plain_exact(request):
+    # ok: sast.python.django-httpresponse-xss
+    return HttpResponseForbidden(request.GET["x"], content_type="text/plain")
+
+
 def bad_html_content_type(request):
     # ruleid: sast.python.django-httpresponse-xss
     return HttpResponse(request.GET["x"], content_type="text/html; charset=utf-8")

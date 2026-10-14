@@ -96,7 +96,7 @@ rules:
                 - pattern: HttpResponse(..., content_type=$CT, ...)
                 - metavariable-regex:
                     metavariable: $CT
-                    regex: '^f?["'']((text/plain)|(application/json))'
+                    regex: '^f?["''](text/plain|application/json)(["'';]|$)'
           - focus-metavariable: $X
       # body-carrying HttpResponse subclasses (same text/html default)
       - patterns:
@@ -109,7 +109,7 @@ rules:
                 - pattern: $C(..., content_type=$CT, ...)
                 - metavariable-regex:
                     metavariable: $CT
-                    regex: '^f?["'']((text/plain)|(application/json))'
+                    regex: '^f?["''](text/plain|application/json)(["'';]|$)'
           - focus-metavariable: $X
       # marking request data as safe HTML disables escaping wherever it is later rendered
       - patterns:
