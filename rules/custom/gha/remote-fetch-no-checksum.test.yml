@@ -168,3 +168,19 @@ jobs:
           curl -fsSLo tool.tgz https://example.com/tool.tgz
           grep -q "$EXPECTED_SHA256" <(sha256sum tool.tgz)
           tar xzf tool.tgz
+      - name: signature verified against a public key before extracting
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          openssl dgst -sha256 -verify public.pem -signature tool.sig tool.tgz
+          tar xzf tool.tgz
+      - name: signature verified in a chained command
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -o tool.tgz https://example.com/tool.tgz && openssl dgst -sha256 -verify public.pem -signature tool.sig tool.tgz && tar xzf tool.tgz
+      - name: digest printed but never compared
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          openssl dgst -sha256 tool.tgz
+          tar xzf tool.tgz
