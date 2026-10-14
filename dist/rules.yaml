@@ -383,6 +383,25 @@ rules:
         metavariable: $O
         regex: ^(runInNewContext|runInThisContext|runInContext|compileFunction|Script)$
     - focus-metavariable: $X
+  - patterns:
+    - pattern-either:
+      - pattern: $K($X, ...)
+      - pattern: new $K($X, ...)
+    - pattern-either:
+      - pattern-inside: '$K = require("vm").$O;
+
+          ...
+
+          '
+      - pattern-inside: '$K = require("node:vm").$O;
+
+          ...
+
+          '
+    - metavariable-regex:
+        metavariable: $O
+        regex: ^(runInNewContext|runInThisContext|runInContext|compileFunction|Script)$
+    - focus-metavariable: $X
 - id: sast.js.command-injection
   languages:
   - javascript
@@ -807,6 +826,18 @@ rules:
             metavariable: $W
             regex: ^(BrowserWindow|BrowserView|WebContentsView)$
       - patterns:
+        - pattern-inside: 'new $W(...)
+
+            '
+        - pattern-inside: 'import { ..., $C as $W, ... } from "electron";
+
+            ...
+
+            '
+        - metavariable-regex:
+            metavariable: $C
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+      - patterns:
         - pattern-inside: 'new $X.$W(...)
 
             '
@@ -857,6 +888,22 @@ rules:
             '
         - metavariable-regex:
             metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+      - patterns:
+        - pattern-inside: '$V = { ... };
+
+            ...
+
+            <... new $W({ ..., webPreferences: $V, ... }) ...>;
+
+            '
+        - pattern-inside: 'import { ..., $C as $W, ... } from "electron";
+
+            ...
+
+            '
+        - metavariable-regex:
+            metavariable: $C
             regex: ^(BrowserWindow|BrowserView|WebContentsView)$
       - patterns:
         - pattern-inside: '$V = { ... };
@@ -3599,6 +3646,14 @@ rules:
 
         '
     - pattern-regex: export\s+default\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}
+    - focus-metavariable: $D
+  - patterns:
+    - pattern: '{ ..., define: $D, ... }
+
+        '
+    - pattern-inside: 'export default function (...) { ... }
+
+        '
     - focus-metavariable: $D
   - patterns:
     - pattern: '{ ..., define: $D, ..., $K: $V, ... }
