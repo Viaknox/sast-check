@@ -24,6 +24,50 @@ app.get('/not-child-process', (req, res) => {
   res.end();
 });
 
+// ---- a function taken off the module and bound to any name ----
+app.get('/extract-exec', (req, res) => {
+  const exec = require('child_process').exec;
+  // ruleid: sast.js.command-injection
+  exec(req.query.cmd);
+  res.end();
+});
+app.get('/extract-node', (req, res) => {
+  const run = require('node:child_process').execSync;
+  // ruleid: sast.js.command-injection
+  run('ls ' + req.query.dir);
+  res.end();
+});
+app.get('/extract-alias', (req, res) => {
+  const run = require('child_process').execSync;
+  // ruleid: sast.js.command-injection
+  run(req.query.cmd);
+  res.end();
+});
+app.get('/extract-spawn', (req, res) => {
+  const launch = require('child_process').spawn;
+  // ruleid: sast.js.command-injection
+  launch('git', ['log', req.query.ref], { shell: true });
+  // ruleid: sast.js.command-injection
+  launch('sh', ['-c', req.body.script]);
+  // ok: sast.js.command-injection
+  launch('git', ['log', req.query.ref]);
+  // ok: sast.js.command-injection
+  launch('python3', ['-c', req.body.script]);
+  res.end();
+});
+app.get('/extract-other', (req, res) => {
+  const exec = require('lodash').exec;
+  // ok: sast.js.command-injection
+  exec(req.query.cmd);
+  const fork = require('child_process').fork;
+  // ok: sast.js.command-injection
+  fork(req.query.module);
+  const sh = require('shelljs').exec;
+  // ok: sast.js.command-injection
+  sh(req.query.cmd);
+  res.end();
+});
+
 // ---- named imports ----
 import { execSync } from 'node:child_process';
 app.get('/named-node', (req, res) => {

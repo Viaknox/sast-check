@@ -176,3 +176,27 @@ rules:
               metavariable: $O
               regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
           - focus-metavariable: $X
+      # a function taken off the module and bound to any name: const run = require("child_process").execSync
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern: $K($X, ...)
+              - patterns:
+                  - pattern: |
+                      $K($C, $X, {..., shell: true, ...})
+              - patterns:
+                  - pattern: $K($SH, [..., "-c", $X, ...], ...)
+                  - metavariable-regex:
+                      metavariable: $SH
+                      regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+          - pattern-either:
+              - pattern-inside: |
+                  $K = require("child_process").$O;
+                  ...
+              - pattern-inside: |
+                  $K = require("node:child_process").$O;
+                  ...
+          - metavariable-regex:
+              metavariable: $O
+              regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
+          - focus-metavariable: $X
