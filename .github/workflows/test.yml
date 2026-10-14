@@ -7,12 +7,13 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read   # the mutation check lists the PR's changed files
 
 jobs:
   test:
     name: rules + e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60   # a PR that changes many rules mutation-tests each one (about a minute per rule)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -70,6 +71,21 @@ jobs:
         run: python tests/rules_test.py --engine "$(command -v semgrep)"
       - name: Rule tests (opengrep - the CI engine)
         run: python tests/rules_test.py --engine "$RUNNER_TEMP/opengrep/opengrep"
+      - name: Rule-quality tool tests
+        run: python tests/tools_test.py
+      - name: Rule mutation check (changed rules)
+        timeout-minutes: 40
+        # every pattern element of a changed rule must be exercised by its fixture, unless the baseline
+        # (tests/mutation-baseline.json) lists it with a reason; see docs/rule-quality.md
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' > "$RUNNER_TEMP/changed.txt"
+          python tools/rule_mutation.py --engine "$RUNNER_TEMP/opengrep/opengrep" \
+            --changed-files "$RUNNER_TEMP/changed.txt" --check tests/mutation-baseline.json
       - name: End-to-end
         env:
           E2E_REQUIRE: zizmor osv-scanner   # CI must not silently skip these scanners' checks

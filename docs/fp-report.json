@@ -1,0 +1,259 @@
+{
+ "rules_bundle": "98fc37493e96fc35",
+ "corpus": [
+  {
+   "repo": "expressjs/express",
+   "sha": "a419aa7350389a275ab45fde2e849ed1f02449ef"
+  },
+  {
+   "repo": "koajs/koa",
+   "sha": "2fecd029c6ce6b79d65158d28a76538f7f6b0378"
+  },
+  {
+   "repo": "fastify/fastify",
+   "sha": "3ad5a426371ed652e3ddc759d6b389b76fb86eaa"
+  },
+  {
+   "repo": "nestjs/nest",
+   "sha": "4514623279f6087808e3c8f08fbf9f37d3c17482"
+  },
+  {
+   "repo": "hapijs/hapi",
+   "sha": "b90c41b9006143421dc715c01d86e6f4933af1e4"
+  },
+  {
+   "repo": "socketio/socket.io",
+   "sha": "1eaa582d3b453e3e6f522300ed05b10da0a0799b"
+  },
+  {
+   "repo": "puppeteer/puppeteer",
+   "sha": "04dee984124892f0965e89df715013d63c47bceb"
+  },
+  {
+   "repo": "jquery/jquery",
+   "sha": "c2f27864e4ffc2d1409c289fcb9a42b6165dfeaf"
+  },
+  {
+   "repo": "vuejs/core",
+   "sha": "d084b904903a7710ea19b7256b7c681e838eb63e"
+  },
+  {
+   "repo": "sveltejs/kit",
+   "sha": "70636540c53231a959d24f16b794ff0b124ad648"
+  },
+  {
+   "repo": "handlebars-lang/handlebars.js",
+   "sha": "13a7a679910d2adbfe7f6fad61ce8f98426b0378"
+  },
+  {
+   "repo": "mde/ejs",
+   "sha": "ebba1b9d5b5e38239b52a968ba04479ce378ee00"
+  },
+  {
+   "repo": "pallets/flask",
+   "sha": "d086db856be187255b8ec61ef409357393020f32"
+  },
+  {
+   "repo": "django/django",
+   "sha": "f1d11117c6a3e227ce7cdd263cf0743f0eb73070"
+  },
+  {
+   "repo": "psf/requests",
+   "sha": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60"
+  },
+  {
+   "repo": "encode/httpx",
+   "sha": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254"
+  },
+  {
+   "repo": "fastapi/fastapi",
+   "sha": "f5c6e9b4f9cadc1bf0f9a1fd672e621206b63007"
+  },
+  {
+   "repo": "terraform-aws-modules/terraform-aws-vpc",
+   "sha": "b3abd6df2ecf052451a361ed55b8f06f8742a795"
+  },
+  {
+   "repo": "terraform-aws-modules/terraform-aws-ec2-instance",
+   "sha": "4dfedcdd1f26006009c52439bbadba40a76ddb79"
+  },
+  {
+   "repo": "kubernetes/ingress-nginx",
+   "sha": "dbb11b92ddb77bee9c35e462479129354c84f939"
+  },
+  {
+   "repo": "argoproj/argo-helm",
+   "sha": "10539f0669a5689df82198f0fafcee5800a5926b"
+  }
+ ],
+ "stale_findings_excluded": 0,
+ "rules": {
+  "sast.docker.remote-fetch-no-checksum": {
+   "fp": 0,
+   "correct": 6,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.gha.remote-fetch-no-checksum": {
+   "fp": 3,
+   "correct": 3,
+   "unclear": 0,
+   "noise": 0.5,
+   "fp_by_repo": {
+    "kubernetes/ingress-nginx": 3
+   }
+  },
+  "sast.js.ejs-unescaped": {
+   "fp": 8,
+   "correct": 0,
+   "unclear": 0,
+   "noise": 1.0,
+   "fp_by_repo": {
+    "expressjs/express": 1,
+    "mde/ejs": 7
+   }
+  },
+  "sast.js.express-error-leak": {
+   "fp": 0,
+   "correct": 6,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.js.express-no-helmet": {
+   "fp": 0,
+   "correct": 19,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.js.grpc-insecure": {
+   "fp": 0,
+   "correct": 5,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.js.handlebars-noescape": {
+   "fp": 0,
+   "correct": 2,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.js.location-xss": {
+   "fp": 1,
+   "correct": 0,
+   "unclear": 0,
+   "noise": 1.0,
+   "fp_by_repo": {
+    "sveltejs/kit": 1
+   }
+  },
+  "sast.js.open-redirect": {
+   "fp": 3,
+   "correct": 7,
+   "unclear": 0,
+   "noise": 0.3,
+   "fp_by_repo": {
+    "sveltejs/kit": 3
+   }
+  },
+  "sast.js.path-traversal": {
+   "fp": 4,
+   "correct": 0,
+   "unclear": 0,
+   "noise": 1.0,
+   "fp_by_repo": {
+    "jquery/jquery": 2,
+    "sveltejs/kit": 2
+   }
+  },
+  "sast.js.react-dangerous-html": {
+   "fp": 3,
+   "correct": 0,
+   "unclear": 0,
+   "noise": 1.0,
+   "fp_by_repo": {
+    "puppeteer/puppeteer": 3
+   }
+  },
+  "sast.js.ssrf": {
+   "fp": 0,
+   "correct": 4,
+   "unclear": 1,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.js.template-safe-filter": {
+   "fp": 16,
+   "correct": 0,
+   "unclear": 0,
+   "noise": 1.0,
+   "fp_by_repo": {
+    "django/django": 16
+   }
+  },
+  "sast.js.timing-unsafe-compare": {
+   "fp": 0,
+   "correct": 3,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.js.tls-reject-unauthorized-off": {
+   "fp": 0,
+   "correct": 16,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.js.websocket-cleartext": {
+   "fp": 0,
+   "correct": 2,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.k8s.ingress-nginx-vulnerable": {
+   "fp": 0,
+   "correct": 5,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.python.django-httpresponse-xss": {
+   "fp": 9,
+   "correct": 12,
+   "unclear": 0,
+   "noise": 0.43,
+   "fp_by_repo": {
+    "django/django": 9
+   }
+  },
+  "sast.python.httpx-verify-false": {
+   "fp": 0,
+   "correct": 1,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  },
+  "sast.python.requests-cleartext": {
+   "fp": 19,
+   "correct": 2,
+   "unclear": 0,
+   "noise": 0.9,
+   "fp_by_repo": {
+    "encode/httpx": 19
+   }
+  },
+  "sast.python.ssrf": {
+   "fp": 0,
+   "correct": 3,
+   "unclear": 0,
+   "noise": 0.0,
+   "fp_by_repo": {}
+  }
+ }
+}
