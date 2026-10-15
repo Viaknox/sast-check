@@ -66,24 +66,147 @@ rules:
               - pattern: $REQ.path
               - pattern: $REQ.get(...)
               - pattern: $REQ.header(...)
+    # sanitizers count only when the function really comes from the ldap-escape package (require or import),
+    # so a local helper or object that happens to be called ldapEscape or escapeDn does not clean the value
     pattern-sanitizers:
-      - pattern: ldapEscape.dn(...)
-      - pattern: ldapEscape.dn`...`
-      - pattern: escapeDn(...)
+      - patterns:
+          - pattern: $E.dn(...)
+          - pattern-either:
+              - pattern-inside: |
+                  $E = require("ldap-escape");
+                  ...
+              - pattern-inside: |
+                  import $E from "ldap-escape";
+                  ...
+              - pattern-inside: |
+                  import * as $E from "ldap-escape";
+                  ...
+          - pattern-not-inside: |
+              $E = {...};
+              ...
+      - patterns:
+          - pattern: dn(...)
+          - pattern-inside: |
+              import { dn } from "ldap-escape";
+              ...
+      - patterns:
+          - pattern: $K(...)
+          # the engine reads const { dn: $K } = require("ldap-escape") as the same import
+          - pattern-inside: |
+              import { dn as $K } from "ldap-escape";
+              ...
+      # the sanitizer pulled out of the package into a variable: const f = require("ldap-escape").dn
+      - patterns:
+          - pattern: $K(...)
+          - pattern-inside: |
+              $K = require("ldap-escape").dn;
+              ...
+      - patterns:
+          - pattern: $K(...)
+          - pattern-inside: |
+              $K = $E.dn;
+              ...
+          - pattern-either:
+              - pattern-inside: |
+                  $E = require("ldap-escape");
+                  ...
+              - pattern-inside: |
+                  import $E from "ldap-escape";
+                  ...
+              - pattern-inside: |
+                  import * as $E from "ldap-escape";
+                  ...
+          - pattern-not-inside: |
+              $E = {...};
+              ...
     pattern-sinks:
-      # the search base and the entry DN of bind/modify/del/compare/add (receiver limited to LDAP-looking clients)
+      # the search base, or the entry DN of bind/modify/del/compare/add, on a client built by ldapjs or ldapts in this file
       - patterns:
-          - pattern: $C.search($B, $OPTS, ...)
+          - pattern-either:
+              - patterns:
+                  - pattern: $C.search($B, $OPTS, ...)
+                  - focus-metavariable: $B
+              - patterns:
+                  - pattern: $C.$M($DN, ...)
+                  - metavariable-regex:
+                      metavariable: $M
+                      regex: '^(bind|modify|del|compare|add)$'
+                  - focus-metavariable: $DN
+          - pattern-either:
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          $L = require("ldapjs");
+                          ...
+                      - pattern-inside: |
+                          import $L from "ldapjs";
+                          ...
+                      - pattern-inside: |
+                          import * as $L from "ldapjs";
+                          ...
+                  - pattern-inside: |
+                      $C = $L.createClient(...);
+                      ...
+              - pattern-inside: |
+                  $C = require("ldapjs").createClient(...);
+                  ...
+              - patterns:
+                  - pattern-inside: |
+                      import { createClient } from "ldapjs";
+                      ...
+                  - pattern-inside: |
+                      $C = createClient(...);
+                      ...
+              - patterns:
+                  - pattern-inside: |
+                      import { createClient as $K } from "ldapjs";
+                      ...
+                  - pattern-inside: |
+                      $C = $K(...);
+                      ...
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          $L = require("ldapts");
+                          ...
+                      - pattern-inside: |
+                          import * as $L from "ldapts";
+                          ...
+                  - pattern-inside: |
+                      $C = new $L.Client(...);
+                      ...
+              - patterns:
+                  - pattern-inside: |
+                      import { Client } from "ldapts";
+                      ...
+                  - pattern-inside: |
+                      $C = new Client(...);
+                      ...
+              - patterns:
+                  - pattern-inside: |
+                      import { Client as $K } from "ldapts";
+                      ...
+                  - pattern-inside: |
+                      $C = new $K(...);
+                      ...
+      # fallback for a client built in another module (const ldapClient = require("./ldap-client"), this.ldap, a parameter):
+      # the receiver's own name must say ldap. Names like client, conn or directory prove nothing and are not trusted.
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern-either:
+                      - pattern: $C.search($B, $OPTS, ...)
+                      # a property receiver (this.ldap) is only matched when its last name is spelled out
+                      - pattern: $O.$C.search($B, $OPTS, ...)
+                  - focus-metavariable: $B
+              - patterns:
+                  - pattern-either:
+                      - pattern: $C.$M($DN, ...)
+                      - pattern: $O.$C.$M($DN, ...)
+                  - metavariable-regex:
+                      metavariable: $M
+                      regex: '^(bind|modify|del|compare|add)$'
+                  - focus-metavariable: $DN
           - metavariable-regex:
               metavariable: $C
-              regex: '(?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$'
-          - focus-metavariable: $B
-      - patterns:
-          - pattern: $C.$M($DN, ...)
-          - metavariable-regex:
-              metavariable: $C
-              regex: '(?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$'
-          - metavariable-regex:
-              metavariable: $M
-              regex: '^(bind|modify|del|compare|add)$'
-          - focus-metavariable: $DN
+              regex: '(?i)ldap'

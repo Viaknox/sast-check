@@ -69,3 +69,118 @@ jobs:
       - name: no downloads at all
         # ok: sast.gha.remote-fetch-no-checksum
         run: npm ci && npm test
+      - name: checksum only checked after the archive was already extracted
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tar.gz https://example.com/tool-1.2.3.tar.gz
+          tar xzf tool.tar.gz
+          echo "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  tool.tar.gz" | sha256sum -c -
+      - name: checksum computed but never compared
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tar.gz https://example.com/tool-1.2.3.tar.gz
+          sha256sum tool.tar.gz
+          tar xzf tool.tar.gz
+      - name: checksum printed to the log only
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          wget https://example.com/tool.zip
+          shasum -a 256 tool.zip
+          unzip tool.zip
+      - name: binary run before its hash is compared
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool https://example.com/tool && chmod +x tool && ./tool --version
+          echo "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  tool" | sha256sum -c -
+      - name: second download is unverified while the first one is checked
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          wget https://example.com/a.zip
+          sha256sum -c a.zip.sha256
+          unzip a.zip
+          wget https://example.com/b.zip
+          unzip b.zip
+          sha256sum -c b.zip.sha256
+      - name: shasum --check form
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          wget https://example.com/tool.zip
+          shasum --check tool.zip.sha256
+          unzip tool.zip
+      - name: shasum -c form
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          wget https://example.com/tool.zip
+          shasum -c tool.zip.sha1
+          unzip tool.zip
+      - name: sha256sum --check form
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLO https://example.com/tool.tgz
+          sha256sum --check tool.tgz.sha256
+          tar xzf tool.tgz
+      - name: hash compared with a pinned value before extracting
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tar.gz https://example.com/tool-1.2.3.tar.gz
+          [ "$(sha256sum tool.tar.gz | cut -d' ' -f1)" = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" ]
+          tar xzf tool.tar.gz
+      - name: hash piped into grep before extracting
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tar.gz https://example.com/tool-1.2.3.tar.gz
+          openssl dgst -sha256 tool.tar.gz | grep -q 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+          tar xzf tool.tar.gz
+      - name: two downloads each verified before use
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          wget https://example.com/a.zip
+          sha256sum -c a.zip.sha256
+          unzip a.zip
+          wget https://example.com/b.zip
+          sha256sum -c b.zip.sha256
+          unzip b.zip
+      - name: verify and extract chained
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo t.tgz https://example.com/t.tgz && echo "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  t.tgz" | sha256sum -c - && tar xzf t.tgz
+      - name: filename-only grep on hash output is not a verification
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          sha1sum tool.tgz | grep -q tool.tgz
+          tar xzf tool.tgz
+      - name: filename-only grep before process substitution
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          grep -q tool.tgz <(sha256sum tool.tgz)
+          tar xzf tool.tgz
+      - name: hash piped into grep against an expected variable
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          sha256sum tool.tgz | grep -q "$EXPECTED_SHA256"
+          tar xzf tool.tgz
+      - name: expected variable grepped against hash substitution
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          grep -q "$EXPECTED_SHA256" <(sha256sum tool.tgz)
+          tar xzf tool.tgz
+      - name: signature verified against a public key before extracting
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          openssl dgst -sha256 -verify public.pem -signature tool.sig tool.tgz
+          tar xzf tool.tgz
+      - name: signature verified in a chained command
+        # ok: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -o tool.tgz https://example.com/tool.tgz && openssl dgst -sha256 -verify public.pem -signature tool.sig tool.tgz && tar xzf tool.tgz
+      - name: digest printed but never compared
+        # ruleid: sast.gha.remote-fetch-no-checksum
+        run: |
+          curl -fsSLo tool.tgz https://example.com/tool.tgz
+          openssl dgst -sha256 tool.tgz
+          tar xzf tool.tgz

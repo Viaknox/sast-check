@@ -30,6 +30,108 @@
   <script src="https://cdn.jsdelivr.net/npm/polyfill-library@4/dist/polyfill.js"></script>
   <!-- ok: sast.web.malicious-cdn-domain -->
   <script src="https://polyfill.io.example.org/x.js"></script>
+
+  <!-- percent-encoded, upper-case and trailing-dot hosts are the same host to a browser -->
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <script src="https://%70olyfill.io/v3/polyfill.min.js"></script>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <script src="//cdn.%50OLYFILL%2Eio/v3/polyfill.min.js"></script>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <script src="https://POLYFILL.IO/v3/polyfill.min.js"></script>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <script src="https://polyfill.io./v3/polyfill.min.js"></script>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <script src=https://cdn.bootcss.com/jquery/jquery.min.js></script>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <script src='https:\\%62ootcdn.net/jquery.js'></script>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <script src="https://%70olyfill.io.example.org/x.js"></script>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <script src="https://%6eotpolyfill.io/x.js"></script>
+
+  <!-- other attributes the browser fetches: object data, preload image sets, legacy background images -->
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <object data="https://polyfill.io/payload.html" type="text/html"></object>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <object type="text/html" data='//cdn.bootcss.com/widget.html'></object>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <link rel="preload" as="image" imagesrcset="https://cdn.staticfile.org/a.png 1x, /b.png 2x">
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <img srcset="https://safe.example/a.png 1x, https://polyfill.io/b.png 2x">
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <link rel="preload" as="image" imagesrcset="/a.png 1x,//cdn.staticfile.org/b.png 2x">
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <img srcset="/a.png 480w, /b.png 800w,
+    https://cdn.bootcdn.net/c.png 1200w">
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <img srcset=/a.png,//polyfill.io/b.png>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <img srcset="https://safe.example/a.png 1x, https://safe.example/b.png 2x">
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <img srcset="/a.png 1x, /b.png 2x" alt="polyfill.io is mentioned in this alt text">
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <table background="https://cdn.bootcdn.net/bg.png"></table>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <object data=https://polyfill.io/payload.html type="text/html"></object>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <link rel=preload as=image imagesrcset=//cdn.staticfile.org/a.png>
+  <!-- ruleid: sast.web.malicious-cdn-domain -->
+  <table background=https://cdn.bootcdn.net/bg.png></table>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <object data=/local/payload.html type="text/html"></object>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <object data="/local/payload.html" type="text/html"></object>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <object data="https://cdnjs.cloudflare.com/payload.html" type="text/html"></object>
+
+  <style>
+    /* ruleid: sast.web.malicious-cdn-domain */
+    @import "https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css";
+    /* ruleid: sast.web.malicious-cdn-domain */
+    .hero { background: url(//cdn.staticfile.org/img/hero.png) no-repeat; }
+    /* ruleid: sast.web.malicious-cdn-domain */
+    @font-face { font-family: X; src: url('https://%70olyfill.io/fonts/x.woff2'); }
+    /* ok: sast.web.malicious-cdn-domain */
+    /* we no longer load anything from polyfill.io */
+    /* ok: sast.web.malicious-cdn-domain */
+    .hero { background: url(/img/hero.png) no-repeat; }
+  </style>
+
+  <script type="module">
+    // ruleid: sast.web.malicious-cdn-domain
+    import poly from "https://polyfill.io/v3/poly.mjs";
+    // ruleid: sast.web.malicious-cdn-domain
+    import "https://cdn.bootcss.com/lib/side-effect.js";
+    // ruleid: sast.web.malicious-cdn-domain
+    const mod = await import("https://%70olyfill.io/v3/lazy.mjs");
+    // ruleid: sast.web.malicious-cdn-domain
+    fetch("https://cdn.bootcdn.net/data.json").then((r) => r.json());
+    // ruleid: sast.web.malicious-cdn-domain
+    loadScript("//polyfill.io/v3/polyfill.min.js");
+    // ruleid: sast.web.malicious-cdn-domain
+    el.setAttribute("src", "https://polyfill.com/v2/polyfill.js");
+    // ruleid: sast.web.malicious-cdn-domain
+    script.src = "https://cdn.staticfile.net/x.js";
+
+    // ok: sast.web.malicious-cdn-domain
+    const DENIED_HOSTS = ["polyfill.io", "bootcss.com", "cdn.bootcdn.net"];
+    // ok: sast.web.malicious-cdn-domain
+    const POLICY = { blocked: ["cdn.polyfill.io"], note: "polyfill.io is compromised" };
+    // ok: sast.web.malicious-cdn-domain
+    if (new URL(src).hostname === "polyfill.io") { reject(src); }
+    // ok: sast.web.malicious-cdn-domain
+    // polyfill.io was hijacked in 2024, see https://polyfill.io/ for the old notice
+    // ok: sast.web.malicious-cdn-domain
+    import x from "polyfill.io-shim";
+    // ok: sast.web.malicious-cdn-domain
+    fetch("https://api.example.com/hosts?deny=polyfill.io");
+    // ok: sast.web.malicious-cdn-domain
+    const same = url === "https://polyfill.io/v3/polyfill.min.js" ? "blocked" : "fine";
+  </script>
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <!-- Removed the polyfill.io script tag; deny-list: bootcss.com, staticfile.org -->
+  <!-- ok: sast.web.malicious-cdn-domain -->
+  <p>Never load scripts from cdn.polyfill.io or bootcdn.net.</p>
 </head>
 <body></body>
 </html>

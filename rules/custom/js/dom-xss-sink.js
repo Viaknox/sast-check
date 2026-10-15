@@ -55,3 +55,58 @@ function t7() {
   // ruleid: sast.js.dom-xss-sink
   el.innerHTML = "<img src='" + encodeURIComponent(location.hash) + "'>";
 }
+
+const FIXED_QUERY = "tab=home&view=list";
+function ok6() {
+  const tab = new URLSearchParams(FIXED_QUERY).get("tab");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = tab;
+}
+function ok7() {
+  const defaults = "page=1";
+  const page = new URLSearchParams(defaults).getAll("page");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = page;
+}
+function ok8() {
+  const tags = new URLSearchParams({ tag: "a" }).getAll("tag");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = tags;
+}
+function t8(raw) {
+  const p = new URLSearchParams(raw).get("tab");
+  // ruleid: sast.js.dom-xss-sink
+  el.innerHTML = p;
+}
+function t9() {
+  let q = "tab=home";
+  q = location.search;
+  const p = new URLSearchParams(q).get("tab");
+  // ruleid: sast.js.dom-xss-sink
+  el.innerHTML = p;
+}
+function t10(raw) {
+  const tags = new URLSearchParams({ tag: raw }).getAll("tag");
+  // ruleid: sast.js.dom-xss-sink
+  el.innerHTML = tags;
+}
+function t11(raw) {
+  const tag = new URLSearchParams({ kind: "x", tag: raw }).get("tag");
+  // ruleid: sast.js.dom-xss-sink
+  el.innerHTML = tag;
+}
+function ok9() {
+  const tag = new URLSearchParams({ kind: "x", tag: "y" }).get("tag");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = tag;
+}
+function ok10() {
+  const tags = new URLSearchParams({ kind: "x", tag: "y" }).getAll("tag");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = tags;
+}
+function ok11() {
+  const tag = new URLSearchParams({ tag: "y" }).get("tag");
+  // ok: sast.js.dom-xss-sink
+  el.innerHTML = tag;
+}

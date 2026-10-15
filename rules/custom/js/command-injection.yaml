@@ -76,41 +76,234 @@ rules:
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
+    # (ShellJS is bound the same way: its exec() also runs its string in a shell.)
+    # The function must come from the child_process module: a variable assigned from require("child_process" or
+    # "node:child_process"), an import of it, or a named import. db.exec(), shell.exec() and /re/.exec() do not count.
     pattern-sinks:
+      # called as a method of the module object: cp.exec(...), cp.spawn(...)
       - patterns:
-          - pattern: $F($X, ...)
-          - metavariable-regex:
-              metavariable: $F
-              regex: '^(exec|execSync)$'
+          - pattern-either:
+              - patterns:
+                  - pattern: $CP.$F($X, ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
+              - patterns:
+                  - pattern: |
+                      $CP.$F($C, $X, {..., shell: $SV, ...})
+                  - metavariable-regex:
+                      metavariable: $SV
+                      regex: '^(true|["''`].+["''`])$'
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(spawn|spawnSync|execFile|execFileSync)$'
+              - patterns:
+                  - pattern: $CP.$F($SH, [..., $FLAG, $X, ...], ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(spawn|spawnSync|execFile|execFileSync)$'
+                  - metavariable-regex:
+                      metavariable: $SH
+                      regex: '^(["''](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["'']|process\.execPath)$'
+                  - metavariable-regex:
+                      metavariable: $FLAG
+                      regex: '^["''](-c|-e|--eval|-Command|-r)["'']$'
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $CP = require($MOD);
+                      ...
+                  - metavariable-regex:
+                      metavariable: $MOD
+                      regex: '^["'']((node:)?child_process|shelljs)["'']$'
+              - pattern-inside: |
+                  import $CP from "child_process";
+                  ...
+              - pattern-inside: |
+                  import $CP from "node:child_process";
+                  ...
+              - pattern-inside: |
+                  import * as $CP from "child_process";
+                  ...
+              - pattern-inside: |
+                  import * as $CP from "node:child_process";
+                  ...
+              - pattern-inside: |
+                  import $CP from "shelljs";
+                  ...
+              - pattern-inside: |
+                  import * as $CP from "shelljs";
+                  ...
           - focus-metavariable: $X
+      # called by name after a named import: const { exec } = require("child_process") reads as the same import
       - patterns:
-          - pattern: $CP.$F($X, ...)
+          - pattern-either:
+              - patterns:
+                  - pattern: $F($X, ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
+              - patterns:
+                  - pattern: |
+                      $F($C, $X, {..., shell: $SV, ...})
+                  - metavariable-regex:
+                      metavariable: $SV
+                      regex: '^(true|["''`].+["''`])$'
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(spawn|spawnSync|execFile|execFileSync)$'
+              - patterns:
+                  - pattern: $F($SH, [..., $FLAG, $X, ...], ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(spawn|spawnSync|execFile|execFileSync)$'
+                  - metavariable-regex:
+                      metavariable: $SH
+                      regex: '^(["''](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["'']|process\.execPath)$'
+                  - metavariable-regex:
+                      metavariable: $FLAG
+                      regex: '^["''](-c|-e|--eval|-Command|-r)["'']$'
+          - pattern-either:
+              - pattern-inside: |
+                  import { $F } from "child_process";
+                  ...
+              - pattern-inside: |
+                  import { $F } from "node:child_process";
+                  ...
+              - pattern-inside: |
+                  import { $F } from "shelljs";
+                  ...
+          - focus-metavariable: $X
+      # called under another name after an aliased import: import { exec as run } from "child_process"
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern: $K($X, ...)
+              - patterns:
+                  - pattern: |
+                      $K($C, $X, {..., shell: $SV, ...})
+                  - metavariable-regex:
+                      metavariable: $SV
+                      regex: '^(true|["''`].+["''`])$'
+              - patterns:
+                  - pattern: $K($SH, [..., $FLAG, $X, ...], ...)
+                  - metavariable-regex:
+                      metavariable: $SH
+                      regex: '^(["''](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["'']|process\.execPath)$'
+                  - metavariable-regex:
+                      metavariable: $FLAG
+                      regex: '^["''](-c|-e|--eval|-Command|-r)["'']$'
+          - pattern-either:
+              - pattern-inside: |
+                  import { $O as $K } from "child_process";
+                  ...
+              - pattern-inside: |
+                  import { $O as $K } from "node:child_process";
+                  ...
+              - pattern-inside: |
+                  import { $O as $K } from "shelljs";
+                  ...
           - metavariable-regex:
-              metavariable: $CP
-              regex: '^(child_process|cp|childProcess|cproc|proc)$'
-          - metavariable-regex:
-              metavariable: $F
+              metavariable: $O
               regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
           - focus-metavariable: $X
+      # a function taken off the module and bound to any name: const run = require("child_process").execSync
       - patterns:
-          - pattern: $F($X, ...)
+          - pattern-either:
+              - patterns:
+                  - pattern: $K($X, ...)
+              - patterns:
+                  - pattern: |
+                      $K($C, $X, {..., shell: $SV, ...})
+                  - metavariable-regex:
+                      metavariable: $SV
+                      regex: '^(true|["''`].+["''`])$'
+              - patterns:
+                  - pattern: $K($SH, [..., $FLAG, $X, ...], ...)
+                  - metavariable-regex:
+                      metavariable: $SH
+                      regex: '^(["''](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["'']|process\.execPath)$'
+                  - metavariable-regex:
+                      metavariable: $FLAG
+                      regex: '^["''](-c|-e|--eval|-Command|-r)["'']$'
+          - pattern-either:
+              - pattern-inside: |
+                  $K = require("child_process").$O;
+                  ...
+              - pattern-inside: |
+                  $K = require("node:child_process").$O;
+                  ...
+              - pattern-inside: |
+                  $K = require("shelljs").$O;
+                  ...
           - metavariable-regex:
-              metavariable: $F
-              regex: '^(spawn|spawnSync|execFile|execFileSync)$'
+              metavariable: $O
+              regex: '^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$'
           - focus-metavariable: $X
+      # called straight on the module, no binding in between: require("child_process").exec(cmd).
+      # Literal module and method names and "=~/regex/" string patterns on purpose: a metavariable-regex on a
+      # sink that has no binding to look for makes the scan 2x slower.
       - patterns:
-          - pattern: |
-              $F($C, $ARGS, {..., shell: true, ...})
-          - metavariable-regex:
-              metavariable: $F
-              regex: '(^|\.)(spawn|spawnSync|execFile|execFileSync)$'
-          - focus-metavariable: $ARGS
-      - patterns:
-          - pattern: $F($SH, [..., "-c", $X, ...], ...)
-          - metavariable-regex:
-              metavariable: $F
-              regex: '(^|\.)(spawn|spawnSync|execFile|execFileSync)$'
-          - metavariable-regex:
-              metavariable: $SH
-              regex: '^["''](/bin/|/usr/bin/)?(ba|z|da)?sh["'']$'
+          - pattern-either:
+              - pattern: require("child_process").exec($X, ...)
+              - pattern: require("child_process").execSync($X, ...)
+              - pattern: require("child_process").spawn($X, ...)
+              - pattern: require("child_process").spawnSync($X, ...)
+              - pattern: require("child_process").execFile($X, ...)
+              - pattern: require("child_process").execFileSync($X, ...)
+              - pattern: require("node:child_process").exec($X, ...)
+              - pattern: require("node:child_process").execSync($X, ...)
+              - pattern: require("node:child_process").spawn($X, ...)
+              - pattern: require("node:child_process").spawnSync($X, ...)
+              - pattern: require("node:child_process").execFile($X, ...)
+              - pattern: require("node:child_process").execFileSync($X, ...)
+              - pattern: require("shelljs").exec($X, ...)
+              - pattern: |
+                  require("child_process").spawn($C, $X, {..., shell: true, ...})
+              - pattern: |
+                  require("child_process").spawn($C, $X, {..., shell: "=~/.+/", ...})
+              - pattern: |
+                  require("child_process").spawnSync($C, $X, {..., shell: true, ...})
+              - pattern: |
+                  require("child_process").spawnSync($C, $X, {..., shell: "=~/.+/", ...})
+              - pattern: |
+                  require("child_process").execFile($C, $X, {..., shell: true, ...})
+              - pattern: |
+                  require("child_process").execFile($C, $X, {..., shell: "=~/.+/", ...})
+              - pattern: |
+                  require("child_process").execFileSync($C, $X, {..., shell: true, ...})
+              - pattern: |
+                  require("child_process").execFileSync($C, $X, {..., shell: "=~/.+/", ...})
+              - pattern: |
+                  require("node:child_process").spawn($C, $X, {..., shell: true, ...})
+              - pattern: |
+                  require("node:child_process").spawn($C, $X, {..., shell: "=~/.+/", ...})
+              - pattern: |
+                  require("node:child_process").spawnSync($C, $X, {..., shell: true, ...})
+              - pattern: |
+                  require("node:child_process").spawnSync($C, $X, {..., shell: "=~/.+/", ...})
+              - pattern: |
+                  require("node:child_process").execFile($C, $X, {..., shell: true, ...})
+              - pattern: |
+                  require("node:child_process").execFile($C, $X, {..., shell: "=~/.+/", ...})
+              - pattern: |
+                  require("node:child_process").execFileSync($C, $X, {..., shell: true, ...})
+              - pattern: |
+                  require("node:child_process").execFileSync($C, $X, {..., shell: "=~/.+/", ...})
+              - pattern: require("child_process").spawn("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("child_process").spawn(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("child_process").spawnSync("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("child_process").spawnSync(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("child_process").execFile("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("child_process").execFile(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("child_process").execFileSync("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("child_process").execFileSync(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("node:child_process").spawn("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("node:child_process").spawn(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("node:child_process").spawnSync("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("node:child_process").spawnSync(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("node:child_process").execFile("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("node:child_process").execFile(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("node:child_process").execFileSync("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+              - pattern: require("node:child_process").execFileSync(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
           - focus-metavariable: $X

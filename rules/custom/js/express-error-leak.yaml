@@ -4,7 +4,7 @@ rules:
   - javascript
   - typescript
   severity: ERROR
-  message: An error object, its stack or its message is written straight into the HTTP response. Stack traces and internal messages reveal file paths, queries and library versions that help an attacker. Log details on the server and return a generic message. (Fastify's reply.send(err) is not flagged because Fastify serializes errors without the stack.)
+  message: An error object, its stack or its message is written straight into the HTTP response. Stack traces and internal messages reveal file paths, queries and library versions that help an attacker. Log details on the server and return a generic message. (reply.send(err) inside a route registered on a Fastify instance is not flagged because Fastify serializes errors without the stack.)
   metadata:
     sast_severity: high
     confidence: medium
@@ -16,7 +16,27 @@ rules:
     - https://owasp.org/Top10/A05_2021-Security_Misconfiguration/
   patterns:
   - pattern-either:
-    - pattern: $R.$M($E)
+    - patterns:
+      - pattern: $R.$M($E)
+      # Fastify serializes a bare error without its stack, so a handler registered on a Fastify instance is exempt.
+      # Only a sink nested in a callback (or route object) passed to a call on a Fastify instance created in this file
+      # is exempt; code that merely sits between the instance and a later call on it is not.
+      - pattern-not-inside: fastify.$V(...)
+      - pattern-not-inside:
+          patterns:
+          - pattern-either:
+            - pattern: $S.$V(..., function (...) {...}, ...)
+            - pattern: $S.$V({...}, ...)
+          - pattern-either:
+            - pattern-inside: |
+                $S = Fastify(...);
+                ...
+            - pattern-inside: |
+                $S = fastify(...);
+                ...
+            - pattern-inside: |
+                $S = require("fastify")(...);
+                ...
     - pattern: $R.$M($E.stack)
     - pattern: $R.$M($E.message)
     - pattern: '$R.$M({..., $K: $E, ...})
@@ -28,8 +48,6 @@ rules:
     - pattern: '$R.$M({..., $K: $E.message, ...})
 
         '
-  - pattern-not: reply.send($E)
-  - pattern-not: reply.$C(...).send($E)
   - metavariable-regex:
       metavariable: $R
       regex: ^(res|response|reply|resp)(\.(status|type|code|set|header|contentType)\([^()]*\))*$

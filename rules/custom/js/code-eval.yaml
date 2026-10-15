@@ -63,6 +63,48 @@ rules:
       - pattern: $U.searchParams.get(...)
       - pattern: location.search
       - pattern: location.hash
+      # a handler defined by name and registered on a route elsewhere in the file: function run(r, res) {...}; app.post('/x', run)
+      # (the engine treats arrow functions, function expressions and async functions assigned to a name as the same definition)
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+              - pattern: $REQ.headers
+              - pattern: $REQ.cookies
+              - pattern: $REQ.url
+              - pattern: $REQ.originalUrl
+              - pattern: $REQ.path
+              - pattern: $REQ.get(...)
+              - pattern: $REQ.header(...)
+          - pattern-either:
+              - pattern-inside: |
+                  function $F($REQ, ...) { ... }
+                  ...
+                  $APP.$M(..., $F)
+              - pattern-inside: |
+                  $APP.$M(..., $F)
+                  ...
+                  function $F($REQ, ...) { ... }
+              # Semgrep CE does not treat these as function definitions (Opengrep does), so spell them out
+              - pattern-inside: |
+                  const $F = ($REQ, ...) => { ... }
+                  ...
+                  $APP.$M(..., $F)
+              - pattern-inside: |
+                  const $F = async ($REQ, ...) => { ... }
+                  ...
+                  $APP.$M(..., $F)
+              - pattern-inside: |
+                  const $F = function ($REQ, ...) { ... }
+                  ...
+                  $APP.$M(..., $F)
+          - metavariable-regex:
+              metavariable: $M
+              regex: '^(get|post|put|patch|delete|all|use|head|options)$'
+          - metavariable-regex:
+              metavariable: $APP
+              regex: '(?i)^(app|server|.*router)$'
     pattern-sanitizers:
       - pattern: Number(...)
       - pattern: parseInt(...)
@@ -74,30 +116,96 @@ rules:
       - patterns:
           - pattern: new Function(..., $X)
           - focus-metavariable: $X
+      # vm used as a module object: the name must come from require("vm") or an import of vm / node:vm
       - patterns:
-          - pattern: $VM.$M($X, ...)
-          - metavariable-regex:
-              metavariable: $M
-              regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction)$'
-          - metavariable-regex:
-              metavariable: $VM
-              regex: '^(vm|node_vm)$'
+          - pattern-either:
+              - patterns:
+                  - pattern: $VM.$M($X, ...)
+                  - metavariable-regex:
+                      metavariable: $M
+                      regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction)$'
+              - pattern: new $VM.Script($X, ...)
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $VM = require($MOD);
+                      ...
+                  - metavariable-regex:
+                      metavariable: $MOD
+                      regex: '^["'']((node:)?vm)["'']$'
+              - pattern-inside: |
+                  import $VM from "vm";
+                  ...
+              - pattern-inside: |
+                  import $VM from "node:vm";
+                  ...
+              - pattern-inside: |
+                  import * as $VM from "vm";
+                  ...
+              - pattern-inside: |
+                  import * as $VM from "node:vm";
+                  ...
           - focus-metavariable: $X
+      # vm functions imported by name: const { runInNewContext } = require("vm") reads as the same import
       - patterns:
-          - pattern: runInNewContext($X, ...)
-          - focus-metavariable: $X
-      - patterns:
-          - pattern: runInThisContext($X, ...)
-          - focus-metavariable: $X
-      - patterns:
-          - pattern: new vm.Script($X, ...)
-          - focus-metavariable: $X
-      - patterns:
-          - pattern: new Script($X, ...)
+          - pattern-either:
+              - patterns:
+                  - pattern: $F($X, ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction)$'
+                  - pattern-either:
+                      - pattern-inside: |
+                          import { $F } from "vm";
+                          ...
+                      - pattern-inside: |
+                          import { $F } from "node:vm";
+                          ...
+              - patterns:
+                  - pattern: new Script($X, ...)
+                  - pattern-either:
+                      - pattern-inside: |
+                          import { Script } from "vm";
+                          ...
+                      - pattern-inside: |
+                          import { Script } from "node:vm";
+                          ...
           - focus-metavariable: $X
       - patterns:
           - pattern: $T($X, ...)
           - metavariable-regex:
               metavariable: $T
               regex: '^(setTimeout|setInterval|window\.setTimeout|window\.setInterval|globalThis\.setTimeout|globalThis\.setInterval)$'
+          - focus-metavariable: $X
+      # vm functions imported under another name: import { runInNewContext as run } from "vm"
+      - patterns:
+          - pattern-either:
+              - pattern: $K($X, ...)
+              - pattern: new $K($X, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  import { $O as $K } from "vm";
+                  ...
+              - pattern-inside: |
+                  import { $O as $K } from "node:vm";
+                  ...
+          - metavariable-regex:
+              metavariable: $O
+              regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction|Script)$'
+          - focus-metavariable: $X
+      # vm functions taken off a require and bound to any name: const run = require("vm").runInThisContext
+      - patterns:
+          - pattern-either:
+              - pattern: $K($X, ...)
+              - pattern: new $K($X, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  $K = require("vm").$O;
+                  ...
+              - pattern-inside: |
+                  $K = require("node:vm").$O;
+                  ...
+          - metavariable-regex:
+              metavariable: $O
+              regex: '^(runInNewContext|runInThisContext|runInContext|compileFunction|Script)$'
           - focus-metavariable: $X

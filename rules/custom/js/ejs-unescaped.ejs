@@ -28,5 +28,143 @@
   <div><%- sanitize(user.bio) %></div>
   <!-- ok: sast.js.ejs-unescaped -->
   <% items.forEach(function (i) { %><li><%= i %></li><% }) %>
+
+  <% var logo = '<b>Acme</b>'; %>
+  <% const tagline = "Fast <i>safe</i>"; %>
+  <% let nav = include('partials/nav'); %>
+  <% const foot = include("partials/foot"); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- logo %></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- tagline %></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%-nav%></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- foot %></div>
+
+  <% var greeting = "Hi " + user.name; %>
+  <% var fromQuery = req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- greeting %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- fromQuery %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- logo + user.bio %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%-notDeclared%></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- unknownName -%></div>
+  <% var banner = '<b>x</b>'; %>
+  <% banner = req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- banner %></div>
+
+  <% var crest = "<i>c</i>"; %>
+  <p>text between</p>
+  <% crest = user.crest; %>
+  <p>more text</p>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- crest %></div>
+
+  <% var badge = '<b>1</b>'; %>
+  <% badge = '<b>2</b>'; %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- badge %></div>
+  <% var seal = '<b>s</b>'; %>
+  <% seal = req.query.s; %>
+  <% seal = '<b>safe again</b>'; %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- seal %></div>
+
+  <% var tag = '<b>t</b>'; %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- tag %></div>
+  <% tag = req.query.t; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- tag %></div>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%-tag-%></div>
+
+  <% let partial = include('partials/a'); %>
+  <% partial = user.partial; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- partial %></div>
+  <% var mark = '<b>m</b>'; %>
+  <% var mark2 = "<b>m2</b>"; %>
+  <% var part = include('partials/p'); %>
+  <% var part2 = include("partials/p2"); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- mark -%></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- mark2 -%></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%-part-%></div>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- part2 -%></div>
+
+  <% var lead = "safe"; %>
+  <% lead = "Hi " + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead %></div>
+  <% var lead2 = 'safe'; %>
+  <% lead2 = 'Hi ' + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead2 -%></div>
+  <% var lead3 = include('partials/a'); %>
+  <% lead3 = include('partials/a') + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead3 %></div>
+  <% var lead4 = "safe"; %>
+  <% lead4 = "a" + req.query.q + "b"; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead4 %></div>
+  <% var lead5 = include('partials/a'); %>
+  <% lead5 = include('partials/a', { u: 1 }) + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead5 %></div>
+  <% var lead6 = include('partials/a'); %>
+  <% lead6 = include(req.query.p); %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- lead6 %></div>
+  <% var okinc = include('partials/a'); %>
+  <% okinc = include('partials/b', { user: 1 }); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- okinc %></div>
+
+  <!-- include() with a literal path renders a partial that escapes its own output: its locals do not matter (PR #11 review 3) -->
+  <% var incA = include('partials/a', user.data); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incA %></div>
+  <% var incB = include("partials/b", { u: user.id, n: fmt(user.name) }); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incB -%></div>
+  <% var incC = include('partials/c', fmt(clean(user.data))); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incC %></div>
+  <% var incI = include('partials/i', user.data); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incI -%></div>
+  <% var incJ = include("partials/j", user.data); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incJ %></div>
+  <% var incD = include('partials/a'); %>
+  <% incD = include('partials/d', user.data); %>
+  <!-- ok: sast.js.ejs-unescaped -->
+  <div><%- incD %></div>
+  <% var incE = include('partials/e'); %>
+  <% incE = include('partials/e', user.data) + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- incE %></div>
+  <% var incF = include('partials/f'); %>
+  <% incF = include('partials/f', user.data) + fmt(req.query.q); %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- incF %></div>
+  <% var incG = include('partials/g'); %>
+  <% incG = include(req.query.p, user.data); %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- incG %></div>
+  <% let incH = include('partials/h', user.data) + req.query.q; %>
+  <!-- ruleid: sast.js.ejs-unescaped -->
+  <div><%- incH %></div>
 </body>
 </html>

@@ -15,14 +15,48 @@ rules:
         - https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/
     patterns:
       - pattern-either:
+          # the loader must come from the js-yaml package (require or import), not any object with a load() method
           - patterns:
               - pattern-either:
+                  - patterns:
+                      - pattern-either:
+                          - pattern: |
+                              $L.$FN($S, {..., schema: $SC, ...}, ...)
+                          - pattern: |
+                              $L.$FN($S, $O, {..., schema: $SC, ...}, ...)
+                      - pattern-either:
+                          - pattern-inside: |
+                              $L = require("js-yaml");
+                              ...
+                          - pattern-inside: |
+                              import $L from "js-yaml";
+                              ...
+                          - pattern-inside: |
+                              import * as $L from "js-yaml";
+                              ...
                   - pattern: |
-                      $FN($S, {..., schema: $SC, ...}, ...)
+                      require("js-yaml").$FN($S, {..., schema: $SC, ...}, ...)
                   - pattern: |
-                      $L.$FN($S, {..., schema: $SC, ...}, ...)
-                  - pattern: |
-                      $L.$FN($S, $O, {..., schema: $SC, ...}, ...)
+                      require("js-yaml").$FN($S, $O, {..., schema: $SC, ...}, ...)
+                  - patterns:
+                      - pattern-either:
+                          - pattern: |
+                              $FN($S, {..., schema: $SC, ...}, ...)
+                          - pattern: |
+                              $FN($S, $O, {..., schema: $SC, ...}, ...)
+                      - pattern-inside: |
+                          import { $FN } from "js-yaml";
+                          ...
+                  # the engine reads const { load: $K } = require("js-yaml") as the same import
+                  - patterns:
+                      - pattern-either:
+                          - pattern: |
+                              $K($S, {..., schema: $SC, ...}, ...)
+                          - pattern: |
+                              $K($S, $O, {..., schema: $SC, ...}, ...)
+                      - pattern-inside: |
+                          import { $FN as $K } from "js-yaml";
+                          ...
               - metavariable-regex:
                   metavariable: $FN
                   regex: '^(load|loadAll|safeLoad|safeLoadAll)$'

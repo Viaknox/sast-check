@@ -2,9 +2,9 @@
  "date": "2026-10-13",
  "engine": "opengrep 1.30.2",
  "total": {
-  "killed": 345,
-  "survived": 1082,
-  "score": 0.24
+  "killed": 700,
+  "survived": 1011,
+  "score": 0.41
  },
  "rules": {
   "docker/remote-fetch-no-checksum.yaml": {
@@ -38,40 +38,40 @@
    "score": 0.62
   },
   "js/code-eval.yaml": {
-   "killed": 11,
-   "survived": 56,
-   "invalid": 8,
-   "score": 0.16
+   "killed": 60,
+   "survived": 50,
+   "invalid": 6,
+   "score": 0.55
   },
   "js/command-injection.yaml": {
-   "killed": 15,
-   "survived": 55,
-   "invalid": 6,
-   "score": 0.21
+   "killed": 48,
+   "survived": 46,
+   "invalid": 11,
+   "score": 0.51
   },
   "js/dom-xss-sink.yaml": {
-   "killed": 11,
-   "survived": 29,
+   "killed": 15,
+   "survived": 27,
    "invalid": 6,
-   "score": 0.28
+   "score": 0.36
   },
   "js/ejs-unescaped.yaml": {
-   "killed": 0,
+   "killed": 9,
    "survived": 0,
-   "invalid": 0,
-   "score": null
+   "invalid": 1,
+   "score": 1.0
   },
   "js/electron-node-integration.yaml": {
-   "killed": 9,
-   "survived": 16,
+   "killed": 18,
+   "survived": 0,
    "invalid": 0,
-   "score": 0.36
+   "score": 1.0
   },
   "js/express-error-leak.yaml": {
-   "killed": 8,
-   "survived": 14,
-   "invalid": 1,
-   "score": 0.36
+   "killed": 17,
+   "survived": 7,
+   "invalid": 2,
+   "score": 0.71
   },
   "js/express-no-helmet.yaml": {
    "killed": 2,
@@ -128,16 +128,16 @@
    "score": 0.67
   },
   "js/ldap-dn-injection.yaml": {
-   "killed": 6,
-   "survived": 50,
-   "invalid": 2,
-   "score": 0.11
+   "killed": 57,
+   "survived": 45,
+   "invalid": 5,
+   "score": 0.56
   },
   "js/ldap-injection.yaml": {
-   "killed": 5,
-   "survived": 54,
-   "invalid": 3,
-   "score": 0.08
+   "killed": 62,
+   "survived": 45,
+   "invalid": 6,
+   "score": 0.58
   },
   "js/libxml-noent.yaml": {
    "killed": 2,
@@ -146,10 +146,10 @@
    "score": 0.67
   },
   "js/location-xss.yaml": {
-   "killed": 18,
-   "survived": 32,
-   "invalid": 3,
-   "score": 0.36
+   "killed": 33,
+   "survived": 34,
+   "invalid": 5,
+   "score": 0.49
   },
   "js/nosql-injection.yaml": {
    "killed": 13,
@@ -164,16 +164,16 @@
    "score": 1.0
   },
   "js/open-redirect.yaml": {
-   "killed": 15,
+   "killed": 27,
    "survived": 61,
-   "invalid": 9,
-   "score": 0.2
+   "invalid": 11,
+   "score": 0.31
   },
   "js/path-traversal.yaml": {
-   "killed": 8,
+   "killed": 30,
    "survived": 54,
-   "invalid": 3,
-   "score": 0.13
+   "invalid": 4,
+   "score": 0.36
   },
   "js/prototype-pollution.yaml": {
    "killed": 15,
@@ -182,10 +182,10 @@
    "score": 0.23
   },
   "js/puppeteer-ssrf.yaml": {
-   "killed": 9,
-   "survived": 56,
-   "invalid": 4,
-   "score": 0.14
+   "killed": 18,
+   "survived": 52,
+   "invalid": 3,
+   "score": 0.26
   },
   "js/react-dangerous-html.yaml": {
    "killed": 4,
@@ -230,10 +230,10 @@
    "score": 0.36
   },
   "js/unsafe-yaml-load.yaml": {
-   "killed": 6,
-   "survived": 3,
+   "killed": 21,
+   "survived": 1,
    "invalid": 3,
-   "score": 0.67
+   "score": 0.95
   },
   "js/vite-define-process-env.yaml": {
    "killed": 3,
@@ -242,10 +242,10 @@
    "score": 0.75
   },
   "js/vite-loadenv-all-vars.yaml": {
-   "killed": 4,
+   "killed": 13,
    "survived": 3,
    "invalid": 1,
-   "score": 0.57
+   "score": 0.81
   },
   "js/vue-dynamic-href.yaml": {
    "killed": 0,
@@ -266,16 +266,16 @@
    "score": 0.6
   },
   "k8s/ingress-nginx-vulnerable.yaml": {
-   "killed": 4,
-   "survived": 1,
+   "killed": 5,
+   "survived": 0,
    "invalid": 0,
-   "score": 0.8
+   "score": 1.0
   },
   "python/django-httpresponse-xss.yaml": {
-   "killed": 11,
-   "survived": 24,
-   "invalid": 4,
-   "score": 0.31
+   "killed": 31,
+   "survived": 19,
+   "invalid": 7,
+   "score": 0.62
   },
   "python/httpx-verify-false.yaml": {
    "killed": 5,
@@ -290,10 +290,10 @@
    "score": 0.25
   },
   "python/jwt-unverified.yaml": {
-   "killed": 3,
+   "killed": 9,
    "survived": 2,
    "invalid": 0,
-   "score": 0.6
+   "score": 0.82
   },
   "python/langchain-hub-unpinned.yaml": {
    "killed": 1,
@@ -302,16 +302,16 @@
    "score": 0.2
   },
   "python/path-traversal.yaml": {
-   "killed": 13,
-   "survived": 31,
-   "invalid": 3,
-   "score": 0.3
+   "killed": 19,
+   "survived": 30,
+   "invalid": 4,
+   "score": 0.39
   },
   "python/requests-cleartext.yaml": {
-   "killed": 5,
-   "survived": 3,
-   "invalid": 1,
-   "score": 0.62
+   "killed": 8,
+   "survived": 2,
+   "invalid": 2,
+   "score": 0.8
   },
   "python/ssrf.yaml": {
    "killed": 13,
@@ -326,10 +326,10 @@
    "score": 0.5
   },
   "terraform/aws-ami-no-owner.yaml": {
-   "killed": 7,
-   "survived": 5,
-   "invalid": 1,
-   "score": 0.58
+   "killed": 19,
+   "survived": 0,
+   "invalid": 3,
+   "score": 1.0
   },
   "web/inline-script-dom-xss.yaml": {
    "killed": 3,
@@ -338,10 +338,10 @@
    "score": 1.0
   },
   "web/malicious-cdn-domain.yaml": {
-   "killed": 0,
+   "killed": 4,
    "survived": 0,
    "invalid": 0,
-   "score": null
+   "score": 1.0
   }
  }
 }
