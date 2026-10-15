@@ -1,7 +1,7 @@
 # Learner rules (P3): from review patterns to custom rules
 
 `tools/learner_rules.py` reads `patterns.json` from the quality-gate learner (`learner-patterns/v1`) and, for each
-pattern with at least 3 hits, asks a cheap model on OpenRouter (default `qwen/qwen3-coder-30b-a3b-instruct`,
+pattern with at least 3 hits and at least 3 distinct examples (so one can be held out), asks a cheap model on OpenRouter (default `qwen/qwen3-coder-30b-a3b-instruct`,
 override with `--model` or `LEARNER_MODEL`) for a rule and a synthetic fixture. The key comes from
 `OPENROUTER_API_KEY` and is never printed. The pattern's examples are sent to OpenRouter.
 
@@ -33,7 +33,13 @@ to `rules/custom/`; the reason is printed and written to `--report`.
 
 - `rules/custom/<area>/<pattern id>.yaml` (rule id `sast.<area>.<pattern id>`) and its fixture. The id is permanent
   once merged: a pattern whose rule id is already shipped or retired is skipped.
-- `metadata.cwe` from the pattern, `metadata.learner_pattern_id` = the pattern id, `confidence: medium`.
+- `metadata.cwe` from the pattern. When the pattern's `cwe` is null (P2 sets one only when a scanner tagged the
+  finding), the model proposes it with the rule; it must be `CWE-<n>`, and the PR marks it "drafted: check it".
+  A CWE the pattern gives always wins over the model's.
+- `metadata.learner_pattern_id` = the pattern id, `confidence: medium`.
+- The PR lists each rule's source orgs (from the pattern's `repos`). A rule from outside SathiaAI, or from unknown
+  repos, is listed under "Owner approval needed": the learning boundaries in quality-gate's `learner/DATA_DICTIONARY.md`
+  require the owner's approval on the PR for cross-org use.
 - Severity from `impact_band`: critical and high are `ERROR` (blocking under `block_on`; the default blocks
   critical only), medium is `WARNING`, low is `INFO`.
 - `--open-pr` commits only those files and `dist/` on `learner/rules-<date>` and opens one PR. It stops if the

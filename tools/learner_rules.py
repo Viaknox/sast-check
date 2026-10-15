@@ -10,6 +10,8 @@ fixture. The draft is accepted only if, with every engine CI uses:
     example line (examples may come from private repositories; fixtures must be new, synthetic code),
   - tools/rule_mutation.py finds no surviving mutant (every pattern element is exercised by the fixture).
 Anything else is discarded, with the reason in the run report; a rejected draft is never written to rules/custom.
+A pattern with `cwe: null` (P2 sets a CWE only when a scanner tagged the finding) gets the CWE the model proposes
+with the rule; a CWE the pattern gives always wins. Either way it must be CWE-<n>.
 Accepted rules go to rules/custom/<area>/lp-....yaml with metadata.cwe and metadata.learner_pattern_id, then
 scripts/build_rules.py rebuilds dist/ and checks the rule-ID lock. With --open-pr the result becomes one pull
 request for a human to review and merge. This tool never merges and never enables auto-merge.
@@ -39,6 +41,8 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = "learner-patterns/v1"
 MIN_HITS = 3
+HOME_ORG = "SathiaAI"   # owner of this repo; a rule from another org's code needs the owner's recorded approval
+MIN_EXAMPLES = 3   # distinct examples: fewer leaves no held-out example, so the rule would be untested on unseen code
 DEFAULT_MODEL = "qwen/qwen3-coder-30b-a3b-instruct"   # cheap, non-frontier coding model; override with --model
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 ENGINE_TIMEOUT = 600
@@ -82,14 +86,16 @@ def check_pattern(p) -> str:
     """Why this pattern cannot become a rule ("" when it can)."""
     if not isinstance(p, dict):
         return "malformed pattern: not an object"
-    for k, t in (("id", str), ("stack", str), ("cwe", str), ("hits", int), ("impact_band", str),
+    for k, t in (("id", str), ("stack", str), ("hits", int), ("impact_band", str),
                  ("summary", str), ("examples", list)):
         if not isinstance(p.get(k), t) or isinstance(p.get(k), bool):
             return f"malformed pattern: {k} missing or not a {t.__name__}"
-    if not PATTERN_ID.match(p["id"]):
+    if not PATTERN_ID.fullmatch(p["id"]):
         return "pattern id is not of the form lp-<lowercase letters, digits, dashes>"
-    if not CWE.match(p["cwe"]):
-        return f"cwe {p['cwe']!r} is not CWE-<n>"
+    if "cwe" not in p:
+        return "malformed pattern: cwe missing (it may be null, but the key must be there)"
+    if p["cwe"] is not None and not (isinstance(p["cwe"], str) and CWE.fullmatch(p["cwe"])):
+        return f"cwe {p.get('cwe')!r} is not CWE-<n> or null"
     if p["impact_band"] not in SEVERITY:
         return f"impact_band {p['impact_band']!r} is not one of {sorted(SEVERITY)}"
     if p["stack"] not in STACKS:
@@ -100,8 +106,18 @@ def check_pattern(p) -> str:
     return ""
 
 
+def source_orgs(p: dict) -> list[str]:
+    """The GitHub orgs of the repos a pattern was seen in ("unknown" when P2 gives none, so it is never taken as ours)."""
+    return sorted({r.split("/", 1)[0] for r in p.get("repos") or [] if isinstance(r, str) and "/" in r}) or ["unknown"]
+
+
 def split_examples(examples: list[dict]) -> tuple[list[dict], list[dict]]:
-    """(examples shown to the model, held-out examples it never sees): every third example is held out."""
+    """(examples shown to the model, held-out examples it never sees): every third example is held out.
+    Repeats (the same before/after, e.g. two review tools on one line) are dropped first, so a held-out example
+    is never also shown to the model."""
+    seen: set = set()
+    examples = [e for e in examples
+                if not ((k := (" ".join(e["before"].split()), " ".join(e["after"].split()))) in seen or seen.add(k))]
     return ([e for i, e in enumerate(examples) if i % 3 != 2], [e for i, e in enumerate(examples) if i % 3 == 2])
 
 
@@ -119,12 +135,14 @@ def clean_files(repo: Path, exts: tuple[str, ...]) -> list[Path]:
 def prompt(p: dict, train: list[dict], rule_id: str, ext: str, feedback: str) -> str:
     """The drafting request. Held-out examples are never part of it."""
     c = COMMENT[ext]
+    cwe_field = "" if p["cwe"] else '\n- "cwe": the CWE id that fits this weakness best, as CWE-<n>.'
     ex = "\n\n".join(f"### Example {i + 1}\nVulnerable (before):\n```\n{e['before']}\n```\nFixed (after):\n```\n{e['after']}\n```"
                      for i, e in enumerate(train))
     return f"""Write one Opengrep/Semgrep rule (language: {p['stack']}) for this recurring weakness.
 
 Weakness: {p['summary']}
-CWE: {p['cwe']}
+Kind of mistake: {p.get('pattern', 'unknown')}
+CWE: {p['cwe'] or 'not known: propose the one CWE that fits best, in the "cwe" field'}
 Rule id: {rule_id}
 
 {ex}
@@ -135,7 +153,7 @@ Reply with ONE JSON object and nothing else, with these string fields:
   focus-metavariable). No id, languages, severity, message, metadata, paths or options.
   It must match every vulnerable example, none of the fixed ones, and not ordinary safe code.
 - "message": one or two plain English sentences: what is wrong, why it matters, how to fix it.
-- "fix": one short concrete fix.
+- "fix": one short concrete fix.{cwe_field}
 - "fixture": a NEW synthetic {p['stack']} test file. Do not reuse lines from the examples. Put the comment
   `{c} ruleid: {rule_id}` on the line before each line the rule must flag (at least 3), and `{c} ok: {rule_id}`
   on the line before each safe look-alike it must not flag (at least 3). Every element of the rule (each
@@ -202,10 +220,13 @@ def build_rule(p: dict, d: dict, rule_id: str) -> tuple[str, str]:
                               or set(body) - taint):
         raise Reject("draft rule: a taint rule needs mode: taint, pattern-sources and pattern-sinks, and nothing else")
     _, langs, _, _ = STACKS[p["stack"]]
-    n = p["cwe"].split("-", 1)[1]
+    cwe = p["cwe"] or d.get("cwe")   # the pattern's CWE wins; the model's is used only when the pattern has none
+    if not (isinstance(cwe, str) and CWE.fullmatch(cwe)):
+        raise Reject(f"draft gives no CWE of the form CWE-<n> (got {cwe!r})")
+    n = cwe.split("-", 1)[1]
     rule = {"id": rule_id, "languages": langs, "severity": SEVERITY[p["impact_band"]],
             "message": " ".join(d["message"].split()),
-            "metadata": {"sast_severity": p["impact_band"], "confidence": "medium", "cwe": p["cwe"],
+            "metadata": {"sast_severity": p["impact_band"], "confidence": "medium", "cwe": cwe,
                          "category": "security", "fix": " ".join(d["fix"].split()),
                          "learner_pattern_id": p["id"],
                          "references": [f"https://cwe.mitre.org/data/definitions/{n}.html"]},
@@ -350,11 +371,15 @@ def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int =
                 report["skipped"].append({"id": pid, "reason": f"{rule_id} already exists, was shipped or retired"})
                 continue
             seen.add(rule_id)
+            train, held = split_examples(p["examples"])
+            if len(train) + len(held) < MIN_EXAMPLES:
+                report["skipped"].append({"id": pid, "reason": f"needs {MIN_EXAMPLES}+ distinct examples so one can be "
+                                                               f"held out (has {len(train) + len(held)})"})
+                continue
             if not clean_files(repo, exts):
                 report["rejected"].append({"id": pid, "reason": f"no {p['stack']} code in this repo to prove the rule "
                                                                 "stays silent on clean code"})
                 continue
-            train, held = split_examples(p["examples"])
             feedback, reason = "", ""
             for attempt in range(1, attempts + 1):
                 work = Path(td) / f"{p['id']}-{attempt}"
@@ -371,7 +396,9 @@ def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int =
                 dest.mkdir(parents=True, exist_ok=True)
                 (dest / f"{p['id']}.yaml").write_text(rule_text)
                 (dest / f"{p['id']}{ext}").write_text(fixture)
-                report["accepted"].append({"id": pid, "rule_id": rule_id, "cwe": p["cwe"], "hits": p["hits"],
+                report["accepted"].append({"id": pid, "rule_id": rule_id, "hits": p["hits"],
+                                           "cwe": yaml.safe_load(rule_text)["rules"][0]["metadata"]["cwe"],
+                                           "cwe_source": "pattern" if p["cwe"] else "drafted", "orgs": source_orgs(p),
                                            "severity": p["impact_band"], "blocking": SEVERITY[p["impact_band"]] == "ERROR",
                                            "held_out": len(held), "attempts": attempt,
                                            "files": [f"rules/custom/{area}/{p['id']}.yaml",
@@ -401,9 +428,18 @@ def pr_body(report: dict, model: str) -> str:
            f"Model: `{model}` (OpenRouter). Each rule matched every vulnerable example including held-out ones, "
            "none of the fixed examples, nothing in this repo's own code, passed its synthetic fixture with "
            "Opengrep and Semgrep, and had no surviving mutant. **A human reviews and merges; nothing here auto-merges.**",
-           "", "## Accepted", "", "| rule | CWE | hits | severity | blocking |", "|---|---|---|---|---|"]
-    out += [f"| `{a['rule_id']}` | {a['cwe']} | {a['hits']} | {a['severity']} | {'yes' if a['blocking'] else 'warning'} |"
+           "", "## Accepted", "", "| rule | CWE | hits | severity | blocking | source orgs |", "|---|---|---|---|---|---|"]
+    out += [f"| `{a['rule_id']}` | {a['cwe']}{' (drafted: check it)' if a.get('cwe_source') == 'drafted' else ''} "
+            f"| {a['hits']} | {a['severity']} | {'yes' if a['blocking'] else 'warning'} "
+            f"| {', '.join(a.get('orgs', ['unknown']))} |"
             for a in report["accepted"]]
+    cross = [a for a in report["accepted"] if set(a.get("orgs", ["unknown"])) - {HOME_ORG}]
+    if cross:
+        out += ["", "## Owner approval needed: rules from another org's code", "",
+                f"These rules were drafted from patterns seen outside {HOME_ORG}. Per the learning boundaries in "
+                "SathiaAI/quality-gate `learner/DATA_DICTIONARY.md`, merging them needs the owner's approval recorded "
+                "on this PR (or remove them first):", ""]
+        out += [f"- `{a['rule_id']}` (from {', '.join(a.get('orgs', ['unknown']))})" for a in cross]
     if report["rejected"] or report["skipped"]:
         out += ["", "## Not turned into rules", ""]
         out += [f"- `{x['id']}`: rejected, {x['reason']}" for x in report["rejected"]]

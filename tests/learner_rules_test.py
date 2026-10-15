@@ -74,13 +74,26 @@ class Patterns(unittest.TestCase):
     def test_malformed_patterns_get_a_reason(self):
         base = pattern("lp-py-yaml-unsafe-load")
         self.assertEqual(lr.check_pattern(base), "")
-        for k, v in (("id", "LP-Yaml"), ("id", "lp-../x"), ("cwe", "502"), ("impact_band", "severe"),
+        for k, v in (("id", "LP-Yaml"), ("id", "lp-../x"), ("cwe", "502"), ("cwe", 502), ("cwe", ""), ("impact_band", "severe"),
                      ("stack", "cobol"), ("hits", "6"), ("hits", True), ("examples", []),
-                     ("examples", [{"before": "x"}])):
+                     ("examples", [{"before": "x"}]), ("id", "lp-yaml\n"), ("cwe", "CWE-502\n")):
             self.assertNotEqual(lr.check_pattern({**base, k: v}), "", (k, v))
+        self.assertIn("cwe missing", lr.check_pattern({k: v for k, v in base.items() if k != "cwe"}))
+
+    def test_a_repeated_example_is_never_both_shown_and_held_out(self):
+        a, b, c = ({"before": f"x{i} = 1", "after": f"x{i} = 2"} for i in range(3))
+        train, held = lr.split_examples([a, b, {**a, "before": "x0  =  1"}, c])
+        self.assertEqual((train, held), ([a, b], [c]))
+
+    def test_a_pattern_with_fewer_than_3_distinct_examples_is_skipped_before_drafting(self):
+        p = pattern("lp-py-yaml-unsafe-load")
+        two = {**p, "examples": p["examples"][:2] + [p["examples"][0]]}   # 3 listed, 2 distinct
+        rep = lr.run([two], ROOT, ["/no/engine"], lambda *a: self.fail("drafted a pattern with 2 examples"))
+        self.assertEqual(rep["skipped"], [{"id": p["id"], "reason": "needs 3+ distinct examples so one can be held out (has 2)"}])
+        self.assertEqual((rep["accepted"], rep["rejected"]), ([], []))
 
     def test_every_third_example_is_held_out(self):
-        train, held = lr.split_examples([{"n": i} for i in range(7)])
+        train, held = lr.split_examples([{"n": i, "before": str(i), "after": ""} for i in range(7)])
         self.assertEqual([e["n"] for e in held], [2, 5])
         self.assertEqual([e["n"] for e in train], [0, 1, 3, 4, 6])
 
@@ -97,6 +110,20 @@ class BuildRule(unittest.TestCase):
             self.assertEqual((r["id"], r["severity"], r["metadata"]["sast_severity"]), (YAML_ID, sev, band))
             self.assertEqual(r["metadata"]["cwe"], "CWE-502")
             self.assertEqual(r["metadata"]["learner_pattern_id"], "lp-py-yaml-unsafe-load")
+
+    def test_a_pattern_without_a_cwe_takes_the_drafted_one_and_a_given_cwe_wins(self):
+        p = {**pattern("lp-py-yaml-unsafe-load"), "cwe": None}
+        self.assertEqual(lr.check_pattern(p), "")
+        self.assertIn('"cwe"', lr.prompt(p, p["examples"], YAML_ID, ".py", ""))
+        self.assertNotIn('"cwe"', lr.prompt(pattern("lp-py-yaml-unsafe-load"), [], YAML_ID, ".py", ""))
+        r = yaml.safe_load(lr.build_rule(p, {**self.D, "cwe": "CWE-20"}, YAML_ID)[0])["rules"][0]
+        self.assertEqual(r["metadata"]["cwe"], "CWE-20")
+        self.assertEqual(r["metadata"]["references"], ["https://cwe.mitre.org/data/definitions/20.html"])
+        given = yaml.safe_load(lr.build_rule(pattern("lp-py-yaml-unsafe-load"), {**self.D, "cwe": "CWE-20"}, YAML_ID)[0])
+        self.assertEqual(given["rules"][0]["metadata"]["cwe"], "CWE-502")
+        for bad in (None, "", "cwe-20", "CWE-0", "CWE-20; rm -rf", 20, "CWE-20\n"):
+            with self.assertRaises(lr.Reject, msg=bad):
+                lr.build_rule(p, {**self.D, "cwe": bad}, YAML_ID)
 
     def test_a_draft_cannot_set_its_own_paths_options_or_metadata(self):
         p = pattern("lp-py-yaml-unsafe-load")
@@ -197,6 +224,16 @@ class OpenPr(unittest.TestCase):
         flat = [x for c in cmds for x in c]
         for banned in ("merge", "--auto", "--force", "-f", "--admin", "--approve"):
             self.assertNotIn(banned, flat)
+
+    def test_rules_from_another_orgs_code_are_listed_for_owner_approval(self):
+        self.assertEqual(lr.source_orgs({"repos": ["Viaknox/app", "SathiaAI/x", "SathiaAI/y"]}), ["SathiaAI", "Viaknox"])
+        self.assertEqual(lr.source_orgs({}), ["unknown"])
+        ours = {**self.REPORT["accepted"][0], "orgs": ["SathiaAI"]}
+        self.assertNotIn("Owner approval needed", lr.pr_body({**self.REPORT, "accepted": [ours]}, "m"))
+        for orgs in (["SathiaAI", "Viaknox"], ["unknown"]):
+            body = lr.pr_body({**self.REPORT, "accepted": [{**ours, "orgs": orgs}]}, "m")
+            self.assertIn("Owner approval needed", body)
+            self.assertIn(f"`{YAML_ID}` (from {', '.join(orgs)})", body)
 
     def test_the_pr_body_has_reasons_but_no_example_code(self):
         body = lr.pr_body(self.REPORT, "m")
@@ -322,6 +359,17 @@ class Rejections(unittest.TestCase):
         reason, _ = self.one(DRAFTS["lp-py-yaml-unsafe-load"][0]["rule"],
                              fixture=DRAFTS["lp-py-yaml-unsafe-load"][0]["fixture"].replace("# ok:", "# ruleid:", 1))
         self.assertIn("fixture test", reason)
+
+    def test_a_pattern_without_a_cwe_lands_with_the_drafted_cwe_marked_for_review(self):
+        pid = "lp-py-yaml-unsafe-load"
+        rep = lr.run([{**pattern(pid), "cwe": None}], self.repo, ENGINES, Drafter({pid: [{**DRAFTS[pid][0], "cwe": "CWE-502"}]}))
+        try:
+            self.assertEqual([(a["cwe"], a["cwe_source"]) for a in rep["accepted"]], [("CWE-502", "drafted")])
+            self.assertIn("CWE-502 (drafted: check it)", lr.pr_body(rep, "m"))
+        finally:
+            for a in rep["accepted"]:
+                for f in a["files"]:
+                    (self.repo / f).unlink(missing_ok=True)
 
     def test_a_failed_build_keeps_nothing(self):
         rep = lr.run([pattern("lp-py-yaml-unsafe-load")], self.repo, ENGINES, Drafter(DRAFTS))
