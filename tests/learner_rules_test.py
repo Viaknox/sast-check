@@ -1,0 +1,323 @@
+#!/usr/bin/env python3
+"""Tests for tools/learner_rules.py (learner P3). Run: python3 tests/learner_rules_test.py
+
+The model is replaced by canned drafts (tests/fixtures/learner/drafts.json), so the tests are offline and
+deterministic. The engine tests need opengrep and semgrep: $OPENGREP / $SEMGREP or on PATH."""
+import io
+import json
+import os
+import shutil
+import sys
+import tempfile
+import unittest
+import urllib.error
+from contextlib import redirect_stderr, redirect_stdout
+from datetime import date
+from pathlib import Path
+from unittest import mock
+
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+import learner_rules as lr  # noqa: E402
+
+FX = ROOT / "tests" / "fixtures" / "learner"
+PATTERNS = lr.load_patterns(FX / "patterns.json")
+DRAFTS = json.loads((FX / "drafts.json").read_text())
+OPENGREP = os.environ.get("OPENGREP") or shutil.which("opengrep")
+SEMGREP = os.environ.get("SEMGREP") or shutil.which("semgrep")
+ENGINES = [OPENGREP, SEMGREP]
+YAML_ID = "sast.python.lp-py-yaml-unsafe-load"
+
+
+def pattern(pid: str) -> dict:
+    return json.loads(json.dumps(next(p for p in PATTERNS if p["id"] == pid)))
+
+
+class Drafter:
+    """Stands in for the model: returns the canned drafts in order (the last one repeats) and records
+    every request, so a test can check what the model was shown."""
+
+    def __init__(self, drafts: dict):
+        self.drafts, self.calls = drafts, []
+
+    def __call__(self, p, train, rule_id, ext, feedback):
+        self.calls.append({"id": p["id"], "train": train, "feedback": feedback,
+                           "prompt": lr.prompt(p, train, rule_id, ext, feedback)})
+        mine = self.drafts[p["id"]]
+        return mine[min(sum(c["id"] == p["id"] for c in self.calls) - 1, len(mine) - 1)]
+
+
+def repo_copy(td: str) -> Path:
+    """A throwaway copy of this repo for the tool to write into."""
+    dst = Path(td) / "repo"
+    shutil.copytree(ROOT, dst, ignore=shutil.ignore_patterns(".git", "__pycache__", "sast-results"))
+    return dst
+
+
+def need_engines():
+    if not (OPENGREP and Path(OPENGREP).name == "opengrep" and SEMGREP):
+        raise RuntimeError("these tests need opengrep and semgrep (set $OPENGREP / $SEMGREP or put them on PATH)")
+
+
+class Patterns(unittest.TestCase):
+    def test_a_file_in_another_format_is_an_error_not_an_empty_run(self):
+        with tempfile.TemporaryDirectory() as td:
+            for doc in ({"patterns": []}, {"schema": "learner-patterns/v2", "patterns": []}, [],
+                        {"schema": lr.SCHEMA, "patterns": {}}):
+                f = Path(td) / "p.json"
+                f.write_text(json.dumps(doc))
+                with self.assertRaises(ValueError):
+                    lr.load_patterns(f)
+
+    def test_malformed_patterns_get_a_reason(self):
+        base = pattern("lp-py-yaml-unsafe-load")
+        self.assertEqual(lr.check_pattern(base), "")
+        for k, v in (("id", "LP-Yaml"), ("id", "lp-../x"), ("cwe", "502"), ("impact_band", "severe"),
+                     ("stack", "cobol"), ("hits", "6"), ("hits", True), ("examples", []),
+                     ("examples", [{"before": "x"}])):
+            self.assertNotEqual(lr.check_pattern({**base, k: v}), "", (k, v))
+
+    def test_every_third_example_is_held_out(self):
+        train, held = lr.split_examples([{"n": i} for i in range(7)])
+        self.assertEqual([e["n"] for e in held], [2, 5])
+        self.assertEqual([e["n"] for e in train], [0, 1, 3, 4, 6])
+
+
+class BuildRule(unittest.TestCase):
+    D = DRAFTS["lp-py-yaml-unsafe-load"][0]
+
+    def test_metadata_and_severity_come_from_the_pattern_not_the_draft(self):
+        cases = {"critical": "ERROR", "high": "ERROR", "medium": "WARNING", "low": "INFO"}
+        for band, sev in cases.items():
+            p = {**pattern("lp-py-yaml-unsafe-load"), "impact_band": band}
+            text, _ = lr.build_rule(p, self.D, YAML_ID)
+            r = yaml.safe_load(text)["rules"][0]
+            self.assertEqual((r["id"], r["severity"], r["metadata"]["sast_severity"]), (YAML_ID, sev, band))
+            self.assertEqual(r["metadata"]["cwe"], "CWE-502")
+            self.assertEqual(r["metadata"]["learner_pattern_id"], "lp-py-yaml-unsafe-load")
+
+    def test_a_draft_cannot_set_its_own_paths_options_or_metadata(self):
+        p = pattern("lp-py-yaml-unsafe-load")
+        for extra in ("paths:\n  include: [x]\n", "options:\n  symbolic_propagation: true\n",
+                      "metadata:\n  sast_severity: low\n", "mode: search\n", "mode: taint\n"):
+            with self.assertRaises(lr.Reject, msg=extra):
+                lr.build_rule(p, {**self.D, "rule": self.D["rule"] + extra}, YAML_ID)
+
+    def test_a_whole_rule_file_keeps_only_its_matching_part(self):
+        whole = yaml.safe_dump({"rules": [{"id": "sast.python.other", "severity": "INFO", "languages": ["js"],
+                                           **yaml.safe_load(self.D["rule"])}]})
+        r = yaml.safe_load(lr.build_rule(pattern("lp-py-yaml-unsafe-load"), {**self.D, "rule": whole}, YAML_ID)[0])
+        self.assertEqual((r["rules"][0]["id"], r["rules"][0]["languages"]), (YAML_ID, ["python"]))
+
+    def test_missing_fields_and_non_json_replies_are_rejected(self):
+        for d in ({**self.D, "fixture": ""}, {k: v for k, v in self.D.items() if k != "message"}):
+            with self.assertRaises(lr.Reject):
+                lr.build_rule(pattern("lp-py-yaml-unsafe-load"), d, YAML_ID)
+        for reply in ("no json here", "[1, 2]", None):
+            with self.assertRaises(lr.Reject):
+                lr.parse_reply(reply)
+        self.assertEqual(lr.parse_reply('```json\n{"a": 1}\n```'), {"a": 1})
+
+    def test_a_fixture_line_copied_from_an_example_is_found(self):
+        p = pattern("lp-py-yaml-unsafe-load")
+        self.assertEqual(lr.copied_line(self.D["fixture"], p["examples"]), "")
+        stolen = self.D["fixture"] + "        job   = yaml.load(body, Loader=yaml.Loader)\n"
+        self.assertEqual(lr.copied_line(stolen, p["examples"]), "job = yaml.load(body, Loader=yaml.Loader)")
+
+
+class Secrets(unittest.TestCase):
+    KEY = "sk-or-v1-test-must-never-be-printed"
+
+    def test_the_api_key_is_sent_but_never_printed_or_recorded(self):
+        p = pattern("lp-py-yaml-unsafe-load")
+        sent = {}
+
+        def fail(req, timeout):
+            sent["auth"] = req.get_header("Authorization")
+            raise urllib.error.HTTPError(lr.OPENROUTER_URL, 401, f"bad key {self.KEY}", {}, io.BytesIO(self.KEY.encode()))
+
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": self.KEY}), \
+                mock.patch("urllib.request.urlopen", fail), redirect_stdout(out), redirect_stderr(err):
+            with self.assertRaises(lr.Reject) as cm:
+                lr.draft_with_llm(p, p["examples"], YAML_ID, ".py", "", "m")
+        self.assertEqual(sent["auth"], f"Bearer {self.KEY}")
+        for text in (str(cm.exception), out.getvalue(), err.getvalue()):
+            self.assertNotIn(self.KEY, text)
+
+    def test_no_key_stops_the_run_before_anything_is_drafted(self):
+        env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
+        argv = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep", "--semgrep", "/x/semgrep"]
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(lr, "run", side_effect=AssertionError("drafted without a key")), redirect_stderr(io.StringIO()):
+            self.assertEqual(lr.main(), 2)
+
+
+class OpenPr(unittest.TestCase):
+    REPORT = {"accepted": [{"id": "lp-py-yaml-unsafe-load", "rule_id": YAML_ID, "cwe": "CWE-502", "hits": 6,
+                            "severity": "high", "blocking": True,
+                            "files": ["rules/custom/python/lp-py-yaml-unsafe-load.yaml",
+                                      "rules/custom/python/lp-py-yaml-unsafe-load.py"]}],
+              "rejected": [{"id": "lp-js-open-redirect", "reason": "no javascript code"}], "skipped": []}
+
+    def test_one_pr_on_a_dated_branch_and_never_a_merge(self):
+        cmds = []
+
+        def runner(cmd, repo):
+            cmds.append(cmd)
+            return mock.Mock(stdout="https://github.com/o/r/pull/1\n")
+
+        self.assertEqual(lr.open_pr(ROOT, self.REPORT, "main", "m", runner), "https://github.com/o/r/pull/1")
+        branch = f"learner/rules-{date.today().isoformat()}"
+        self.assertIn(["git", "checkout", "-b", branch], cmds)
+        self.assertEqual(cmds[1], ["git", "add", "--", *self.REPORT["accepted"][0]["files"],
+                                   "dist/rules.yaml", "dist/rule-ids.lock"])
+        self.assertEqual(sum(c[:3] == ["gh", "pr", "create"] for c in cmds), 1)
+        flat = [x for c in cmds for x in c]
+        for banned in ("merge", "--auto", "--force", "-f", "--admin", "--approve"):
+            self.assertNotIn(banned, flat)
+
+    def test_the_pr_body_has_reasons_but_no_example_code(self):
+        body = lr.pr_body(self.REPORT, "m")
+        self.assertIn("no javascript code", body)
+        self.assertIn(YAML_ID, body)
+        for e in pattern("lp-py-yaml-unsafe-load")["examples"]:
+            for ln in (e["before"] + e["after"]).splitlines():
+                if len(ln.strip()) > 12:
+                    self.assertNotIn(ln.strip(), body)
+
+
+class FixtureRun(unittest.TestCase):
+    """The exit test: the whole fixture through the real checks, with both engines."""
+
+    @classmethod
+    def setUpClass(cls):
+        need_engines()
+        cls.td = tempfile.TemporaryDirectory()
+        cls.repo = repo_copy(cls.td.name)
+        cls.drafter = Drafter(DRAFTS)
+        cls.report = lr.run(PATTERNS, cls.repo, ENGINES, cls.drafter)
+        cls.build_error = lr.build_dist(cls.repo, cls.report)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.td.cleanup()
+
+    def test_good_drafts_are_accepted_and_bad_ones_rejected_with_reasons(self):
+        self.assertEqual(self.build_error, "")
+        self.assertEqual([a["id"] for a in self.report["accepted"]],
+                         ["lp-py-yaml-unsafe-load", "lp-py-tar-extractall-unfiltered", "lp-py-requests-no-timeout"])
+        rejected = {r["id"]: r["reason"] for r in self.report["rejected"]}
+        self.assertEqual(sorted(rejected), ["lp-js-open-redirect", "lp-py-subprocess-unchecked"])
+        self.assertIn("fires on this repo's own code", rejected["lp-py-subprocess-unchecked"])
+        self.assertIn("no javascript code", rejected["lp-js-open-redirect"])
+        self.assertEqual(self.report["skipped"], [{"id": "lp-py-md5-password", "reason": "2 hits (needs 3)"}])
+
+    def test_a_draft_that_matches_fixed_code_is_retried_with_the_reason(self):
+        calls = [c for c in self.drafter.calls if c["id"] == "lp-py-requests-no-timeout"]
+        self.assertEqual(len(calls), 2)
+        self.assertIn("matches the fixed code", calls[1]["feedback"])
+
+    def test_the_model_never_sees_held_out_examples(self):
+        for p in PATTERNS:
+            _, held = lr.split_examples(p["examples"])
+            for c in (c for c in self.drafter.calls if c["id"] == p["id"]):
+                self.assertTrue(held, p["id"])
+                for e in held:
+                    self.assertNotIn(e, c["train"])
+                    self.assertNotIn(e["before"].strip(), c["prompt"])
+
+    def test_accepted_rules_catch_held_out_examples_and_are_silent_on_clean_code(self):
+        clean = lr.clean_files(self.repo, (".py",))
+        self.assertGreater(len(clean), 5)
+        with tempfile.TemporaryDirectory() as td:
+            for a in self.report["accepted"]:
+                _, held = lr.split_examples(pattern(a["id"])["examples"])
+                files = []
+                for i, e in enumerate(held):
+                    files.append(Path(td) / f"{a['id']}-{i}.py")
+                    files[-1].write_text(e["before"])
+                for eng in ENGINES:
+                    hits = lr.scan(eng, self.repo / a["files"][0], files)
+                    self.assertEqual(sorted(hits), sorted(f.resolve() for f in files), (a["id"], eng))
+                    self.assertEqual(lr.scan(eng, self.repo / a["files"][0], clean), {}, (a["id"], eng))
+
+    def test_written_rules_carry_the_contract_metadata_and_severity(self):
+        for a, sev in zip(self.report["accepted"], ("ERROR", "ERROR", "WARNING"), strict=True):
+            r = yaml.safe_load((self.repo / a["files"][0]).read_text())["rules"][0]
+            self.assertEqual(r["severity"], sev)
+            self.assertEqual(r["metadata"]["cwe"], pattern(a["id"])["cwe"])
+            self.assertEqual(r["metadata"]["learner_pattern_id"], a["id"])
+            self.assertTrue((self.repo / a["files"][1]).exists())
+
+    def test_rejected_rules_never_land(self):
+        lock = (self.repo / "dist" / "rule-ids.lock").read_text().split()
+        bundle = (self.repo / "dist" / "rules.yaml").read_text()
+        for a in self.report["accepted"]:
+            self.assertIn(a["rule_id"], lock)
+        for r in self.report["rejected"] + self.report["skipped"]:
+            self.assertEqual(list((self.repo / "rules" / "custom").glob(f"*/{r['id']}.*")), [], r["id"])
+            self.assertFalse(any(r["id"] in x for x in lock), r["id"])
+            self.assertNotIn(r["id"], bundle)
+
+
+class Rejections(unittest.TestCase):
+    """Each acceptance check on its own: the draft is rejected, with a reason, and nothing is written."""
+
+    @classmethod
+    def setUpClass(cls):
+        need_engines()
+        cls.td = tempfile.TemporaryDirectory()
+        cls.repo = repo_copy(cls.td.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.td.cleanup()
+
+    def one(self, rule: str, pid="lp-py-yaml-unsafe-load", **fields):
+        drafter = Drafter({pid: [{**DRAFTS[pid][0], "rule": rule, **fields}]})
+        rep = lr.run([pattern(pid)], self.repo, ENGINES, drafter)
+        self.assertEqual(rep["accepted"], [])
+        self.assertEqual(list((self.repo / "rules" / "custom").glob(f"*/{pid}.*")), [])
+        return rep["rejected"][0]["reason"], drafter
+
+    def test_missing_a_held_out_example_rejects_without_a_retry(self):
+        rule = ("pattern-either:\n  - pattern: yaml.load($S)\n  - pattern: yaml.load($S, Loader=yaml.Loader)\n"
+                "  - pattern: yaml.load($S, yaml.FullLoader)\n")
+        reason, drafter = self.one(rule)
+        self.assertIn("misses a held-out vulnerable example", reason)
+        self.assertEqual(len(drafter.calls), 1)
+
+    def test_an_untested_pattern_element_is_a_mutation_survivor(self):
+        rule = DRAFTS["lp-py-yaml-unsafe-load"][0]["rule"] + "  - pattern-not: yaml.load($S, Loader=yaml.BaseLoader)\n"
+        reason, _ = self.one(rule)
+        self.assertIn("mutation check: NEW SURVIVOR", reason)
+
+    def test_a_rule_the_engine_rejects(self):
+        reason, _ = self.one("patterns:\n  - pattern: yaml.load(\n")
+        self.assertIn("rejects the rule", reason)
+
+    def test_a_fixture_that_does_not_match_its_annotations(self):
+        reason, _ = self.one(DRAFTS["lp-py-yaml-unsafe-load"][0]["rule"],
+                             fixture=DRAFTS["lp-py-yaml-unsafe-load"][0]["fixture"].replace("# ok:", "# ruleid:", 1))
+        self.assertIn("fixture test", reason)
+
+    def test_a_failed_build_keeps_nothing(self):
+        rep = lr.run([pattern("lp-py-yaml-unsafe-load")], self.repo, ENGINES, Drafter(DRAFTS))
+        self.assertEqual(len(rep["accepted"]), 1)
+        retired = self.repo / "rules" / "RETIRED.txt"
+        old = retired.read_text() if retired.exists() else None
+        retired.write_text((old or "") + YAML_ID + "\n")   # the rule-ID lock now refuses this id
+        try:
+            err = lr.build_dist(self.repo, rep)
+        finally:
+            retired.unlink() if old is None else retired.write_text(old)
+        self.assertIn("retired rule ids must never be reused", err)
+        self.assertEqual(rep["accepted"], [])
+        self.assertEqual(list((self.repo / "rules" / "custom").glob("*/lp-py-yaml-unsafe-load.*")), [])
+
+
+if __name__ == "__main__":
+    unittest.main()
