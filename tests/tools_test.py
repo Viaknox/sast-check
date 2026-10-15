@@ -111,6 +111,43 @@ class EngineExit(unittest.TestCase):
         self.assertTrue(fails and all(rules_test.ENGINE_FAILED in f for f in fails), fails)
 
 
+class BatchedMutants(unittest.TestCase):
+    RULE = rm.RULES / "js" / "code-eval.yaml"
+
+    def test_a_batch_that_fails_is_split_until_each_mutant_runs_alone(self):
+        muts = rm.mutants(yaml.safe_load(self.RULE.read_text()))[:3]
+        with tempfile.TemporaryDirectory() as td:
+            eng, log = Path(td) / "opengrep", Path(td) / "calls"
+            # rejects any config holding more than one rule; a single rule scans cleanly and finds nothing
+            eng.write_text('#!/bin/sh\nprev=""\nfor a; do [ "$prev" = --config ] && conf="$a"; prev="$a"; done\n'
+                           f'n=$(grep -c "^- " "$conf")\necho "$n" >> "{log}"\n'
+                           'if [ "$n" -gt 1 ]; then exit 7; fi\necho \'{"results": [], "errors": []}\'\n')
+            eng.chmod(eng.stat().st_mode | stat.S_IEXEC)
+            got = rm.batch_failures(str(eng), self.RULE, muts)
+            alone = [rules_test.rule_failures(str(eng), self.RULE, yaml.safe_dump(m, sort_keys=False))[1]
+                     for _, _, m in muts]
+            sizes = log.read_text().split()
+        self.assertEqual(got, alone)
+        self.assertEqual(sizes[:5], ["3", "1", "2", "1", "1"])   # 3 fails -> [1] alone, [2] fails -> two alone
+
+    def test_mutants_the_engine_rejects_are_predicted(self):
+        doc = {"rules": [{"id": "r", "patterns": [{"pattern-inside": "f(...)"}, {"pattern-not": "f(1)"}]},
+                         {"id": "s", "pattern-either": [{"pattern": "a"}]}]}
+        rejected = {el for _, el, m in rm.mutants(doc) if rm.likely_rejected(m)}
+        # deleting the only positive element, or emptying a list, leaves a rule the engine rejects
+        self.assertEqual(rejected, {"pattern-inside: f(...)", "pattern: a"})
+
+    @unittest.skipUnless(os.environ.get("OPENGREP"), "set OPENGREP to the engine to compare with the real engine")
+    def test_batched_results_equal_one_scan_per_mutant(self):
+        eng = os.environ["OPENGREP"]
+        # every 10th mutant the engine accepts: a mix of killed and survived on the current rule
+        muts = [x for x in rm.mutants(yaml.safe_load(self.RULE.read_text())) if not rm.likely_rejected(x[2])][::10]
+        alone = [rules_test.rule_failures(eng, self.RULE, yaml.safe_dump(m, sort_keys=False))[1] for _, _, m in muts]
+        got = rm.batch_failures(eng, self.RULE, muts)
+        self.assertEqual([bool(f) for f in got], [bool(f) for f in alone])
+        self.assertTrue(any(alone) and not all(alone), "pick mutants with both outcomes")
+
+
 class FpReport(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.TemporaryDirectory()
