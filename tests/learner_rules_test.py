@@ -105,6 +105,15 @@ class BuildRule(unittest.TestCase):
             with self.assertRaises(lr.Reject, msg=extra):
                 lr.build_rule(p, {**self.D, "rule": self.D["rule"] + extra}, YAML_ID)
 
+    def test_a_taint_draft_needs_mode_sources_and_sinks_only(self):
+        p = pattern("lp-py-yaml-unsafe-load")
+        src, snk = "pattern-sources:\n  - pattern: input()\n", "pattern-sinks:\n  - pattern: eval(...)\n"
+        lr.build_rule(p, {**self.D, "rule": "mode: taint\n" + src + snk}, YAML_ID)
+        for rule in ("mode: taint\n" + snk, "mode: taint\n" + src, src + snk,
+                     "mode: taint\n" + src + snk + "pattern: eval(...)\n"):
+            with self.assertRaises(lr.Reject, msg=rule):
+                lr.build_rule(p, {**self.D, "rule": rule}, YAML_ID)
+
     def test_a_whole_rule_file_keeps_only_its_matching_part(self):
         whole = yaml.safe_dump({"rules": [{"id": "sast.python.other", "severity": "INFO", "languages": ["js"],
                                            **yaml.safe_load(self.D["rule"])}]})

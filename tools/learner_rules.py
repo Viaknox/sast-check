@@ -197,8 +197,10 @@ def build_rule(p: dict, d: dict, rule_id: str) -> tuple[str, str]:
     extra = sorted(set(body) - ALLOWED_KEYS)
     if extra:
         raise Reject(f"draft rule uses keys that are not allowed: {extra}")
-    if body.get("mode", "taint") != "taint" or ("mode" in body) != ("pattern-sinks" in body):
-        raise Reject("draft rule: mode must be taint, with pattern-sources and pattern-sinks")
+    taint = {"mode", "pattern-sources", "pattern-sinks", "pattern-sanitizers"}
+    if taint & set(body) and (body.get("mode") != "taint" or not {"pattern-sources", "pattern-sinks"} <= set(body)
+                              or set(body) - taint):
+        raise Reject("draft rule: a taint rule needs mode: taint, pattern-sources and pattern-sinks, and nothing else")
     _, langs, _, _ = STACKS[p["stack"]]
     n = p["cwe"].split("-", 1)[1]
     rule = {"id": rule_id, "languages": langs, "severity": SEVERITY[p["impact_band"]],
