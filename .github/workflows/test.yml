@@ -73,6 +73,8 @@ jobs:
         run: python tests/rules_test.py --engine "$RUNNER_TEMP/opengrep/opengrep"
       - name: Rule-quality tool tests
         run: python tests/tools_test.py
+      - name: Learner rule tests (tools/learner_rules.py, offline with canned drafts)
+        run: OPENGREP="$RUNNER_TEMP/opengrep/opengrep" python tests/learner_rules_test.py
       - name: Rule mutation check (changed rules)
         # PR #11 (many rules): 34 min on one run, over 40 on two re-runs of the same commit; 60 leaves room
         # for runner speed. Setup and rule tests take about 6 min and end-to-end about 3, so the job limit is 75.

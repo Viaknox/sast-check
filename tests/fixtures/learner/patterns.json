@@ -1,0 +1,94 @@
+{
+ "schema": "learner-patterns/v1",
+ "patterns": [
+  {
+   "id": "lp-py-yaml-unsafe-load",
+   "pattern": "yaml.load with a loader that builds arbitrary objects",
+   "stack": "python",
+   "domain": "deserialization",
+   "cwe": "CWE-502",
+   "hits": 6,
+   "impact_band": "high",
+   "summary": "Config and message payloads parsed with yaml.load and the default or full/unsafe loader, which can construct arbitrary Python objects from attacker-controlled YAML.",
+   "examples": [
+    {"before": "import yaml\n\ndef read_settings(fh):\n    return yaml.load(fh)\n", "after": "import yaml\n\ndef read_settings(fh):\n    return yaml.safe_load(fh)\n", "note": "synthetic"},
+    {"before": "import yaml\n\ndef parse_job(body):\n    job = yaml.load(body, Loader=yaml.Loader)\n    return job\n", "after": "import yaml\n\ndef parse_job(body):\n    job = yaml.load(body, Loader=yaml.SafeLoader)\n    return job\n", "note": "synthetic"},
+    {"before": "import yaml\n\ndef load_manifest(text):\n    return yaml.load(text, Loader=yaml.UnsafeLoader)\n", "after": "import yaml\n\ndef load_manifest(text):\n    return yaml.load(text, Loader=yaml.CSafeLoader)\n", "note": "synthetic, held out"},
+    {"before": "import yaml\n\ndef import_rules(stream):\n    rules = yaml.load(stream, yaml.FullLoader)\n    return rules\n", "after": "import yaml\n\ndef import_rules(stream):\n    rules = yaml.safe_load(stream)\n    return rules\n", "note": "synthetic"}
+   ]
+  },
+  {
+   "id": "lp-py-tar-extractall-unfiltered",
+   "pattern": "tarfile extractall without an extraction filter",
+   "stack": "python",
+   "domain": "file-handling",
+   "cwe": "CWE-22",
+   "hits": 4,
+   "impact_band": "critical",
+   "summary": "Uploaded or downloaded archives unpacked with TarFile.extractall and no filter, so a member named ../../x or an absolute path writes outside the target directory.",
+   "examples": [
+    {"before": "import tarfile\n\ndef unpack(upload, dest):\n    with tarfile.open(upload) as tar:\n        tar.extractall(dest)\n", "after": "import tarfile\n\ndef unpack(upload, dest):\n    with tarfile.open(upload) as tar:\n        tar.extractall(dest, filter=\"data\")\n"},
+    {"before": "import tarfile\n\ndef restore(path, out):\n    archive = tarfile.open(path, \"r:gz\")\n    archive.extractall(path=out)\n    archive.close()\n", "after": "import tarfile\n\ndef restore(path, out):\n    archive = tarfile.open(path, \"r:gz\")\n    archive.extractall(path=out, filter=\"data\")\n    archive.close()\n"},
+    {"before": "import tarfile\n\ndef seed(bundle):\n    tarfile.open(bundle).extractall()\n", "after": "import tarfile\n\ndef seed(bundle):\n    tarfile.open(bundle).extractall(filter=\"tar\")\n"}
+   ]
+  },
+  {
+   "id": "lp-py-requests-no-timeout",
+   "pattern": "HTTP call through requests with no timeout",
+   "stack": "python",
+   "domain": "availability",
+   "cwe": "CWE-400",
+   "hits": 5,
+   "impact_band": "medium",
+   "summary": "Outbound calls with requests.get/post and no timeout, so one slow upstream ties up the worker forever.",
+   "examples": [
+    {"before": "import requests\n\ndef fetch_rates(url):\n    return requests.get(url).json()\n", "after": "import requests\n\ndef fetch_rates(url):\n    return requests.get(url, timeout=10).json()\n"},
+    {"before": "import requests\n\ndef notify(hook, payload):\n    requests.post(hook, json=payload)\n", "after": "import requests\n\ndef notify(hook, payload):\n    requests.post(hook, json=payload, timeout=5)\n"},
+    {"before": "import requests\n\ndef ping(host):\n    r = requests.get(f\"https://{host}/health\", headers={\"x-probe\": \"1\"})\n    return r.ok\n", "after": "import requests\n\ndef ping(host):\n    r = requests.get(f\"https://{host}/health\", headers={\"x-probe\": \"1\"}, timeout=3)\n    return r.ok\n"}
+   ]
+  },
+  {
+   "id": "lp-py-subprocess-unchecked",
+   "pattern": "subprocess.run whose failure is not checked",
+   "stack": "python",
+   "domain": "error-handling",
+   "cwe": "CWE-252",
+   "hits": 3,
+   "impact_band": "low",
+   "summary": "Helper scripts call subprocess.run and carry on when the command failed.",
+   "examples": [
+    {"before": "import subprocess\n\ndef deploy(tag):\n    subprocess.run([\"make\", \"release\", tag])\n", "after": "import subprocess\n\ndef deploy(tag):\n    subprocess.run([\"make\", \"release\", tag], check=True)\n"},
+    {"before": "import subprocess\n\ndef sync(src):\n    subprocess.run([\"rsync\", \"-a\", src, \"/srv\"], capture_output=True)\n", "after": "import subprocess\n\ndef sync(src):\n    subprocess.run([\"rsync\", \"-a\", src, \"/srv\"], capture_output=True, check=True)\n"},
+    {"before": "import subprocess\n\ndef warm():\n    subprocess.run([\"./warm-cache\"], timeout=60)\n", "after": "import subprocess\n\ndef warm():\n    subprocess.run([\"./warm-cache\"], timeout=60, check=True)\n"}
+   ]
+  },
+  {
+   "id": "lp-js-open-redirect",
+   "pattern": "redirect to a URL taken from the query string",
+   "stack": "javascript",
+   "domain": "web",
+   "cwe": "CWE-601",
+   "hits": 5,
+   "impact_band": "medium",
+   "summary": "Login and logout handlers redirect to req.query.next without checking it is a local path.",
+   "examples": [
+    {"before": "app.get('/login/done', (req, res) => {\n  res.redirect(req.query.next);\n});\n", "after": "app.get('/login/done', (req, res) => {\n  res.redirect(safeLocalPath(req.query.next));\n});\n"},
+    {"before": "router.get('/out', (req, res) => {\n  const to = req.query.returnTo;\n  res.redirect(302, to);\n});\n", "after": "router.get('/out', (req, res) => {\n  const to = req.query.returnTo;\n  res.redirect(302, safeLocalPath(to));\n});\n"},
+    {"before": "app.post('/sso', (req, res) => {\n  res.redirect(req.body.target);\n});\n", "after": "app.post('/sso', (req, res) => {\n  res.redirect('/');\n});\n"}
+   ]
+  },
+  {
+   "id": "lp-py-md5-password",
+   "pattern": "password hashed with md5",
+   "stack": "python",
+   "domain": "crypto",
+   "cwe": "CWE-916",
+   "hits": 2,
+   "impact_band": "high",
+   "summary": "Only two hits so far: below the threshold, so no rule is drafted.",
+   "examples": [
+    {"before": "import hashlib\n\ndef store(pw):\n    return hashlib.md5(pw.encode()).hexdigest()\n", "after": "import bcrypt\n\ndef store(pw):\n    return bcrypt.hashpw(pw.encode(), bcrypt.gensalt())\n"}
+   ]
+  }
+ ]
+}
