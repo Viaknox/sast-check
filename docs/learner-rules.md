@@ -37,6 +37,9 @@ to `rules/custom/`; the reason is printed and written to `--report`.
   finding), the model proposes it with the rule; it must be `CWE-<n>`, and the PR marks it "drafted: check it".
   A CWE the pattern gives always wins over the model's.
 - `metadata.learner_pattern_id` = the pattern id, `confidence: medium`.
+- The PR lists each rule's source orgs (from the pattern's `repos`). A rule from outside SathiaAI, or from unknown
+  repos, is listed under "Owner approval needed": the learning boundaries in quality-gate's `learner/DATA_DICTIONARY.md`
+  require the owner's approval on the PR for cross-org use.
 - Severity from `impact_band`: critical and high are `ERROR` (blocking under `block_on`; the default blocks
   critical only), medium is `WARNING`, low is `INFO`.
 - `--open-pr` commits only those files and `dist/` on `learner/rules-<date>` and opens one PR. It stops if the

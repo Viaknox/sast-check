@@ -41,6 +41,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = "learner-patterns/v1"
 MIN_HITS = 3
+HOME_ORG = "SathiaAI"   # owner of this repo; a rule from another org's code needs the owner's recorded approval
 MIN_EXAMPLES = 3   # distinct examples: fewer leaves no held-out example, so the rule would be untested on unseen code
 DEFAULT_MODEL = "qwen/qwen3-coder-30b-a3b-instruct"   # cheap, non-frontier coding model; override with --model
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -103,6 +104,11 @@ def check_pattern(p) -> str:
                                     and isinstance(e.get("after"), str) for e in p["examples"]):
         return "every example needs a before and an after string"
     return ""
+
+
+def source_orgs(p: dict) -> list[str]:
+    """The GitHub orgs of the repos a pattern was seen in ("unknown" when P2 gives none, so it is never taken as ours)."""
+    return sorted({r.split("/", 1)[0] for r in p.get("repos") or [] if isinstance(r, str) and "/" in r}) or ["unknown"]
 
 
 def split_examples(examples: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -392,7 +398,7 @@ def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int =
                 (dest / f"{p['id']}{ext}").write_text(fixture)
                 report["accepted"].append({"id": pid, "rule_id": rule_id, "hits": p["hits"],
                                            "cwe": yaml.safe_load(rule_text)["rules"][0]["metadata"]["cwe"],
-                                           "cwe_source": "pattern" if p["cwe"] else "drafted",
+                                           "cwe_source": "pattern" if p["cwe"] else "drafted", "orgs": source_orgs(p),
                                            "severity": p["impact_band"], "blocking": SEVERITY[p["impact_band"]] == "ERROR",
                                            "held_out": len(held), "attempts": attempt,
                                            "files": [f"rules/custom/{area}/{p['id']}.yaml",
@@ -422,10 +428,18 @@ def pr_body(report: dict, model: str) -> str:
            f"Model: `{model}` (OpenRouter). Each rule matched every vulnerable example including held-out ones, "
            "none of the fixed examples, nothing in this repo's own code, passed its synthetic fixture with "
            "Opengrep and Semgrep, and had no surviving mutant. **A human reviews and merges; nothing here auto-merges.**",
-           "", "## Accepted", "", "| rule | CWE | hits | severity | blocking |", "|---|---|---|---|---|"]
+           "", "## Accepted", "", "| rule | CWE | hits | severity | blocking | source orgs |", "|---|---|---|---|---|---|"]
     out += [f"| `{a['rule_id']}` | {a['cwe']}{' (drafted: check it)' if a.get('cwe_source') == 'drafted' else ''} "
-            f"| {a['hits']} | {a['severity']} | {'yes' if a['blocking'] else 'warning'} |"
+            f"| {a['hits']} | {a['severity']} | {'yes' if a['blocking'] else 'warning'} "
+            f"| {', '.join(a.get('orgs', ['unknown']))} |"
             for a in report["accepted"]]
+    cross = [a for a in report["accepted"] if set(a.get("orgs", ["unknown"])) - {HOME_ORG}]
+    if cross:
+        out += ["", "## Owner approval needed: rules from another org's code", "",
+                f"These rules were drafted from patterns seen outside {HOME_ORG}. Per the learning boundaries in "
+                "SathiaAI/quality-gate `learner/DATA_DICTIONARY.md`, merging them needs the owner's approval recorded "
+                "on this PR (or remove them first):", ""]
+        out += [f"- `{a['rule_id']}` (from {', '.join(a.get('orgs', ['unknown']))})" for a in cross]
     if report["rejected"] or report["skipped"]:
         out += ["", "## Not turned into rules", ""]
         out += [f"- `{x['id']}`: rejected, {x['reason']}" for x in report["rejected"]]

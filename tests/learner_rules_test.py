@@ -225,6 +225,16 @@ class OpenPr(unittest.TestCase):
         for banned in ("merge", "--auto", "--force", "-f", "--admin", "--approve"):
             self.assertNotIn(banned, flat)
 
+    def test_rules_from_another_orgs_code_are_listed_for_owner_approval(self):
+        self.assertEqual(lr.source_orgs({"repos": ["Viaknox/app", "SathiaAI/x", "SathiaAI/y"]}), ["SathiaAI", "Viaknox"])
+        self.assertEqual(lr.source_orgs({}), ["unknown"])
+        ours = {**self.REPORT["accepted"][0], "orgs": ["SathiaAI"]}
+        self.assertNotIn("Owner approval needed", lr.pr_body({**self.REPORT, "accepted": [ours]}, "m"))
+        for orgs in (["SathiaAI", "Viaknox"], ["unknown"]):
+            body = lr.pr_body({**self.REPORT, "accepted": [{**ours, "orgs": orgs}]}, "m")
+            self.assertIn("Owner approval needed", body)
+            self.assertIn(f"`{YAML_ID}` (from {', '.join(orgs)})", body)
+
     def test_the_pr_body_has_reasons_but_no_example_code(self):
         body = lr.pr_body(self.REPORT, "m")
         self.assertIn("no javascript code", body)
