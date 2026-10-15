@@ -33,7 +33,10 @@ to `rules/custom/`; the reason is printed and written to `--report`.
 
 - `rules/custom/<area>/<pattern id>.yaml` (rule id `sast.<area>.<pattern id>`) and its fixture. The id is permanent
   once merged: a pattern whose rule id is already shipped or retired is skipped.
-- `metadata.cwe` from the pattern, `metadata.learner_pattern_id` = the pattern id, `confidence: medium`.
+- `metadata.cwe` from the pattern. When the pattern's `cwe` is null (P2 sets one only when a scanner tagged the
+  finding), the model proposes it with the rule; it must be `CWE-<n>`, and the PR marks it "drafted: check it".
+  A CWE the pattern gives always wins over the model's.
+- `metadata.learner_pattern_id` = the pattern id, `confidence: medium`.
 - Severity from `impact_band`: critical and high are `ERROR` (blocking under `block_on`; the default blocks
   critical only), medium is `WARNING`, low is `INFO`.
 - `--open-pr` commits only those files and `dist/` on `learner/rules-<date>` and opens one PR. It stops if the

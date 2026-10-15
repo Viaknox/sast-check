@@ -74,7 +74,7 @@ class Patterns(unittest.TestCase):
     def test_malformed_patterns_get_a_reason(self):
         base = pattern("lp-py-yaml-unsafe-load")
         self.assertEqual(lr.check_pattern(base), "")
-        for k, v in (("id", "LP-Yaml"), ("id", "lp-../x"), ("cwe", "502"), ("impact_band", "severe"),
+        for k, v in (("id", "LP-Yaml"), ("id", "lp-../x"), ("cwe", "502"), ("cwe", 502), ("cwe", ""), ("impact_band", "severe"),
                      ("stack", "cobol"), ("hits", "6"), ("hits", True), ("examples", []),
                      ("examples", [{"before": "x"}])):
             self.assertNotEqual(lr.check_pattern({**base, k: v}), "", (k, v))
@@ -97,6 +97,20 @@ class BuildRule(unittest.TestCase):
             self.assertEqual((r["id"], r["severity"], r["metadata"]["sast_severity"]), (YAML_ID, sev, band))
             self.assertEqual(r["metadata"]["cwe"], "CWE-502")
             self.assertEqual(r["metadata"]["learner_pattern_id"], "lp-py-yaml-unsafe-load")
+
+    def test_a_pattern_without_a_cwe_takes_the_drafted_one_and_a_given_cwe_wins(self):
+        p = {**pattern("lp-py-yaml-unsafe-load"), "cwe": None}
+        self.assertEqual(lr.check_pattern(p), "")
+        self.assertIn('"cwe"', lr.prompt(p, p["examples"], YAML_ID, ".py", ""))
+        self.assertNotIn('"cwe"', lr.prompt(pattern("lp-py-yaml-unsafe-load"), [], YAML_ID, ".py", ""))
+        r = yaml.safe_load(lr.build_rule(p, {**self.D, "cwe": "CWE-20"}, YAML_ID)[0])["rules"][0]
+        self.assertEqual(r["metadata"]["cwe"], "CWE-20")
+        self.assertEqual(r["metadata"]["references"], ["https://cwe.mitre.org/data/definitions/20.html"])
+        given = yaml.safe_load(lr.build_rule(pattern("lp-py-yaml-unsafe-load"), {**self.D, "cwe": "CWE-20"}, YAML_ID)[0])
+        self.assertEqual(given["rules"][0]["metadata"]["cwe"], "CWE-502")
+        for bad in (None, "", "cwe-20", "CWE-0", "CWE-20; rm -rf", 20):
+            with self.assertRaises(lr.Reject, msg=bad):
+                lr.build_rule(p, {**self.D, "cwe": bad}, YAML_ID)
 
     def test_a_draft_cannot_set_its_own_paths_options_or_metadata(self):
         p = pattern("lp-py-yaml-unsafe-load")
@@ -322,6 +336,17 @@ class Rejections(unittest.TestCase):
         reason, _ = self.one(DRAFTS["lp-py-yaml-unsafe-load"][0]["rule"],
                              fixture=DRAFTS["lp-py-yaml-unsafe-load"][0]["fixture"].replace("# ok:", "# ruleid:", 1))
         self.assertIn("fixture test", reason)
+
+    def test_a_pattern_without_a_cwe_lands_with_the_drafted_cwe_marked_for_review(self):
+        pid = "lp-py-yaml-unsafe-load"
+        rep = lr.run([{**pattern(pid), "cwe": None}], self.repo, ENGINES, Drafter({pid: [{**DRAFTS[pid][0], "cwe": "CWE-502"}]}))
+        try:
+            self.assertEqual([(a["cwe"], a["cwe_source"]) for a in rep["accepted"]], [("CWE-502", "drafted")])
+            self.assertIn("CWE-502 (drafted: check it)", lr.pr_body(rep, "m"))
+        finally:
+            for a in rep["accepted"]:
+                for f in a["files"]:
+                    (self.repo / f).unlink(missing_ok=True)
 
     def test_a_failed_build_keeps_nothing(self):
         rep = lr.run([pattern("lp-py-yaml-unsafe-load")], self.repo, ENGINES, Drafter(DRAFTS))
