@@ -1,7 +1,7 @@
 # Learner rules (P3): from review patterns to custom rules
 
 `tools/learner_rules.py` reads `patterns.json` from the quality-gate learner (`learner-patterns/v1`) and, for each
-pattern with at least 3 hits, asks a cheap model on OpenRouter (default `qwen/qwen3-coder-30b-a3b-instruct`,
+pattern with at least 3 hits and at least 3 distinct examples (so one can be held out), asks a cheap model on OpenRouter (default `qwen/qwen3-coder-30b-a3b-instruct`,
 override with `--model` or `LEARNER_MODEL`) for a rule and a synthetic fixture. The key comes from
 `OPENROUTER_API_KEY` and is never printed. The pattern's examples are sent to OpenRouter.
 

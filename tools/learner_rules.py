@@ -41,6 +41,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = "learner-patterns/v1"
 MIN_HITS = 3
+MIN_EXAMPLES = 3   # distinct examples: fewer leaves no held-out example, so the rule would be untested on unseen code
 DEFAULT_MODEL = "qwen/qwen3-coder-30b-a3b-instruct"   # cheap, non-frontier coding model; override with --model
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 ENGINE_TIMEOUT = 600
@@ -364,11 +365,15 @@ def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int =
                 report["skipped"].append({"id": pid, "reason": f"{rule_id} already exists, was shipped or retired"})
                 continue
             seen.add(rule_id)
+            train, held = split_examples(p["examples"])
+            if len(train) + len(held) < MIN_EXAMPLES:
+                report["skipped"].append({"id": pid, "reason": f"needs {MIN_EXAMPLES}+ distinct examples so one can be "
+                                                               f"held out (has {len(train) + len(held)})"})
+                continue
             if not clean_files(repo, exts):
                 report["rejected"].append({"id": pid, "reason": f"no {p['stack']} code in this repo to prove the rule "
                                                                 "stays silent on clean code"})
                 continue
-            train, held = split_examples(p["examples"])
             feedback, reason = "", ""
             for attempt in range(1, attempts + 1):
                 work = Path(td) / f"{p['id']}-{attempt}"

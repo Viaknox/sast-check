@@ -85,6 +85,13 @@ class Patterns(unittest.TestCase):
         train, held = lr.split_examples([a, b, {**a, "before": "x0  =  1"}, c])
         self.assertEqual((train, held), ([a, b], [c]))
 
+    def test_a_pattern_with_fewer_than_3_distinct_examples_is_skipped_before_drafting(self):
+        p = pattern("lp-py-yaml-unsafe-load")
+        two = {**p, "examples": p["examples"][:2] + [p["examples"][0]]}   # 3 listed, 2 distinct
+        rep = lr.run([two], ROOT, ["/no/engine"], lambda *a: self.fail("drafted a pattern with 2 examples"))
+        self.assertEqual(rep["skipped"], [{"id": p["id"], "reason": "needs 3+ distinct examples so one can be held out (has 2)"}])
+        self.assertEqual((rep["accepted"], rep["rejected"]), ([], []))
+
     def test_every_third_example_is_held_out(self):
         train, held = lr.split_examples([{"n": i, "before": str(i), "after": ""} for i in range(7)])
         self.assertEqual([e["n"] for e in held], [2, 5])
