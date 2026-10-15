@@ -80,8 +80,13 @@ class Patterns(unittest.TestCase):
             self.assertNotEqual(lr.check_pattern({**base, k: v}), "", (k, v))
         self.assertIn("cwe missing", lr.check_pattern({k: v for k, v in base.items() if k != "cwe"}))
 
+    def test_a_repeated_example_is_never_both_shown_and_held_out(self):
+        a, b, c = ({"before": f"x{i} = 1", "after": f"x{i} = 2"} for i in range(3))
+        train, held = lr.split_examples([a, b, {**a, "before": "x0  =  1"}, c])
+        self.assertEqual((train, held), ([a, b], [c]))
+
     def test_every_third_example_is_held_out(self):
-        train, held = lr.split_examples([{"n": i} for i in range(7)])
+        train, held = lr.split_examples([{"n": i, "before": str(i), "after": ""} for i in range(7)])
         self.assertEqual([e["n"] for e in held], [2, 5])
         self.assertEqual([e["n"] for e in train], [0, 1, 3, 4, 6])
 

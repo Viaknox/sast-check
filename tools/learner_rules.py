@@ -105,7 +105,12 @@ def check_pattern(p) -> str:
 
 
 def split_examples(examples: list[dict]) -> tuple[list[dict], list[dict]]:
-    """(examples shown to the model, held-out examples it never sees): every third example is held out."""
+    """(examples shown to the model, held-out examples it never sees): every third example is held out.
+    Repeats (the same before/after, e.g. two review tools on one line) are dropped first, so a held-out example
+    is never also shown to the model."""
+    seen: set = set()
+    examples = [e for e in examples
+                if not ((k := (" ".join(e["before"].split()), " ".join(e["after"].split()))) in seen or seen.add(k))]
     return ([e for i, e in enumerate(examples) if i % 3 != 2], [e for i, e in enumerate(examples) if i % 3 == 2])
 
 
