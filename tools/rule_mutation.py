@@ -118,14 +118,37 @@ def batch_failures(engine: str, rule: Path, muts: list[tuple[str, str, dict]]) -
             for i, (_, _, m) in enumerate(muts)]
 
 
+def likely_rejected(node) -> bool:
+    """True when a mutated rule has a list left empty, or a `patterns` with no positive element: the engine
+    rejects those, and one rejected rule in a batch makes the whole batch split. Such mutants run alone instead.
+    (A guess only decides how a mutant is run, never its result.)"""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k in LIST_KEYS and isinstance(v, list) and (not v or k == "patterns" and not any(
+                    isinstance(e, dict) and e.keys() & {"pattern", "pattern-either", "patterns", "pattern-regex",
+                                                         "pattern-inside"} for e in v)):
+                return True
+            if likely_rejected(v):
+                return True
+    elif isinstance(node, list):
+        return any(likely_rejected(x) for x in node)
+    return False
+
+
 def run_rule(engine: str, rule: Path) -> dict:
     doc = yaml.safe_load(rule.read_text())
     _, base_fails = rule_failures(engine, rule)
     if base_fails:   # the unmodified rule must pass first, or "killed" means nothing
         return {"rule": str(rule.relative_to(RULES)), "error": "unmodified rule fails: " + base_fails[0], "mutants": []}
     muts = mutants(doc)
+    alone = {i for i, (_, _, m) in enumerate(muts) if likely_rejected(m)}
+    together = [i for i in range(len(muts)) if i not in alone]
+    found = {}
+    for idx in [[i] for i in sorted(alone)] + ([together] if together else []):
+        found.update(zip(idx, batch_failures(engine, rule, [muts[i] for i in idx])))
     res = []
-    for (mid, elem, _), fails in zip(muts, batch_failures(engine, rule, muts) if muts else []):
+    for i, (mid, elem, _) in enumerate(muts):
+        fails = found[i]
         if any(ENGINE_FAILED in f for f in fails):   # the scan did not complete: nothing was evaluated
             return {"rule": str(rule.relative_to(RULES)), "error": f"mutant {mid}: {fails[0]}", "mutants": res}
         status = ("invalid" if fails and all("engine error" in f for f in fails)

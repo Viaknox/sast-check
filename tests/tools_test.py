@@ -130,6 +130,13 @@ class BatchedMutants(unittest.TestCase):
         self.assertEqual(got, alone)
         self.assertEqual(sizes[:5], ["3", "1", "2", "1", "1"])   # 3 fails -> [1] alone, [2] fails -> two alone
 
+    def test_mutants_the_engine_rejects_are_predicted(self):
+        doc = {"rules": [{"id": "r", "patterns": [{"pattern-inside": "f(...)"}, {"pattern-not": "f(1)"}]},
+                         {"id": "s", "pattern-either": [{"pattern": "a"}]}]}
+        rejected = {el for _, el, m in rm.mutants(doc) if rm.likely_rejected(m)}
+        # deleting the only positive element, or emptying a list, leaves a rule the engine rejects
+        self.assertEqual(rejected, {"pattern-inside: f(...)", "pattern: a"})
+
     @unittest.skipUnless(os.environ.get("OPENGREP"), "set OPENGREP to the engine to compare with the real engine")
     def test_batched_results_equal_one_scan_per_mutant(self):
         eng = os.environ["OPENGREP"]
