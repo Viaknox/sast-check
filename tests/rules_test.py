@@ -51,6 +51,31 @@ def rule_failures(engine: str, rule: Path, text: str | None = None) -> tuple[int
     fx = fixture_for(rule)
     if not fx:
         return len(rids), [f"{rule.relative_to(ROOT)}: no fixture"]
+    out, problem = scan_fixture(engine, rule, text)
+    if problem:
+        return len(rids), [problem] * len(rids)
+    return len(rids), [f for rid in rids for f in fixture_mismatch(out, fx, rid)]
+
+
+def fixture_mismatch(out: dict, fx: Path, rid: str, check_id: str | None = None) -> list[str]:
+    """Compare one rule's findings in a scan result with the fixture's annotations for `rid`.
+    `check_id` is the id the rule ran under, when it differs from `rid` (tools/rule_mutation.py runs renamed copies)."""
+    got = {r["start"]["line"] for r in out.get("results", []) if r["check_id"].endswith(check_id or rid)}
+    want, ok = expected(fx, rid)
+    # exact: every annotated ruleid line must match, and nothing else may match
+    missed, wrong = want - got, got - want
+    if len(want) < 3 or len(ok) < 3:   # docs/RULE_SPEC.md: >=3 true positives, >=3 safe look-alikes
+        return [f"{rid}: fixture needs >=3 ruleid: and >=3 ok: annotations (has {len(want)}/{len(ok)})"]
+    if missed or wrong:
+        return [f"{rid}: missed lines {sorted(missed)} unexpected lines {sorted(wrong)}"]
+    return []
+
+
+def scan_fixture(engine: str, rule: Path, text: str) -> tuple[dict, str | None]:
+    """Scan `rule`'s fixture with the rules in `text`. Returns (engine JSON, None), or ({}, the reason) when the
+    scan did not complete cleanly: an engine failure, or an engine error such as a rule it rejects."""
+    import yaml  # noqa: PLC0415 - dev dependency
+    fx = fixture_for(rule)
     is_og = Path(engine).name == "opengrep"
     cmd = [engine, "scan", "--json", "--quiet", "--scan-unknown-extensions"]
     cmd += ["--taint-intrafile"] if is_og else ["--metrics=off", "--disable-version-check"]
@@ -70,25 +95,15 @@ def rule_failures(engine: str, rule: Path, text: str | None = None) -> tuple[int
             out = json.loads(r.stdout)
         except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
             msg = "timed out" if isinstance(e, subprocess.TimeoutExpired) else f"exit {r.returncode}, no JSON output"
-            return len(rids), [f"{rule.relative_to(ROOT)}: {ENGINE_FAILED}: {msg}"] * len(rids)
+            return {}, f"{rule.relative_to(ROOT)}: {ENGINE_FAILED}: {msg}"
     # a rule the engine cannot parse is silently skipped -> treat it as a failure
     rule_errs = [e for e in out.get("errors", []) if "Syntax error" not in str(e.get("type"))
                  and "PartialParsing" not in str(e.get("type"))]
     if rule_errs:
-        return len(rids), [f"{rule.relative_to(ROOT)}: engine error: {str(rule_errs[0].get('message'))[:200]}"] * len(rids)
+        return {}, f"{rule.relative_to(ROOT)}: engine error: {str(rule_errs[0].get('message'))[:200]}"
     if r.returncode != 0:   # JSON but a failed run (results may be incomplete): never a pass or a kill
-        return len(rids), [f"{rule.relative_to(ROOT)}: {ENGINE_FAILED}: exit {r.returncode}"] * len(rids)
-    fails = []
-    for rid in rids:
-        got = {r["start"]["line"] for r in out.get("results", []) if r["check_id"].endswith(rid)}
-        want, ok = expected(fx, rid)
-        # exact: every annotated ruleid line must match, and nothing else may match
-        missed, wrong = want - got, got - want
-        if len(want) < 3 or len(ok) < 3:   # docs/RULE_SPEC.md: >=3 true positives, >=3 safe look-alikes
-            fails.append(f"{rid}: fixture needs >=3 ruleid: and >=3 ok: annotations (has {len(want)}/{len(ok)})")
-        elif missed or wrong:
-            fails.append(f"{rid}: missed lines {sorted(missed)} unexpected lines {sorted(wrong)}")
-    return len(rids), fails
+        return {}, f"{rule.relative_to(ROOT)}: {ENGINE_FAILED}: exit {r.returncode}"
+    return out, None
 
 
 def main() -> int:

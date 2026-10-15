@@ -38,7 +38,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tests"))
-from rules_test import ENGINE_FAILED, fixture_for, rule_failures  # noqa: E402
+from rules_test import ENGINE_FAILED, fixture_for, fixture_mismatch, rule_failures, scan_fixture  # noqa: E402
 
 RULES = ROOT / "rules" / "custom"
 LIST_KEYS = ("pattern-either", "patterns", "pattern-sources", "pattern-sinks", "pattern-sanitizers",
@@ -98,14 +98,34 @@ def mutants(doc: dict) -> list[tuple[str, str, dict]]:
     return out
 
 
+def batch_failures(engine: str, rule: Path, muts: list[tuple[str, str, dict]]) -> list[list[str]]:
+    """The fixture failures of each mutant, the same as rule_failures() run on it alone, from as few engine runs
+    as possible. Engine start-up is most of a small scan, so the mutants run together as renamed copies of the
+    mutated rule in one config. A batch that does not scan cleanly (a mutant the engine rejects, a time-out) is
+    split in half until each mutant that caused it runs on its own, exactly as before."""
+    if len(muts) == 1:
+        return [rule_failures(engine, rule, yaml.safe_dump(muts[0][2], sort_keys=False))[1]]
+    fx = fixture_for(rule)
+    copies = []
+    for i, (_, _, m) in enumerate(muts):
+        for r in m["rules"]:   # each copy gets an id no other copy ends with (m1 is not a suffix of m11)
+            copies.append({**r, "id": f"{r['id']}--mutant{i}"})
+    out, problem = scan_fixture(engine, rule, yaml.safe_dump({"rules": copies}, sort_keys=False))
+    if problem:
+        half = len(muts) // 2
+        return batch_failures(engine, rule, muts[:half]) + batch_failures(engine, rule, muts[half:])
+    return [[f for r in m["rules"] for f in fixture_mismatch(out, fx, r["id"], f"{r['id']}--mutant{i}")]
+            for i, (_, _, m) in enumerate(muts)]
+
+
 def run_rule(engine: str, rule: Path) -> dict:
     doc = yaml.safe_load(rule.read_text())
     _, base_fails = rule_failures(engine, rule)
     if base_fails:   # the unmodified rule must pass first, or "killed" means nothing
         return {"rule": str(rule.relative_to(RULES)), "error": "unmodified rule fails: " + base_fails[0], "mutants": []}
+    muts = mutants(doc)
     res = []
-    for mid, elem, m in mutants(doc):
-        n, fails = rule_failures(engine, rule, yaml.safe_dump(m, sort_keys=False))
+    for (mid, elem, _), fails in zip(muts, batch_failures(engine, rule, muts) if muts else []):
         if any(ENGINE_FAILED in f for f in fails):   # the scan did not complete: nothing was evaluated
             return {"rule": str(rule.relative_to(RULES)), "error": f"mutant {mid}: {fails[0]}", "mutants": res}
         status = ("invalid" if fails and all("engine error" in f for f in fails)

@@ -72,7 +72,7 @@ jobs:
       - name: Rule tests (opengrep - the CI engine)
         run: python tests/rules_test.py --engine "$RUNNER_TEMP/opengrep/opengrep"
       - name: Rule-quality tool tests
-        run: python tests/tools_test.py
+        run: OPENGREP="$RUNNER_TEMP/opengrep/opengrep" python tests/tools_test.py
       - name: Learner rule tests (tools/learner_rules.py, offline with canned drafts)
         run: OPENGREP="$RUNNER_TEMP/opengrep/opengrep" python tests/learner_rules_test.py
       - name: Rule mutation check (changed rules)
