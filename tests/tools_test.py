@@ -140,7 +140,8 @@ class BatchedMutants(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("OPENGREP"), "set OPENGREP to the engine to compare with the real engine")
     def test_batched_results_equal_one_scan_per_mutant(self):
         eng = os.environ["OPENGREP"]
-        muts = rm.mutants(yaml.safe_load(self.RULE.read_text()))[:12]
+        # every 10th mutant the engine accepts: a mix of killed and survived on the current rule
+        muts = [x for x in rm.mutants(yaml.safe_load(self.RULE.read_text())) if not rm.likely_rejected(x[2])][::10]
         alone = [rules_test.rule_failures(eng, self.RULE, yaml.safe_dump(m, sort_keys=False))[1] for _, _, m in muts]
         got = rm.batch_failures(eng, self.RULE, muts)
         self.assertEqual([bool(f) for f in got], [bool(f) for f in alone])
