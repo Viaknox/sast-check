@@ -88,9 +88,11 @@ def check_pattern(p) -> str:
                  ("summary", str), ("examples", list)):
         if not isinstance(p.get(k), t) or isinstance(p.get(k), bool):
             return f"malformed pattern: {k} missing or not a {t.__name__}"
-    if not PATTERN_ID.match(p["id"]):
+    if not PATTERN_ID.fullmatch(p["id"]):
         return "pattern id is not of the form lp-<lowercase letters, digits, dashes>"
-    if p.get("cwe") is not None and not (isinstance(p["cwe"], str) and CWE.match(p["cwe"])):
+    if "cwe" not in p:
+        return "malformed pattern: cwe missing (it may be null, but the key must be there)"
+    if p["cwe"] is not None and not (isinstance(p["cwe"], str) and CWE.fullmatch(p["cwe"])):
         return f"cwe {p.get('cwe')!r} is not CWE-<n> or null"
     if p["impact_band"] not in SEVERITY:
         return f"impact_band {p['impact_band']!r} is not one of {sorted(SEVERITY)}"
@@ -207,7 +209,7 @@ def build_rule(p: dict, d: dict, rule_id: str) -> tuple[str, str]:
         raise Reject("draft rule: a taint rule needs mode: taint, pattern-sources and pattern-sinks, and nothing else")
     _, langs, _, _ = STACKS[p["stack"]]
     cwe = p["cwe"] or d.get("cwe")   # the pattern's CWE wins; the model's is used only when the pattern has none
-    if not (isinstance(cwe, str) and CWE.match(cwe)):
+    if not (isinstance(cwe, str) and CWE.fullmatch(cwe)):
         raise Reject(f"draft gives no CWE of the form CWE-<n> (got {cwe!r})")
     n = cwe.split("-", 1)[1]
     rule = {"id": rule_id, "languages": langs, "severity": SEVERITY[p["impact_band"]],

@@ -76,8 +76,9 @@ class Patterns(unittest.TestCase):
         self.assertEqual(lr.check_pattern(base), "")
         for k, v in (("id", "LP-Yaml"), ("id", "lp-../x"), ("cwe", "502"), ("cwe", 502), ("cwe", ""), ("impact_band", "severe"),
                      ("stack", "cobol"), ("hits", "6"), ("hits", True), ("examples", []),
-                     ("examples", [{"before": "x"}])):
+                     ("examples", [{"before": "x"}]), ("id", "lp-yaml\n"), ("cwe", "CWE-502\n")):
             self.assertNotEqual(lr.check_pattern({**base, k: v}), "", (k, v))
+        self.assertIn("cwe missing", lr.check_pattern({k: v for k, v in base.items() if k != "cwe"}))
 
     def test_every_third_example_is_held_out(self):
         train, held = lr.split_examples([{"n": i} for i in range(7)])
@@ -108,7 +109,7 @@ class BuildRule(unittest.TestCase):
         self.assertEqual(r["metadata"]["references"], ["https://cwe.mitre.org/data/definitions/20.html"])
         given = yaml.safe_load(lr.build_rule(pattern("lp-py-yaml-unsafe-load"), {**self.D, "cwe": "CWE-20"}, YAML_ID)[0])
         self.assertEqual(given["rules"][0]["metadata"]["cwe"], "CWE-502")
-        for bad in (None, "", "cwe-20", "CWE-0", "CWE-20; rm -rf", 20):
+        for bad in (None, "", "cwe-20", "CWE-0", "CWE-20; rm -rf", 20, "CWE-20\n"):
             with self.assertRaises(lr.Reject, msg=bad):
                 lr.build_rule(p, {**self.D, "cwe": bad}, YAML_ID)
 
