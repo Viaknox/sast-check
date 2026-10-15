@@ -29,7 +29,9 @@ rules:
     - pattern-regex: (?mi)^[ \t]*RUN[ \t]+(?P<CMD>(?:[^\n\\]|\\\r?\n|\\.)*)
     - metavariable-regex:
         metavariable: $CMD
-        regex: (?s)^(?:(?!.*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|'\"\\]+)(?!.*(?:(?P=F)[^\n]*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst)|(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst)[^\n]*(?P=F))).*)$
+        regex: (?s)^(?:(?!.*(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|openssl[ \t]+dgst\b(?=[^\n]*[ \t]-verify[ \t])(?=[^\n]*[ \t]-signature[ \t])|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|'\"\\]+)(?!(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|openssl[ \t]+dgst\b(?=[^\n]*[ \t]-verify[ \t])(?=[^\n]*[ \t]-signature[
+          \t])|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b))|.*\n(?=[^\n]*(?P=F))(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|openssl[ \t]+dgst\b(?=[^\n]*[ \t]-verify[ \t])(?=[^\n]*[ \t]-signature[ \t])|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[
+          \t]+dgst)\b))).*|.*?\b(?:curl|wget)\b(?:(?!(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|openssl[ \t]+dgst\b(?=[^\n]*[ \t]-verify[ \t])(?=[^\n]*[ \t]-signature[ \t])|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).)*?(?:[;&|(]|\n)[ \t]*(?:\\\r?\n[ \t]*)*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:tar|unzip|gunzip|bunzip2|unxz|7za?|dpkg|rpm|\./\S+|(?:ba|z|da|k)?sh|source|python[0-9.]*|node|perl|ruby)(?=[ \t\n\\]|$).*)$
     - metavariable-regex:
         metavariable: $CMD
         regex: (?s).*(?:\bcurl\b[^\n|]*[ \t](?:-[A-Za-z]*[oO]\b|--output\b|--remote-name\b)|\bwget\b[ \t]+(?![^\n]*(?:--spider|-[A-Za-z]*O[ \t]*-))).*https?://.*
@@ -81,7 +83,7 @@ rules:
     - https://nvd.nist.gov/vuln/detail/CVE-2025-30066
     - https://nvd.nist.gov/vuln/detail/CVE-2025-30154
     - https://cwe.mitre.org/data/definitions/829.html
-  pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?uses:[ \t]*(?:&\w+[ \t]+)?(?:!!str[ \t]+)?["']?(?i:tj-actions/changed-files|tj-actions/eslint-changed-files|reviewdog/action-[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?@(?![0-9a-fA-F]{40}["']?[ \t]*(?:#.*)?$)[^\s"'#]+
+  pattern-regex: (?m)^(?:[ \t]*(?:-[ \t]+)?|[ \t]*(?:-[ \t]+)*(?:["']?[\w.-]+["']?:[ \t]+)?[\[{](?:(?:[^#\n"']|"[^"\n]*"|'[^'\n]*')*?[{,])?[ \t]*)["']?uses["']?[ \t]*:[ \t]*(?:(?:&[^\s,\[\]{}]+[ \t]+)?(?:!!str[ \t]+)?|!!str[ \t]+&[^\s,\[\]{}]+[ \t]+)["']?(?i:tj-actions/changed-files|tj-actions/eslint-changed-files|reviewdog/action-[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?@(?![0-9a-fA-F]{40}["']?[ \t]*(?:#.*$|$|[,}\]]))[^\s"'#,}\]]+
   paths:
     include:
     - .github/workflows/*.yml
@@ -119,10 +121,18 @@ rules:
         regex: (?s).*(?:\bcurl\b[^\n|]*[ \t](?:-[A-Za-z]*[oO]\b|--output\b|--remote-name\b)(?![ \t]+/dev/null)|\bwget\b[ \t]+(?![^\n]*(?:--spider|-[A-Za-z]*O[ \t]*-)))[^\n|]*(?:\n|$).*
     - metavariable-regex:
         metavariable: $SCRIPT
-        regex: (?s)^(?:(?!.*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst|minisign[ \t]+-V)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|'\"\\]+)(?!.*(?:(?P=F)[^\n]*(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst|minisign[ \t]+-V)|(?:sha256sum|sha512sum|shasum[ \t]+-a[ \t]*(?:256|512)|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|openssl[ \t]+dgst|minisign[ \t]+-V)[^\n]*(?P=F))).*)$
+        regex: (?s)^(?:(?!.*(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|openssl[ \t]+dgst\b(?=[^\n]*[ \t]-verify[ \t])(?=[^\n]*[ \t]-signature[ \t])|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).*|.*?(?:\bcurl\b[^\n|]*?[ \t](?:-[A-Za-z]*o|--output)[ \t]*|\bwget\b[^\n|]*?[ \t]-[A-Za-z]*O[ \t]*)(?P<F>[^\s;&|'\"\\]+)(?!(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|openssl[ \t]+dgst\b(?=[^\n]*[ \t]-verify[ \t])(?=[^\n]*[ \t]-signature[
+          \t])|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b))|.*\n(?=[^\n]*(?P=F))(?=[^\n]*?(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|openssl[ \t]+dgst\b(?=[^\n]*[ \t]-verify[ \t])(?=[^\n]*[ \t]-signature[ \t])|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[
+          \t]+dgst)\b))).*|.*?\b(?:curl|wget)\b(?:(?!(?:(?:sha(?:1|224|256|384|512)sum|b2sum|shasum)\b[^\n]*[ \t](?:-[A-Za-z]*c[A-Za-z]*|--check)\b|cosign[ \t]+verify|gpg[ \t]+--verify|gpgv\b|minisign[ \t]+-V|openssl[ \t]+dgst\b(?=[^\n]*[ \t]-verify[ \t])(?=[^\n]*[ \t]-signature[ \t])|(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b[^\n]*(?:\|[ \t]*(?:diff|cmp)\b|\|[ \t]*grep\b[^\n|]*(?:\$|\b[0-9a-fA-F]{32,}\b)|\b(?:diff|cmp|test)\b|\[\[?[ \t]|==)|(?:\[\[?[ \t]|\btest\b|\bdiff\b|\bcmp\b|==)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b|\bgrep\b[^\n]*(?:\$|\b[0-9a-fA-F]{32,}\b)[^\n]*(?:sha(?:1|224|256|384|512)sum|shasum|openssl[ \t]+dgst)\b)).)*?(?:\n|[;&|(])[ \t]*(?:sudo[ \t]+(?:-[A-Za-z]+[ \t]+)*)?(?:tar|unzip|gunzip|bunzip2|unxz|7za?|dpkg|rpm|\./\S+|(?:ba|z|da|k)?sh|source|python[0-9.]*|node|perl|ruby)(?=[ \t\n]|$).*)$
     - metavariable-regex:
         metavariable: $SCRIPT
         regex: (?s)^(?!.*\|[ \t]*(?:sudo[ \t]+)?(?:(?:ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)\b(?![ \t]+-m[ \t]+json\.tool)).*
+  paths:
+    include:
+    - .github/workflows/*.yml
+    - .github/workflows/*.yaml
+    - action.yml
+    - action.yaml
 - id: sast.js.angular-bypass-trust
   languages:
   - typescript
@@ -212,6 +222,60 @@ rules:
   - pattern: $U.searchParams.get(...)
   - pattern: location.search
   - pattern: location.hash
+  - patterns:
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: $REQ.cookies
+      - pattern: $REQ.url
+      - pattern: $REQ.originalUrl
+      - pattern: $REQ.path
+      - pattern: $REQ.get(...)
+      - pattern: $REQ.header(...)
+    - pattern-either:
+      - pattern-inside: 'function $F($REQ, ...) { ... }
+
+          ...
+
+          $APP.$M(..., $F)
+
+          '
+      - pattern-inside: '$APP.$M(..., $F)
+
+          ...
+
+          function $F($REQ, ...) { ... }
+
+          '
+      - pattern-inside: 'const $F = ($REQ, ...) => { ... }
+
+          ...
+
+          $APP.$M(..., $F)
+
+          '
+      - pattern-inside: 'const $F = async ($REQ, ...) => { ... }
+
+          ...
+
+          $APP.$M(..., $F)
+
+          '
+      - pattern-inside: 'const $F = function ($REQ, ...) { ... }
+
+          ...
+
+          $APP.$M(..., $F)
+
+          '
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(get|post|put|patch|delete|all|use|head|options)$
+    - metavariable-regex:
+        metavariable: $APP
+        regex: (?i)^(app|server|.*router)$
   pattern-sanitizers:
   - pattern: Number(...)
   - pattern: parseInt(...)
@@ -224,31 +288,119 @@ rules:
     - pattern: new Function(..., $X)
     - focus-metavariable: $X
   - patterns:
-    - pattern: $VM.$M($X, ...)
-    - metavariable-regex:
-        metavariable: $M
-        regex: ^(runInNewContext|runInThisContext|runInContext|compileFunction)$
-    - metavariable-regex:
-        metavariable: $VM
-        regex: ^(vm|node_vm)$
+    - pattern-either:
+      - patterns:
+        - pattern: $VM.$M($X, ...)
+        - metavariable-regex:
+            metavariable: $M
+            regex: ^(runInNewContext|runInThisContext|runInContext|compileFunction)$
+      - pattern: new $VM.Script($X, ...)
+    - pattern-either:
+      - patterns:
+        - pattern-inside: '$VM = require($MOD);
+
+            ...
+
+            '
+        - metavariable-regex:
+            metavariable: $MOD
+            regex: ^["']((node:)?vm)["']$
+      - pattern-inside: 'import $VM from "vm";
+
+          ...
+
+          '
+      - pattern-inside: 'import $VM from "node:vm";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $VM from "vm";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $VM from "node:vm";
+
+          ...
+
+          '
     - focus-metavariable: $X
   - patterns:
-    - pattern: runInNewContext($X, ...)
-    - focus-metavariable: $X
-  - patterns:
-    - pattern: runInThisContext($X, ...)
-    - focus-metavariable: $X
-  - patterns:
-    - pattern: new vm.Script($X, ...)
-    - focus-metavariable: $X
-  - patterns:
-    - pattern: new Script($X, ...)
+    - pattern-either:
+      - patterns:
+        - pattern: $F($X, ...)
+        - metavariable-regex:
+            metavariable: $F
+            regex: ^(runInNewContext|runInThisContext|runInContext|compileFunction)$
+        - pattern-either:
+          - pattern-inside: 'import { $F } from "vm";
+
+              ...
+
+              '
+          - pattern-inside: 'import { $F } from "node:vm";
+
+              ...
+
+              '
+      - patterns:
+        - pattern: new Script($X, ...)
+        - pattern-either:
+          - pattern-inside: 'import { Script } from "vm";
+
+              ...
+
+              '
+          - pattern-inside: 'import { Script } from "node:vm";
+
+              ...
+
+              '
     - focus-metavariable: $X
   - patterns:
     - pattern: $T($X, ...)
     - metavariable-regex:
         metavariable: $T
         regex: ^(setTimeout|setInterval|window\.setTimeout|window\.setInterval|globalThis\.setTimeout|globalThis\.setInterval)$
+    - focus-metavariable: $X
+  - patterns:
+    - pattern-either:
+      - pattern: $K($X, ...)
+      - pattern: new $K($X, ...)
+    - pattern-either:
+      - pattern-inside: 'import { $O as $K } from "vm";
+
+          ...
+
+          '
+      - pattern-inside: 'import { $O as $K } from "node:vm";
+
+          ...
+
+          '
+    - metavariable-regex:
+        metavariable: $O
+        regex: ^(runInNewContext|runInThisContext|runInContext|compileFunction|Script)$
+    - focus-metavariable: $X
+  - patterns:
+    - pattern-either:
+      - pattern: $K($X, ...)
+      - pattern: new $K($X, ...)
+    - pattern-either:
+      - pattern-inside: '$K = require("vm").$O;
+
+          ...
+
+          '
+      - pattern-inside: '$K = require("node:vm").$O;
+
+          ...
+
+          '
+    - metavariable-regex:
+        metavariable: $O
+        regex: ^(runInNewContext|runInThisContext|runInContext|compileFunction|Script)$
     - focus-metavariable: $X
 - id: sast.js.command-injection
   languages:
@@ -328,42 +480,276 @@ rules:
   - pattern: parseFloat(...)
   pattern-sinks:
   - patterns:
-    - pattern: $F($X, ...)
-    - metavariable-regex:
-        metavariable: $F
-        regex: ^(exec|execSync)$
+    - pattern-either:
+      - patterns:
+        - pattern: $CP.$F($X, ...)
+        - metavariable-regex:
+            metavariable: $F
+            regex: ^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$
+      - patterns:
+        - pattern: '$CP.$F($C, $X, {..., shell: $SV, ...})
+
+            '
+        - metavariable-regex:
+            metavariable: $SV
+            regex: ^(true|["'`].+["'`])$
+        - metavariable-regex:
+            metavariable: $F
+            regex: ^(spawn|spawnSync|execFile|execFileSync)$
+      - patterns:
+        - pattern: $CP.$F($SH, [..., $FLAG, $X, ...], ...)
+        - metavariable-regex:
+            metavariable: $F
+            regex: ^(spawn|spawnSync|execFile|execFileSync)$
+        - metavariable-regex:
+            metavariable: $SH
+            regex: ^(["'](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["']|process\.execPath)$
+        - metavariable-regex:
+            metavariable: $FLAG
+            regex: ^["'](-c|-e|--eval|-Command|-r)["']$
+    - pattern-either:
+      - patterns:
+        - pattern-inside: '$CP = require($MOD);
+
+            ...
+
+            '
+        - metavariable-regex:
+            metavariable: $MOD
+            regex: ^["']((node:)?child_process|shelljs)["']$
+      - pattern-inside: 'import $CP from "child_process";
+
+          ...
+
+          '
+      - pattern-inside: 'import $CP from "node:child_process";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $CP from "child_process";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $CP from "node:child_process";
+
+          ...
+
+          '
+      - pattern-inside: 'import $CP from "shelljs";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $CP from "shelljs";
+
+          ...
+
+          '
     - focus-metavariable: $X
   - patterns:
-    - pattern: $CP.$F($X, ...)
+    - pattern-either:
+      - patterns:
+        - pattern: $F($X, ...)
+        - metavariable-regex:
+            metavariable: $F
+            regex: ^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$
+      - patterns:
+        - pattern: '$F($C, $X, {..., shell: $SV, ...})
+
+            '
+        - metavariable-regex:
+            metavariable: $SV
+            regex: ^(true|["'`].+["'`])$
+        - metavariable-regex:
+            metavariable: $F
+            regex: ^(spawn|spawnSync|execFile|execFileSync)$
+      - patterns:
+        - pattern: $F($SH, [..., $FLAG, $X, ...], ...)
+        - metavariable-regex:
+            metavariable: $F
+            regex: ^(spawn|spawnSync|execFile|execFileSync)$
+        - metavariable-regex:
+            metavariable: $SH
+            regex: ^(["'](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["']|process\.execPath)$
+        - metavariable-regex:
+            metavariable: $FLAG
+            regex: ^["'](-c|-e|--eval|-Command|-r)["']$
+    - pattern-either:
+      - pattern-inside: 'import { $F } from "child_process";
+
+          ...
+
+          '
+      - pattern-inside: 'import { $F } from "node:child_process";
+
+          ...
+
+          '
+      - pattern-inside: 'import { $F } from "shelljs";
+
+          ...
+
+          '
+    - focus-metavariable: $X
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern: $K($X, ...)
+      - patterns:
+        - pattern: '$K($C, $X, {..., shell: $SV, ...})
+
+            '
+        - metavariable-regex:
+            metavariable: $SV
+            regex: ^(true|["'`].+["'`])$
+      - patterns:
+        - pattern: $K($SH, [..., $FLAG, $X, ...], ...)
+        - metavariable-regex:
+            metavariable: $SH
+            regex: ^(["'](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["']|process\.execPath)$
+        - metavariable-regex:
+            metavariable: $FLAG
+            regex: ^["'](-c|-e|--eval|-Command|-r)["']$
+    - pattern-either:
+      - pattern-inside: 'import { $O as $K } from "child_process";
+
+          ...
+
+          '
+      - pattern-inside: 'import { $O as $K } from "node:child_process";
+
+          ...
+
+          '
+      - pattern-inside: 'import { $O as $K } from "shelljs";
+
+          ...
+
+          '
     - metavariable-regex:
-        metavariable: $CP
-        regex: ^(child_process|cp|childProcess|cproc|proc)$
-    - metavariable-regex:
-        metavariable: $F
+        metavariable: $O
         regex: ^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$
     - focus-metavariable: $X
   - patterns:
-    - pattern: $F($X, ...)
+    - pattern-either:
+      - patterns:
+        - pattern: $K($X, ...)
+      - patterns:
+        - pattern: '$K($C, $X, {..., shell: $SV, ...})
+
+            '
+        - metavariable-regex:
+            metavariable: $SV
+            regex: ^(true|["'`].+["'`])$
+      - patterns:
+        - pattern: $K($SH, [..., $FLAG, $X, ...], ...)
+        - metavariable-regex:
+            metavariable: $SH
+            regex: ^(["'](/bin/|/usr/bin/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)["']|process\.execPath)$
+        - metavariable-regex:
+            metavariable: $FLAG
+            regex: ^["'](-c|-e|--eval|-Command|-r)["']$
+    - pattern-either:
+      - pattern-inside: '$K = require("child_process").$O;
+
+          ...
+
+          '
+      - pattern-inside: '$K = require("node:child_process").$O;
+
+          ...
+
+          '
+      - pattern-inside: '$K = require("shelljs").$O;
+
+          ...
+
+          '
     - metavariable-regex:
-        metavariable: $F
-        regex: ^(spawn|spawnSync|execFile|execFileSync)$
+        metavariable: $O
+        regex: ^(exec|execSync|spawn|spawnSync|execFile|execFileSync)$
     - focus-metavariable: $X
   - patterns:
-    - pattern: '$F($C, $ARGS, {..., shell: true, ...})
+    - pattern-either:
+      - pattern: require("child_process").exec($X, ...)
+      - pattern: require("child_process").execSync($X, ...)
+      - pattern: require("child_process").spawn($X, ...)
+      - pattern: require("child_process").spawnSync($X, ...)
+      - pattern: require("child_process").execFile($X, ...)
+      - pattern: require("child_process").execFileSync($X, ...)
+      - pattern: require("node:child_process").exec($X, ...)
+      - pattern: require("node:child_process").execSync($X, ...)
+      - pattern: require("node:child_process").spawn($X, ...)
+      - pattern: require("node:child_process").spawnSync($X, ...)
+      - pattern: require("node:child_process").execFile($X, ...)
+      - pattern: require("node:child_process").execFileSync($X, ...)
+      - pattern: require("shelljs").exec($X, ...)
+      - pattern: 'require("child_process").spawn($C, $X, {..., shell: true, ...})
 
-        '
-    - metavariable-regex:
-        metavariable: $F
-        regex: (^|\.)(spawn|spawnSync|execFile|execFileSync)$
-    - focus-metavariable: $ARGS
-  - patterns:
-    - pattern: $F($SH, [..., "-c", $X, ...], ...)
-    - metavariable-regex:
-        metavariable: $F
-        regex: (^|\.)(spawn|spawnSync|execFile|execFileSync)$
-    - metavariable-regex:
-        metavariable: $SH
-        regex: ^["'](/bin/|/usr/bin/)?(ba|z|da)?sh["']$
+          '
+      - pattern: 'require("child_process").spawn($C, $X, {..., shell: "=~/.+/", ...})
+
+          '
+      - pattern: 'require("child_process").spawnSync($C, $X, {..., shell: true, ...})
+
+          '
+      - pattern: 'require("child_process").spawnSync($C, $X, {..., shell: "=~/.+/", ...})
+
+          '
+      - pattern: 'require("child_process").execFile($C, $X, {..., shell: true, ...})
+
+          '
+      - pattern: 'require("child_process").execFile($C, $X, {..., shell: "=~/.+/", ...})
+
+          '
+      - pattern: 'require("child_process").execFileSync($C, $X, {..., shell: true, ...})
+
+          '
+      - pattern: 'require("child_process").execFileSync($C, $X, {..., shell: "=~/.+/", ...})
+
+          '
+      - pattern: 'require("node:child_process").spawn($C, $X, {..., shell: true, ...})
+
+          '
+      - pattern: 'require("node:child_process").spawn($C, $X, {..., shell: "=~/.+/", ...})
+
+          '
+      - pattern: 'require("node:child_process").spawnSync($C, $X, {..., shell: true, ...})
+
+          '
+      - pattern: 'require("node:child_process").spawnSync($C, $X, {..., shell: "=~/.+/", ...})
+
+          '
+      - pattern: 'require("node:child_process").execFile($C, $X, {..., shell: true, ...})
+
+          '
+      - pattern: 'require("node:child_process").execFile($C, $X, {..., shell: "=~/.+/", ...})
+
+          '
+      - pattern: 'require("node:child_process").execFileSync($C, $X, {..., shell: true, ...})
+
+          '
+      - pattern: 'require("node:child_process").execFileSync($C, $X, {..., shell: "=~/.+/", ...})
+
+          '
+      - pattern: require("child_process").spawn("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("child_process").spawn(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("child_process").spawnSync("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("child_process").spawnSync(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("child_process").execFile("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("child_process").execFile(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("child_process").execFileSync("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("child_process").execFileSync(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("node:child_process").spawn("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("node:child_process").spawn(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("node:child_process").spawnSync("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("node:child_process").spawnSync(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("node:child_process").execFile("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("node:child_process").execFile(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("node:child_process").execFileSync("=~/^(\/bin\/|\/usr\/bin\/)?(python3?|node|perl|ruby|php|(ba|z|da)?sh|pwsh|powershell)$/", [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
+      - pattern: require("node:child_process").execFileSync(process.execPath, [..., "=~/^(-c|-e|--eval|-Command|-r)$/", $X, ...], ...)
     - focus-metavariable: $X
 - id: sast.js.dom-xss-sink
   languages:
@@ -402,7 +788,8 @@ rules:
       - pattern: new URLSearchParams(...).get(...)
       - pattern: new URLSearchParams(...).getAll(...)
     - pattern-not: new URLSearchParams("...").get(...)
-    - pattern-not: new URLSearchParams({...}).get(...)
+    - pattern-not: new URLSearchParams("...").getAll(...)
+    - pattern-not-regex: new URLSearchParams\(\{(\s*\w+\s*:\s*("[^"\\]*"|'[^'\\]*')\s*,?)+\s*\}\)\.get(All)?\([^)]*\)
   - patterns:
     - pattern-either:
       - pattern-inside: '$W.addEventListener("message", function($E) { ... })
@@ -455,7 +842,104 @@ rules:
   paths:
     include:
     - '*.ejs'
-  pattern-regex: (?i)<%-(?!\s*include\s*\()(?!\s*body\s*-?%>)(?!\s*(?:'[^']*'|"[^"]*")\s*-?%>)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()\s*[^\s%][^%]*%>
+  pattern-either:
+  - pattern-regex: (?i)<%-(?!\s*include\s*\()(?!\s*[\w$]+\s*-?%>)(?!\s*(?:'[^']*'|"[^"]*")\s*-?%>)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()\s*[^\s%][^%]*%>
+  - patterns:
+    - pattern-either:
+      - pattern: <%- $X %>
+      - pattern: <%- $X -%>
+    - metavariable-regex:
+        metavariable: $X
+        regex: (?i)^(?!body$)[a-z_$][\w$]*$
+    - pattern-not-inside: '$X = "...";
+
+        ...
+
+        <%- $X %>
+
+        '
+    - pattern-not-inside: '$X = "...";
+
+        ...
+
+        <%- $X -%>
+
+        '
+    - pattern-not-inside: '$X = ''...'';
+
+        ...
+
+        <%- $X %>
+
+        '
+    - pattern-not-inside: '$X = ''...'';
+
+        ...
+
+        <%- $X -%>
+
+        '
+    - pattern-not-inside: '$X = include(''...'');
+
+        ...
+
+        <%- $X %>
+
+        '
+    - pattern-not-inside: '$X = include(''...'');
+
+        ...
+
+        <%- $X -%>
+
+        '
+    - pattern-not-inside: '$X = include("...");
+
+        ...
+
+        <%- $X %>
+
+        '
+    - pattern-not-inside: '$X = include("...");
+
+        ...
+
+        <%- $X -%>
+
+        '
+    - pattern-not-inside: '$X = include(''...'', ...);
+
+        ...
+
+        <%- $X %>
+
+        '
+    - pattern-not-inside: '$X = include(''...'', ...);
+
+        ...
+
+        <%- $X -%>
+
+        '
+    - pattern-not-inside: '$X = include("...", ...);
+
+        ...
+
+        <%- $X %>
+
+        '
+    - pattern-not-inside: '$X = include("...", ...);
+
+        ...
+
+        <%- $X -%>
+
+        '
+  - patterns:
+    - pattern-either:
+      - pattern: <%- $X %>
+      - pattern: <%- $X -%>
+    - pattern-regex: (?s)<%\s*(?:(?:var|let|const)\s+)?([A-Za-z_$][\w$]*)\s*=(?!=)(?!\s*(?:'[^'\n]*'|"[^"\n]*")\s*;\s*%>)(?!\s*include\s*\(\s*(?:'[^'\n]*'|"[^"\n]*")\s*(?:,(?:[^;()]|\((?:[^;()]|\((?:[^;()]|\([^;()]*\))*\))*\))*)?\)\s*;\s*%>)[^;]*;\s*%>(?:(?!<%\s*(?:(?:var|let|const)\s+)?\1\s*=(?!=)).)*<%-\s*\1\s*-?%>
 - id: sast.js.electron-node-integration
   languages:
   - javascript
@@ -472,97 +956,216 @@ rules:
     - https://cwe.mitre.org/data/definitions/94.html
     - https://www.electronjs.org/docs/latest/tutorial/security
   pattern-either:
-  - pattern: '{ ..., webPreferences: { ..., nodeIntegration: true, ... }, ... }
-
-      '
-  - pattern: 'webPreferences = { ..., nodeIntegration: true, ... }
-
-      '
-  - pattern: '{ ..., webPreferences: { ..., nodeIntegrationInWorker: true, ... }, ... }
-
-      '
-  - pattern: 'webPreferences = { ..., nodeIntegrationInWorker: true, ... }
-
-      '
-  - pattern: '{ ..., webPreferences: { ..., contextIsolation: false, ... }, ... }
-
-      '
-  - pattern: 'webPreferences = { ..., contextIsolation: false, ... }
-
-      '
-  - pattern: '{ ..., webPreferences: { ..., sandbox: false, ... }, ... }
-
-      '
-  - pattern: 'webPreferences = { ..., sandbox: false, ... }
-
-      '
-  - pattern: '{ ..., webPreferences: { ..., webSecurity: false, ... }, ... }
-
-      '
-  - pattern: 'webPreferences = { ..., webSecurity: false, ... }
-
-      '
   - patterns:
-    - pattern: '$V = { ..., nodeIntegration: true, ... }
+    - pattern-either:
+      - pattern: '{ ..., webPreferences: { ..., nodeIntegration: true, ... }, ... }
 
-        '
-    - pattern-inside: '$V = { ... };
+          '
+      - pattern: '{ ..., webPreferences: { ..., nodeIntegrationInWorker: true, ... }, ... }
 
-        ...
+          '
+      - pattern: '{ ..., webPreferences: { ..., contextIsolation: false, ... }, ... }
 
-        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+          '
+      - pattern: '{ ..., webPreferences: { ..., sandbox: false, ... }, ... }
 
-        '
+          '
+      - pattern: '{ ..., webPreferences: { ..., webSecurity: false, ... }, ... }
+
+          '
+    - pattern-either:
+      - patterns:
+        - pattern-inside: 'new $W(...)
+
+            '
+        - metavariable-regex:
+            metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+      - patterns:
+        - pattern-inside: 'new $W(...)
+
+            '
+        - pattern-inside: 'import { ..., $C as $W, ... } from "electron";
+
+            ...
+
+            '
+        - metavariable-regex:
+            metavariable: $C
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+      - patterns:
+        - pattern-inside: 'new $X.$W(...)
+
+            '
+        - metavariable-regex:
+            metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+        - pattern-either:
+          - pattern-inside: '$X = require("electron");
+
+              ...
+
+              '
+          - pattern-inside: 'import * as $X from "electron";
+
+              ...
+
+              '
+          - pattern-inside: 'import $X from "electron";
+
+              ...
+
+              '
   - patterns:
-    - pattern: '$V = { ..., nodeIntegrationInWorker: true, ... }
+    - pattern-either:
+      - pattern: '$V = { ..., nodeIntegration: true, ... }
 
-        '
-    - pattern-inside: '$V = { ... };
+          '
+      - pattern: '$V = { ..., nodeIntegrationInWorker: true, ... }
 
-        ...
+          '
+      - pattern: '$V = { ..., contextIsolation: false, ... }
 
-        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+          '
+      - pattern: '$V = { ..., sandbox: false, ... }
 
-        '
+          '
+      - pattern: '$V = { ..., webSecurity: false, ... }
+
+          '
+    - pattern-either:
+      - patterns:
+        - pattern-inside: '$V = { ... };
+
+            ...
+
+            <... new $W({ ..., webPreferences: $V, ... }) ...>;
+
+            '
+        - metavariable-regex:
+            metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+      - patterns:
+        - pattern-inside: '$V = { ... };
+
+            ...
+
+            <... new $W({ ..., webPreferences: $V, ... }) ...>;
+
+            '
+        - pattern-inside: 'import { ..., $C as $W, ... } from "electron";
+
+            ...
+
+            '
+        - metavariable-regex:
+            metavariable: $C
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+      - patterns:
+        - pattern-inside: '$V = { ... };
+
+            ...
+
+            <... new $X.$W({ ..., webPreferences: $V, ... }) ...>;
+
+            '
+        - metavariable-regex:
+            metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+        - pattern-either:
+          - pattern-inside: '$X = require("electron");
+
+              ...
+
+              '
+          - pattern-inside: 'import * as $X from "electron";
+
+              ...
+
+              '
+          - pattern-inside: 'import $X from "electron";
+
+              ...
+
+              '
   - patterns:
-    - pattern: '$V = { ..., contextIsolation: false, ... }
+    - pattern-either:
+      - pattern: '$V = { ..., webPreferences: { ..., nodeIntegration: true, ... }, ... }
 
-        '
-    - pattern-inside: '$V = { ... };
+          '
+      - pattern: '$V = { ..., webPreferences: { ..., nodeIntegrationInWorker: true, ... }, ... }
 
-        ...
+          '
+      - pattern: '$V = { ..., webPreferences: { ..., contextIsolation: false, ... }, ... }
 
-        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+          '
+      - pattern: '$V = { ..., webPreferences: { ..., sandbox: false, ... }, ... }
 
-        '
-  - patterns:
-    - pattern: '$V = { ..., sandbox: false, ... }
+          '
+      - pattern: '$V = { ..., webPreferences: { ..., webSecurity: false, ... }, ... }
 
-        '
-    - pattern-inside: '$V = { ... };
+          '
+    - pattern-either:
+      - patterns:
+        - pattern-inside: '$V = { ... };
 
-        ...
+            ...
 
-        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+            <... new $W($V) ...>;
 
-        '
-  - patterns:
-    - pattern: '$V = { ..., webSecurity: false, ... }
+            '
+        - metavariable-regex:
+            metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+      - patterns:
+        - pattern-inside: '$V = { ... };
 
-        '
-    - pattern-inside: '$V = { ... };
+            ...
 
-        ...
+            <... new $W($V) ...>;
 
-        <... new $W({ ..., webPreferences: $V, ... }) ...>;
+            '
+        - pattern-inside: 'import { ..., $C as $W, ... } from "electron";
 
-        '
+            ...
+
+            '
+        - metavariable-regex:
+            metavariable: $C
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+      - patterns:
+        - pattern-inside: '$V = { ... };
+
+            ...
+
+            <... new $X.$W($V) ...>;
+
+            '
+        - metavariable-regex:
+            metavariable: $W
+            regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+        - pattern-either:
+          - pattern-inside: '$X = require("electron");
+
+              ...
+
+              '
+          - pattern-inside: 'import * as $X from "electron";
+
+              ...
+
+              '
+          - pattern-inside: 'import $X from "electron";
+
+              ...
+
+              '
 - id: sast.js.express-error-leak
   languages:
   - javascript
   - typescript
   severity: ERROR
-  message: An error object, its stack or its message is written straight into the HTTP response. Stack traces and internal messages reveal file paths, queries and library versions that help an attacker. Log details on the server and return a generic message. (Fastify's reply.send(err) is not flagged because Fastify serializes errors without the stack.)
+  message: An error object, its stack or its message is written straight into the HTTP response. Stack traces and internal messages reveal file paths, queries and library versions that help an attacker. Log details on the server and return a generic message. (reply.send(err) inside a route registered on a Fastify instance is not flagged because Fastify serializes errors without the stack.)
   metadata:
     sast_severity: high
     confidence: medium
@@ -574,7 +1177,30 @@ rules:
     - https://owasp.org/Top10/A05_2021-Security_Misconfiguration/
   patterns:
   - pattern-either:
-    - pattern: $R.$M($E)
+    - patterns:
+      - pattern: $R.$M($E)
+      - pattern-not-inside: fastify.$V(...)
+      - pattern-not-inside:
+          patterns:
+          - pattern-either:
+            - pattern: $S.$V(..., function (...) {...}, ...)
+            - pattern: $S.$V({...}, ...)
+          - pattern-either:
+            - pattern-inside: '$S = Fastify(...);
+
+                ...
+
+                '
+            - pattern-inside: '$S = fastify(...);
+
+                ...
+
+                '
+            - pattern-inside: '$S = require("fastify")(...);
+
+                ...
+
+                '
     - pattern: $R.$M($E.stack)
     - pattern: $R.$M($E.message)
     - pattern: '$R.$M({..., $K: $E, ...})
@@ -586,8 +1212,6 @@ rules:
     - pattern: '$R.$M({..., $K: $E.message, ...})
 
         '
-  - pattern-not: reply.send($E)
-  - pattern-not: reply.$C(...).send($E)
   - metavariable-regex:
       metavariable: $R
       regex: ^(res|response|reply|resp)(\.(status|type|code|set|header|contentType)\([^()]*\))*$
@@ -1245,25 +1869,197 @@ rules:
       - pattern: $REQ.get(...)
       - pattern: $REQ.header(...)
   pattern-sanitizers:
-  - pattern: ldapEscape.dn(...)
-  - pattern: ldapEscape.dn`...`
-  - pattern: escapeDn(...)
+  - patterns:
+    - pattern: $E.dn(...)
+    - pattern-either:
+      - pattern-inside: '$E = require("ldap-escape");
+
+          ...
+
+          '
+      - pattern-inside: 'import $E from "ldap-escape";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $E from "ldap-escape";
+
+          ...
+
+          '
+    - pattern-not-inside: '$E = {...};
+
+        ...
+
+        '
+  - patterns:
+    - pattern: dn(...)
+    - pattern-inside: 'import { dn } from "ldap-escape";
+
+        ...
+
+        '
+  - patterns:
+    - pattern: $K(...)
+    - pattern-inside: 'import { dn as $K } from "ldap-escape";
+
+        ...
+
+        '
+  - patterns:
+    - pattern: $K(...)
+    - pattern-inside: '$K = require("ldap-escape").dn;
+
+        ...
+
+        '
+  - patterns:
+    - pattern: $K(...)
+    - pattern-inside: '$K = $E.dn;
+
+        ...
+
+        '
+    - pattern-either:
+      - pattern-inside: '$E = require("ldap-escape");
+
+          ...
+
+          '
+      - pattern-inside: 'import $E from "ldap-escape";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $E from "ldap-escape";
+
+          ...
+
+          '
+    - pattern-not-inside: '$E = {...};
+
+        ...
+
+        '
   pattern-sinks:
   - patterns:
-    - pattern: $C.search($B, $OPTS, ...)
-    - metavariable-regex:
-        metavariable: $C
-        regex: (?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$
-    - focus-metavariable: $B
+    - pattern-either:
+      - patterns:
+        - pattern: $C.search($B, $OPTS, ...)
+        - focus-metavariable: $B
+      - patterns:
+        - pattern: $C.$M($DN, ...)
+        - metavariable-regex:
+            metavariable: $M
+            regex: ^(bind|modify|del|compare|add)$
+        - focus-metavariable: $DN
+    - pattern-either:
+      - patterns:
+        - pattern-either:
+          - pattern-inside: '$L = require("ldapjs");
+
+              ...
+
+              '
+          - pattern-inside: 'import $L from "ldapjs";
+
+              ...
+
+              '
+          - pattern-inside: 'import * as $L from "ldapjs";
+
+              ...
+
+              '
+        - pattern-inside: '$C = $L.createClient(...);
+
+            ...
+
+            '
+      - pattern-inside: '$C = require("ldapjs").createClient(...);
+
+          ...
+
+          '
+      - patterns:
+        - pattern-inside: 'import { createClient } from "ldapjs";
+
+            ...
+
+            '
+        - pattern-inside: '$C = createClient(...);
+
+            ...
+
+            '
+      - patterns:
+        - pattern-inside: 'import { createClient as $K } from "ldapjs";
+
+            ...
+
+            '
+        - pattern-inside: '$C = $K(...);
+
+            ...
+
+            '
+      - patterns:
+        - pattern-either:
+          - pattern-inside: '$L = require("ldapts");
+
+              ...
+
+              '
+          - pattern-inside: 'import * as $L from "ldapts";
+
+              ...
+
+              '
+        - pattern-inside: '$C = new $L.Client(...);
+
+            ...
+
+            '
+      - patterns:
+        - pattern-inside: 'import { Client } from "ldapts";
+
+            ...
+
+            '
+        - pattern-inside: '$C = new Client(...);
+
+            ...
+
+            '
+      - patterns:
+        - pattern-inside: 'import { Client as $K } from "ldapts";
+
+            ...
+
+            '
+        - pattern-inside: '$C = new $K(...);
+
+            ...
+
+            '
   - patterns:
-    - pattern: $C.$M($DN, ...)
+    - pattern-either:
+      - patterns:
+        - pattern-either:
+          - pattern: $C.search($B, $OPTS, ...)
+          - pattern: $O.$C.search($B, $OPTS, ...)
+        - focus-metavariable: $B
+      - patterns:
+        - pattern-either:
+          - pattern: $C.$M($DN, ...)
+          - pattern: $O.$C.$M($DN, ...)
+        - metavariable-regex:
+            metavariable: $M
+            regex: ^(bind|modify|del|compare|add)$
+        - focus-metavariable: $DN
     - metavariable-regex:
         metavariable: $C
-        regex: (?i)^(.*ldap.*|client|ad|activeDirectory|directory|conn|connection)$
-    - metavariable-regex:
-        metavariable: $M
-        regex: ^(bind|modify|del|compare|add)$
-    - focus-metavariable: $DN
+        regex: (?i)ldap
 - id: sast.js.ldap-injection
   languages:
   - javascript
@@ -1330,20 +2126,200 @@ rules:
       - pattern: $REQ.get(...)
       - pattern: $REQ.header(...)
   pattern-sanitizers:
-  - pattern: ldapEscape.filter(...)
-  - pattern: ldapEscape.filter`...`
-  - pattern: escapeFilter(...)
-  - pattern: escapeLdapFilter(...)
-  pattern-sinks:
   - patterns:
-    - pattern: '$C.search($B, {..., filter: $X, ...}, ...)
+    - pattern: $E.filter(...)
+    - pattern-either:
+      - pattern-inside: '$E = require("ldap-escape");
+
+          ...
+
+          '
+      - pattern-inside: 'import $E from "ldap-escape";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $E from "ldap-escape";
+
+          ...
+
+          '
+    - pattern-not-inside: '$E = {...};
+
+        ...
 
         '
-    - focus-metavariable: $X
   - patterns:
-    - pattern: $C.search($B, $OPTS, ...)
-    - pattern-not: $C.search($B, {...}, ...)
-    - focus-metavariable: $OPTS
+    - pattern: filter(...)
+    - pattern-inside: 'import { filter } from "ldap-escape";
+
+        ...
+
+        '
+  - patterns:
+    - pattern: $K(...)
+    - pattern-inside: 'import { filter as $K } from "ldap-escape";
+
+        ...
+
+        '
+  - patterns:
+    - pattern: $K(...)
+    - pattern-inside: '$K = require("ldap-escape").filter;
+
+        ...
+
+        '
+  - patterns:
+    - pattern: $K(...)
+    - pattern-inside: '$K = $E.filter;
+
+        ...
+
+        '
+    - pattern-either:
+      - pattern-inside: '$E = require("ldap-escape");
+
+          ...
+
+          '
+      - pattern-inside: 'import $E from "ldap-escape";
+
+          ...
+
+          '
+      - pattern-inside: 'import * as $E from "ldap-escape";
+
+          ...
+
+          '
+    - pattern-not-inside: '$E = {...};
+
+        ...
+
+        '
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern: '$C.search($B, {..., filter: $X, ...}, ...)
+
+            '
+        - focus-metavariable: $X
+      - patterns:
+        - pattern: $C.search($B, $OPTS, ...)
+        - pattern-not: $C.search($B, {...}, ...)
+        - focus-metavariable: $OPTS
+    - pattern-either:
+      - patterns:
+        - pattern-either:
+          - pattern-inside: '$L = require("ldapjs");
+
+              ...
+
+              '
+          - pattern-inside: 'import $L from "ldapjs";
+
+              ...
+
+              '
+          - pattern-inside: 'import * as $L from "ldapjs";
+
+              ...
+
+              '
+        - pattern-inside: '$C = $L.createClient(...);
+
+            ...
+
+            '
+      - pattern-inside: '$C = require("ldapjs").createClient(...);
+
+          ...
+
+          '
+      - patterns:
+        - pattern-inside: 'import { createClient } from "ldapjs";
+
+            ...
+
+            '
+        - pattern-inside: '$C = createClient(...);
+
+            ...
+
+            '
+      - patterns:
+        - pattern-inside: 'import { createClient as $K } from "ldapjs";
+
+            ...
+
+            '
+        - pattern-inside: '$C = $K(...);
+
+            ...
+
+            '
+      - patterns:
+        - pattern-either:
+          - pattern-inside: '$L = require("ldapts");
+
+              ...
+
+              '
+          - pattern-inside: 'import * as $L from "ldapts";
+
+              ...
+
+              '
+        - pattern-inside: '$C = new $L.Client(...);
+
+            ...
+
+            '
+      - patterns:
+        - pattern-inside: 'import { Client } from "ldapts";
+
+            ...
+
+            '
+        - pattern-inside: '$C = new Client(...);
+
+            ...
+
+            '
+      - patterns:
+        - pattern-inside: 'import { Client as $K } from "ldapts";
+
+            ...
+
+            '
+        - pattern-inside: '$C = new $K(...);
+
+            ...
+
+            '
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern-either:
+          - pattern: '$C.search($B, {..., filter: $X, ...}, ...)
+
+              '
+          - pattern: '$O.$C.search($B, {..., filter: $X, ...}, ...)
+
+              '
+        - focus-metavariable: $X
+      - patterns:
+        - pattern-either:
+          - pattern: $C.search($B, $OPTS, ...)
+          - pattern: $O.$C.search($B, $OPTS, ...)
+        - pattern-not: $C.search($B, {...}, ...)
+        - pattern-not: $O.$C.search($B, {...}, ...)
+        - focus-metavariable: $OPTS
+    - metavariable-regex:
+        metavariable: $C
+        regex: (?i)ldap
   - patterns:
     - pattern: $AD.$M($X, ...)
     - metavariable-regex:
@@ -1397,8 +2373,6 @@ rules:
   mode: taint
   pattern-sources:
   - pattern-either:
-    - pattern: location.hash
-    - pattern: location.search
     - pattern: window.location.hash
     - pattern: window.location.search
     - pattern: document.location.hash
@@ -1420,6 +2394,63 @@ rules:
 
           '
     - pattern: $E.data
+  - patterns:
+    - pattern-either:
+      - pattern: location.hash
+      - pattern: location.search
+    - pattern-not-inside: 'function $F(..., location, ...) { ... }
+
+        '
+    - pattern-not-inside: 'function (..., location, ...) { ... }
+
+        '
+    - pattern-not-inside: '(..., location, ...) => $B
+
+        '
+    - pattern-not-inside: 'const location = $E;
+
+        ...
+
+        '
+    - pattern-not-inside: 'let location = $E;
+
+        ...
+
+        '
+    - pattern-not-inside: 'const { ..., location, ... } = $E;
+
+        ...
+
+        '
+    - pattern-not-inside: 'let { ..., location, ... } = $E;
+
+        ...
+
+        '
+    - pattern-not-inside: 'function $F(...) { var location = $E; ... }
+
+        '
+    - pattern-not-inside: 'function (...) { var location = $E; ... }
+
+        '
+    - pattern-not-inside: '(...) => { var location = $E; ... }
+
+        '
+    - pattern-not-inside: 'function $F(...) { var { ..., location, ... } = $E; ... }
+
+        '
+    - pattern-not-inside: 'function (...) { var { ..., location, ... } = $E; ... }
+
+        '
+    - pattern-not-inside: '(...) => { var { ..., location, ... } = $E; ... }
+
+        '
+    - pattern-not-inside: 'function $F(..., { ..., location, ... }, ...) { ... }
+
+        '
+    - pattern-not-inside: '({ ..., location, ... }) => { ... }
+
+        '
   pattern-sanitizers:
   - patterns:
     - pattern-either:
@@ -1452,26 +2483,82 @@ rules:
   pattern-sinks:
   - patterns:
     - pattern-either:
-      - pattern: location = $X
       - pattern: window.location = $X
       - pattern: document.location = $X
-      - pattern: location.href = $X
       - pattern: window.location.href = $X
       - pattern: document.location.href = $X
     - pattern-not: $L = `/...`
     - focus-metavariable: $X
   - patterns:
     - pattern-either:
-      - pattern: location.assign($X)
       - pattern: window.location.assign($X)
       - pattern: document.location.assign($X)
-      - pattern: location.replace($X)
       - pattern: window.location.replace($X)
       - pattern: document.location.replace($X)
       - pattern: window.open($X, ...)
       - pattern: window.open($X)
       - pattern: open($X)
     - pattern-not: $F(`/...`, ...)
+    - focus-metavariable: $X
+  - patterns:
+    - pattern-either:
+      - pattern: location = $X
+      - pattern: location.href = $X
+      - pattern: location.assign($X)
+      - pattern: location.replace($X)
+    - pattern-not-inside: 'function $F(..., location, ...) { ... }
+
+        '
+    - pattern-not-inside: 'function (..., location, ...) { ... }
+
+        '
+    - pattern-not-inside: '(..., location, ...) => $B
+
+        '
+    - pattern-not-inside: 'const location = $E;
+
+        ...
+
+        '
+    - pattern-not-inside: 'let location = $E;
+
+        ...
+
+        '
+    - pattern-not-inside: 'const { ..., location, ... } = $E;
+
+        ...
+
+        '
+    - pattern-not-inside: 'let { ..., location, ... } = $E;
+
+        ...
+
+        '
+    - pattern-not-inside: 'function $F(...) { var location = $E; ... }
+
+        '
+    - pattern-not-inside: 'function (...) { var location = $E; ... }
+
+        '
+    - pattern-not-inside: '(...) => { var location = $E; ... }
+
+        '
+    - pattern-not-inside: 'function $F(...) { var { ..., location, ... } = $E; ... }
+
+        '
+    - pattern-not-inside: 'function (...) { var { ..., location, ... } = $E; ... }
+
+        '
+    - pattern-not-inside: '(...) => { var { ..., location, ... } = $E; ... }
+
+        '
+    - pattern-not-inside: 'function $F(..., { ..., location, ... }, ...) { ... }
+
+        '
+    - pattern-not-inside: '({ ..., location, ... }) => { ... }
+
+        '
     - focus-metavariable: $X
 - id: sast.js.nosql-injection
   languages:
@@ -1674,6 +2761,39 @@ rules:
     - metavariable-regex:
         metavariable: $B
         regex: ^(req|request)\.(url|originalUrl)$
+  - patterns:
+    - pattern: $T
+    - metavariable-regex:
+        metavariable: $T
+        regex: ^`(/|\$\{(process\.env\.\w+|import\.meta\.env\.\w+|config\.[\w.]+|[A-Z][A-Z0-9_]*)\}/)[^/\\$`]
+  - patterns:
+    - pattern: $B + $P + $X
+    - metavariable-regex:
+        metavariable: $B
+        regex: ^(process\.env\.\w+|import\.meta\.env\.\w+|config\.[\w.]+|[A-Z][A-Z0-9_]*)$
+    - metavariable-regex:
+        metavariable: $P
+        regex: ^["'`]/[^/\\"'`]
+    - focus-metavariable: $X
+  - patterns:
+    - pattern: $X
+    - pattern-either:
+      - pattern-inside: 'if ($RE.test($X)) { ... }
+
+          '
+      - pattern-inside: 'if (!$RE.test($X)) { ... return ...; }
+
+          ...
+
+          '
+      - pattern-inside: 'if (!$RE.test($X)) { ... throw ...; }
+
+          ...
+
+          '
+    - metavariable-regex:
+        metavariable: $RE
+        regex: ^/\^(\\d|\[0-9\])\+\$/$
   - pattern: encodeURIComponent(...)
   - pattern: Number(...)
   - pattern: parseInt(...)
@@ -1797,6 +2917,133 @@ rules:
   - pattern: Number(...)
   - pattern: parseInt(...)
   - pattern: parseFloat(...)
+  - patterns:
+    - pattern-either:
+      - pattern: $X.replace($RE, "")
+      - pattern: $X.replaceAll($RE, "")
+    - metavariable-regex:
+        metavariable: $RE
+        regex: ^/\[\^(A-Za-z0-9|a-zA-Z0-9|a-z0-9|0-9a-z)\]\+?/(?=[gi]*g)[gi]+$
+  - patterns:
+    - pattern: $X
+    - pattern-inside: 'if ($RE.test($X)) { ... }
+
+        '
+    - metavariable-regex:
+        metavariable: $RE
+        regex: ^/\^\[(A-Za-z0-9|a-zA-Z0-9|a-z0-9|0-9a-z)\][+*]\$/i?$
+  - patterns:
+    - pattern: $X
+    - pattern-either:
+      - pattern-inside: 'if (!$RE.test($X)) { ... return ...; }
+
+          ...
+
+          '
+      - pattern-inside: 'if (!$RE.test($X)) { ... throw ...; }
+
+          ...
+
+          '
+    - metavariable-regex:
+        metavariable: $RE
+        regex: ^/\^\[(A-Za-z0-9|a-zA-Z0-9|a-z0-9|0-9a-z)\][+*]\$/i?$
+  - patterns:
+    - pattern: $F
+    - pattern-either:
+      - pattern-inside: '$F = path.resolve(...);
+
+          ...
+
+          if ($F.startsWith($R + path.sep)) { ... }
+
+          '
+      - pattern-inside: '$F = path.resolve(...);
+
+          ...
+
+          if (!$F.startsWith($R + path.sep)) { ... return ...; }
+
+          ...
+
+          '
+      - pattern-inside: '$F = path.resolve(...);
+
+          ...
+
+          if (!$F.startsWith($R + path.sep)) { ... throw ...; }
+
+          ...
+
+          '
+      - pattern-inside: '$F = path.normalize(...);
+
+          ...
+
+          if ($F.startsWith($R + path.sep)) { ... }
+
+          '
+      - pattern-inside: '$F = path.normalize(...);
+
+          ...
+
+          if (!$F.startsWith($R + path.sep)) { ... return ...; }
+
+          ...
+
+          '
+      - pattern-inside: '$F = path.normalize(...);
+
+          ...
+
+          if (!$F.startsWith($R + path.sep)) { ... throw ...; }
+
+          ...
+
+          '
+      - pattern-inside: '$F = path.join(...);
+
+          ...
+
+          if ($F.startsWith($R + path.sep)) { ... }
+
+          '
+      - pattern-inside: '$F = path.join(...);
+
+          ...
+
+          if (!$F.startsWith($R + path.sep)) { ... return ...; }
+
+          ...
+
+          '
+      - pattern-inside: '$F = path.join(...);
+
+          ...
+
+          if (!$F.startsWith($R + path.sep)) { ... throw ...; }
+
+          ...
+
+          '
+      - pattern-inside: '$REL = path.relative($R, $F);
+
+          ...
+
+          if ($REL.startsWith("..") || path.isAbsolute($REL)) { ... return ...; }
+
+          ...
+
+          '
+      - pattern-inside: '$REL = path.relative($R, $F);
+
+          ...
+
+          if ($REL.startsWith("..") || path.isAbsolute($REL)) { ... throw ...; }
+
+          ...
+
+          '
   pattern-sinks:
   - patterns:
     - pattern: $FS.$M($P, ...)
@@ -2014,30 +3261,128 @@ rules:
   - requires: INPUT and not FIXED_ORIGIN
     patterns:
     - pattern-either:
-      - pattern: $PAGE.goto($X, ...)
+      - patterns:
+        - pattern: $PAGE.goto($X, ...)
+        - pattern-either:
+          - pattern-inside: '$PAGE = await $B.newPage(...);
+
+              ...
+
+              '
+          - pattern-inside: '[$PAGE, ...] = await $B.pages();
+
+              ...
+
+              '
+          - pattern-inside: '$PAGE = (await $B.pages())[0];
+
+              ...
+
+              '
+          - patterns:
+            - pattern-either:
+              - pattern-inside: 'function $F(..., $PAGE, ...) { ... }
+
+                  '
+              - pattern-inside: '($PAGE, ...) => { ... }
+
+                  '
+            - pattern-either:
+              - pattern-inside: '$P = require($M);
+
+                  ...
+
+                  '
+              - pattern-inside: 'import * as $P from $M;
+
+                  ...
+
+                  '
+              - pattern-inside: 'import { ... } from $M;
+
+                  ...
+
+                  '
+            - metavariable-regex:
+                metavariable: $M
+                regex: ^["'`]?puppeteer(-core)?["'`]?$
       - pattern: (await $B.newPage()).goto($X, ...)
     - pattern-not: $PAGE.goto(encodeURIComponent(...), ...)
-    - metavariable-regex:
-        metavariable: $PAGE
-        regex: (?i).*(page|tab|frame|context|browser|newPage).*
     - focus-metavariable: $X
   - requires: INPUT
     patterns:
     - pattern-either:
-      - pattern: $PAGE.$M($X, ...)
-      - pattern: (await $B.newPage()).$M($X, ...)
-    - metavariable-regex:
-        metavariable: $M
-        regex: ^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$
-    - focus-metavariable: $X
-  - requires: INPUT
-    patterns:
-    - pattern: '$PAGE.addScriptTag({..., $K: $X, ...})
+      - patterns:
+        - pattern-either:
+          - patterns:
+            - pattern: $PAGE.$M2($X, ...)
+            - metavariable-regex:
+                metavariable: $M2
+                regex: ^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$
+          - patterns:
+            - pattern: '$PAGE.addScriptTag({..., $K: $X, ...})
 
-        '
-    - metavariable-regex:
-        metavariable: $K
-        regex: ^(url|content)$
+                '
+            - metavariable-regex:
+                metavariable: $K
+                regex: ^(url|content)$
+        - pattern-either:
+          - pattern-inside: '$PAGE = await $B.newPage(...);
+
+              ...
+
+              '
+          - pattern-inside: '[$PAGE, ...] = await $B.pages();
+
+              ...
+
+              '
+          - pattern-inside: '$PAGE = (await $B.pages())[0];
+
+              ...
+
+              '
+          - patterns:
+            - pattern-either:
+              - pattern-inside: 'function $F(..., $PAGE, ...) { ... }
+
+                  '
+              - pattern-inside: '($PAGE, ...) => { ... }
+
+                  '
+            - pattern-either:
+              - pattern-inside: '$P = require($M);
+
+                  ...
+
+                  '
+              - pattern-inside: 'import * as $P from $M;
+
+                  ...
+
+                  '
+              - pattern-inside: 'import { ... } from $M;
+
+                  ...
+
+                  '
+            - metavariable-regex:
+                metavariable: $M
+                regex: ^["'`]?puppeteer(-core)?["'`]?$
+      - patterns:
+        - pattern-either:
+          - patterns:
+            - pattern: (await $B.newPage()).$M2($X, ...)
+            - metavariable-regex:
+                metavariable: $M2
+                regex: ^(setContent|evaluate|evaluateOnNewDocument|waitForFunction)$
+          - patterns:
+            - pattern: '(await $B.newPage()).addScriptTag({..., $K: $X, ...})
+
+                '
+            - metavariable-regex:
+                metavariable: $K
+                regex: ^(url|content)$
     - focus-metavariable: $X
 - id: sast.js.react-dangerous-html
   languages:
@@ -2358,10 +3703,7 @@ rules:
   paths:
     include:
     - '*.njk'
-    - '*.html'
-    - '*.jinja'
-    - '*.jinja2'
-    - '*.j2'
+    - '*.nunjucks'
   pattern-regex: (?i)\{\{-?(?!\s*(?:'[^']*'|"[^"]*")\s*\|)(?!\s*(?:[\w$]+\.)*(?:sanitize|purify|escapeHtml)\s*\()(?![^}]*\|\s*(?:escape|e|forceescape|striptags|sanitize|purify)\s*(?:[(|]|-?\}))(?![^}\n]*\.Content\b)[^}\n]*\|\s*(?:safe|safeHTML)\b[^}\n]*-?\}\}
 - id: sast.js.timing-unsafe-compare
   languages:
@@ -2527,15 +3869,62 @@ rules:
   - pattern-either:
     - patterns:
       - pattern-either:
-        - pattern: '$FN($S, {..., schema: $SC, ...}, ...)
+        - patterns:
+          - pattern-either:
+            - pattern: '$L.$FN($S, {..., schema: $SC, ...}, ...)
+
+                '
+            - pattern: '$L.$FN($S, $O, {..., schema: $SC, ...}, ...)
+
+                '
+          - pattern-either:
+            - pattern-inside: '$L = require("js-yaml");
+
+                ...
+
+                '
+            - pattern-inside: 'import $L from "js-yaml";
+
+                ...
+
+                '
+            - pattern-inside: 'import * as $L from "js-yaml";
+
+                ...
+
+                '
+        - pattern: 'require("js-yaml").$FN($S, {..., schema: $SC, ...}, ...)
 
             '
-        - pattern: '$L.$FN($S, {..., schema: $SC, ...}, ...)
+        - pattern: 'require("js-yaml").$FN($S, $O, {..., schema: $SC, ...}, ...)
 
             '
-        - pattern: '$L.$FN($S, $O, {..., schema: $SC, ...}, ...)
+        - patterns:
+          - pattern-either:
+            - pattern: '$FN($S, {..., schema: $SC, ...}, ...)
 
-            '
+                '
+            - pattern: '$FN($S, $O, {..., schema: $SC, ...}, ...)
+
+                '
+          - pattern-inside: 'import { $FN } from "js-yaml";
+
+              ...
+
+              '
+        - patterns:
+          - pattern-either:
+            - pattern: '$K($S, {..., schema: $SC, ...}, ...)
+
+                '
+            - pattern: '$K($S, $O, {..., schema: $SC, ...}, ...)
+
+                '
+          - pattern-inside: 'import { $FN as $K } from "js-yaml";
+
+              ...
+
+              '
       - metavariable-regex:
           metavariable: $FN
           regex: ^(load|loadAll|safeLoad|safeLoadAll)$
@@ -2604,9 +3993,42 @@ rules:
   - pattern: Object.keys(...)
   pattern-sinks:
   - patterns:
+    - pattern-either:
+      - pattern: '{ ..., define: $D, ... }
+
+          '
+      - pattern: '$CFG.define = $D
+
+          '
+    - pattern-either:
+      - pattern-inside: 'defineConfig(...)
+
+          '
+      - pattern-inside: 'module.exports = $X
+
+          '
+    - focus-metavariable: $D
+  - patterns:
     - pattern: '{ ..., define: $D, ... }
 
         '
+    - pattern-regex: export\s+default\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}
+    - focus-metavariable: $D
+  - patterns:
+    - pattern: '{ ..., define: $D, ... }
+
+        '
+    - pattern-inside: 'export default function (...) { ... }
+
+        '
+    - focus-metavariable: $D
+  - patterns:
+    - pattern: '{ ..., define: $D, ..., $K: $V, ... }
+
+        '
+    - metavariable-regex:
+        metavariable: $K
+        regex: ^(plugins|server|build|base|resolve|css|esbuild|optimizeDeps|envPrefix|envDir|publicDir|preview|ssr|appType|worker)$
     - focus-metavariable: $D
 - id: sast.js.vue-dynamic-href
   languages:
@@ -2681,7 +4103,7 @@ rules:
     - https://kubernetes.io/blog/2025/03/24/ingress-nginx-cve-2025-1974/
     - https://cwe.mitre.org/data/definitions/94.html
   pattern-either:
-  - pattern-regex: (?:ingress-nginx/controller|kubernetes-ingress-controller/nginx-ingress-controller):v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)(?![0-9])
+  - pattern-regex: (?m)^(?:[ \t]*(?:-[ \t]+)?|[^#\n]*[{,][ \t]*)[\"']?image[\"']?:[ \t]*[\"']?(?:[^\"'#\n]*/)?(?:ingress-nginx/controller|kubernetes-ingress-controller/nginx-ingress-controller):v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)(?![0-9])
   - pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?(?:image|repository):[ \t]*[\"']?(?:[\w.:-]+/)*ingress-nginx/controller[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*tag:[ \t]*[\"']?v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)(?![0-9])
   - pattern-regex: (?m)^[ \t]*tag:[ \t]*[\"']?v?(?:0\.\d+\.\d+|1\.(?:[0-9]|10)\.\d+|1\.11\.[0-4]|1\.12\.0)[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*(?:image|repository):[ \t]*[\"']?(?:[\w.:-]+/)*ingress-nginx/controller(?![\w/.-])
   - pattern-regex: (?m)^[ \t]*(?:-[ \t]+)?(?:chart|name):[ \t]*[\"']?ingress-nginx[\"']?[ \t]*(?:#[^\n]*)?\n(?:[ \t]*(?:#[^\n]*|[\w.-]+:[^\n]*)?\n){0,40}?[ \t]*(?:version|targetRevision):[ \t]*[\"']?v?(?:[0-3]\.\d+\.\d+|4\.(?:[0-9]|10)\.\d+|4\.11\.[0-4]|4\.12\.0)(?![0-9])
@@ -2711,13 +4133,60 @@ rules:
       - pattern: request.headers
       - pattern: request.body
       - pattern: request.FILES
+  - patterns:
+    - pattern: $R.$A
+    - metavariable-regex:
+        metavariable: $A
+        regex: ^(GET|POST|COOKIES|META|FILES)$
+    - pattern-either:
+      - pattern-inside: 'def $F($R, ...): ...
+
+          '
+      - pattern-inside: 'def $F(self, $R, ...): ...
+
+          '
+  - patterns:
+    - pattern: $R.$A
+    - metavariable-regex:
+        metavariable: $A
+        regex: ^(body|headers)$
+    - pattern-inside: '@$D
+
+        def $F($R, ...): ...
+
+        '
+    - metavariable-regex:
+        metavariable: $D
+        regex: (^|\.)(require_(GET|POST|safe|http_methods)|csrf_exempt|csrf_protect|ensure_csrf_cookie|login_required|permission_required|user_passes_test|api_view|never_cache|cache_page)$
   pattern-sanitizers:
   - pattern: django.utils.html.escape(...)
   - pattern: escape(...)
   - pattern: conditional_escape(...)
   - pattern: django.utils.html.conditional_escape(...)
-  - pattern: format_html(...)
-  - pattern: django.utils.html.format_html(...)
+  - patterns:
+    - pattern: $FH("...", ...)
+    - metavariable-regex:
+        metavariable: $FH
+        regex: ^(django\.utils\.html\.)?format_html$
+  - patterns:
+    - pattern: Template($S).render(...)
+    - metavariable-regex:
+        metavariable: $S
+        regex: (?s)^[rRuU]?["'](?!.*(\|\s*safe|autoescape\s+off))
+    - pattern-not: Template(...).render(Context(..., autoescape=False))
+    - pattern-not: Template(...).render(Context($D, False))
+  - patterns:
+    - pattern: $T.render(...)
+    - pattern-inside: '$T = Template($S)
+
+        ...
+
+        '
+    - metavariable-regex:
+        metavariable: $S
+        regex: (?s)^[rRuU]?["'](?!.*(\|\s*safe|autoescape\s+off))
+    - pattern-not: $T.render(Context(..., autoescape=False))
+    - pattern-not: $T.render(Context($D, False))
   - pattern: int(...)
   - pattern: float(...)
   - pattern: bool(...)
@@ -2727,16 +4196,24 @@ rules:
       - pattern: HttpResponse($X, ...)
       - pattern: HttpResponse(..., content=$X, ...)
       - pattern: django.http.HttpResponse($X, ...)
-    - pattern-not: HttpResponse(..., content_type="application/json", ...)
-    - pattern-not: HttpResponse(..., content_type="text/plain", ...)
+    - pattern-not:
+        patterns:
+        - pattern: HttpResponse(..., content_type=$CT, ...)
+        - metavariable-regex:
+            metavariable: $CT
+            regex: ^f?["'](text/plain|application/json)(;[^"']*)?["'](\s*%\s*[\w.]+|\.format\([^()]*\))?$
     - focus-metavariable: $X
   - patterns:
     - pattern: $C($X, ...)
     - metavariable-regex:
         metavariable: $C
         regex: ^(django\.http\.)?HttpResponse(BadRequest|NotFound|Forbidden|ServerError|Gone|NotAllowed)$
-    - pattern-not: $C(..., content_type="application/json", ...)
-    - pattern-not: $C(..., content_type="text/plain", ...)
+    - pattern-not:
+        patterns:
+        - pattern: $C(..., content_type=$CT, ...)
+        - metavariable-regex:
+            metavariable: $CT
+            regex: ^f?["'](text/plain|application/json)(;[^"']*)?["'](\s*%\s*[\w.]+|\.format\([^()]*\))?$
     - focus-metavariable: $X
   - patterns:
     - pattern-either:
@@ -2832,6 +4309,20 @@ rules:
   - pattern: 'jwt.decode(..., algorithms=[..., "NONE", ...], ...)
 
       '
+  - patterns:
+    - pattern: jwt.decode(..., options=$O, ...)
+    - pattern-inside: '$O = {..., "verify_signature": False, ...}
+
+        ...
+
+        '
+  - patterns:
+    - pattern: jwt.decode(..., options=$O, ...)
+    - pattern-inside: '$O = dict(..., verify_signature=False, ...)
+
+        ...
+
+        '
 - id: sast.python.langchain-hub-unpinned
   languages:
   - python
@@ -2882,9 +4373,46 @@ rules:
   pattern-sanitizers:
   - pattern: secure_filename(...)
   - pattern: werkzeug.utils.secure_filename(...)
-  - pattern: os.path.basename(...)
-  - pattern: basename(...)
-  - pattern: $P.name
+  - patterns:
+    - pattern-either:
+      - pattern: os.path.basename(...)
+      - pattern: basename(...)
+    - pattern-not-inside:
+        patterns:
+        - pattern: $DS(...)
+        - metavariable-regex:
+            metavariable: $DS
+            regex: ^(os\.(listdir|scandir|walk|rmdir|rename)|shutil\.(rmtree|copytree|move)|glob\.(glob|iglob))$
+    - pattern-not-inside: $Q.iterdir()
+  - patterns:
+    - pattern: pathlib.$C(...).name
+    - metavariable-regex:
+        metavariable: $C
+        regex: ^(Path|PurePath|PurePosixPath|PureWindowsPath)$
+    - pattern-not-inside:
+        patterns:
+        - pattern: $DS(...)
+        - metavariable-regex:
+            metavariable: $DS
+            regex: ^(os\.(listdir|scandir|walk|rmdir|rename)|shutil\.(rmtree|copytree|move)|glob\.(glob|iglob))$
+    - pattern-not-inside: $Q.iterdir()
+  - patterns:
+    - pattern: $P.name
+    - pattern-inside: '$P = pathlib.$C(...)
+
+        ...
+
+        '
+    - metavariable-regex:
+        metavariable: $C
+        regex: ^(Path|PurePath|PurePosixPath|PureWindowsPath)$
+    - pattern-not-inside:
+        patterns:
+        - pattern: $DS(...)
+        - metavariable-regex:
+            metavariable: $DS
+            regex: ^(os\.(listdir|scandir|walk|rmdir|rename)|shutil\.(rmtree|copytree|move)|glob\.(glob|iglob))$
+    - pattern-not-inside: $Q.iterdir()
   - pattern: int(...)
   - pattern: uuid.UUID(...)
   pattern-sinks:
@@ -2913,6 +4441,11 @@ rules:
       - pattern: os.rename($P, ...)
       - pattern: os.makedirs($P, ...)
       - pattern: os.listdir($P)
+      - pattern: os.scandir($P)
+      - pattern: os.walk($P, ...)
+      - pattern: os.rmdir($P)
+      - pattern: glob.glob($P, ...)
+      - pattern: pathlib.Path($P).iterdir()
       - pattern: shutil.rmtree($P, ...)
     - focus-metavariable: $P
   - patterns:
@@ -2921,7 +4454,7 @@ rules:
       - pattern: $Q.joinpath($P).$M(...)
     - metavariable-regex:
         metavariable: $M
-        regex: ^(read_text|read_bytes|open)$
+        regex: ^(read_text|read_bytes|open|iterdir)$
     - focus-metavariable: $P
 - id: sast.python.requests-cleartext
   languages:
@@ -2938,10 +4471,15 @@ rules:
     - https://cwe.mitre.org/data/definitions/319.html
   patterns:
   - pattern-either:
-    - pattern: requests.$M("$URL", ...)
-    - pattern: requests.$M(..., url="$URL", ...)
-    - pattern: httpx.$M("$URL", ...)
-    - pattern: httpx.$M(..., url="$URL", ...)
+    - patterns:
+      - pattern-either:
+        - pattern: requests.$M("$URL", ...)
+        - pattern: requests.$M(..., url="$URL", ...)
+        - pattern: httpx.$M("$URL", ...)
+        - pattern: httpx.$M(..., url="$URL", ...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(get|post|put|patch|delete|head|options|request|stream)$
     - pattern: urllib.request.urlopen("$URL", ...)
     - pattern: urllib.request.Request("$URL", ...)
     - pattern: urlopen("$URL", ...)
@@ -3037,20 +4575,29 @@ rules:
     references:
     - https://cwe.mitre.org/data/definitions/829.html
     - https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami
-  patterns:
-  - pattern: "data \"aws_ami\" \"$NAME\" {\n  ...\n  most_recent = true\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  owners = [$O, ...]\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-id\"\n    ...\n    values = [$V, ...]\n    ...\n  }\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-alias\"\n    ...\n    values = [$V, ...]\n    ...\n  }\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  owners = var.$X\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  owners = local.$X\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  owners = module.$M.$X\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-id\"\n    ...\n    values = var.$X\n    ...\n  }\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-id\"\n    ...\n    values = local.$X\n    ...\n  }\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-id\"\n    ...\n    values = module.$M.$X\n    ...\n  }\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-alias\"\n    ...\n    values = var.$X\n    ...\n  }\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-alias\"\n    ...\n    values = local.$X\n    ...\n  }\n  ...\n}\n"
-  - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-alias\"\n    ...\n    values = module.$M.$X\n    ...\n  }\n  ...\n}\n"
+  pattern-either:
+  - patterns:
+    - pattern: "data \"aws_ami\" \"$NAME\" {\n  ...\n  most_recent = true\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  owners = [$O, ...]\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-id\"\n    ...\n    values = [$V, ...]\n    ...\n  }\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-alias\"\n    ...\n    values = [$V, ...]\n    ...\n  }\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  owners = var.$X\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  owners = local.$X\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  owners = module.$M.$X\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-id\"\n    ...\n    values = var.$X\n    ...\n  }\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-id\"\n    ...\n    values = local.$X\n    ...\n  }\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-id\"\n    ...\n    values = module.$M.$X\n    ...\n  }\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-alias\"\n    ...\n    values = var.$X\n    ...\n  }\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-alias\"\n    ...\n    values = local.$X\n    ...\n  }\n  ...\n}\n"
+    - pattern-not: "data \"aws_ami\" \"$NAME\" {\n  ...\n  filter {\n    ...\n    name = \"owner-alias\"\n    ...\n    values = module.$M.$X\n    ...\n  }\n  ...\n}\n"
+  - patterns:
+    - pattern-regex: (?s)\bvariable[ \t]+"(?P<V>[A-Za-z_][\w-]*)"[ \t]*\{(?!(?:(?!\n\}).)*?\bcondition[ \t]*=[ \t]*length\(var\.(?P=V)\)[ \t]*(?:>[ \t]*0|>=[ \t]*1|!=[ \t]*0)\b(?![^\n]*\|\|))(?:(?!\n\}).)*?\bdefault[ \t]*=[ \t]*\[[ \t\r\n]*\](?:(?!\n\}).)*\n\}.*?(?P<D>data[ \t]+"aws_ami"[ \t]+"[^"]+")[ \t]*\{(?=(?:(?!\n\}).)*?\bmost_recent[ \t]*=[ \t]*true\b)(?!(?:(?!\n\}).)*?\bname[ \t]*=[ \t]*\"owner-)(?=(?:(?!\n\}).)*?\bowners[ \t]*=[ \t]*var\.(?P=V)(?![\w.\[-]))
+    - focus-metavariable: $D
+  - pattern-regex: (?s)(?P<D>data[ \t]+"aws_ami"[ \t]+"[^"]+")[ \t]*\{(?=(?:(?!\n\}).)*?\bmost_recent[ \t]*=[ \t]*true\b)(?!(?:(?!\n\}).)*?\bname[ \t]*=[ \t]*\"owner-)(?=(?:(?!\n\}).)*?\bowners[ \t]*=[ \t]*var\.(?P<V>[A-Za-z_][\w-]*)(?![\w.\[-]))(?=(?:(?!\n\}).)*?\n\}.*?\bvariable[ \t]+"(?P=V)"[ \t]*\{(?!(?:(?!\n\}).)*?\bcondition[ \t]*=[ \t]*length\(var\.(?P=V)\)[ \t]*(?:>[ \t]*0|>=[ \t]*1|!=[ \t]*0)\b(?![^\n]*\|\|))(?:(?!\n\}).)*?\bdefault[ \t]*=[ \t]*\[[ \t\r\n]*\](?:(?!\n\}).)*\n\})
+  - patterns:
+    - pattern-regex: (?s)\blocals[ \t]*\{(?:(?!\n\}).)*?\b(?P<V>[A-Za-z_][\w-]*)[ \t]*=[ \t]*\[[ \t\r\n]*\](?:(?!\n\}).)*\n\}.*?(?P<D>data[ \t]+"aws_ami"[ \t]+"[^"]+")[ \t]*\{(?=(?:(?!\n\}).)*?\bmost_recent[ \t]*=[ \t]*true\b)(?!(?:(?!\n\}).)*?\bname[ \t]*=[ \t]*\"owner-)(?=(?:(?!\n\}).)*?\bowners[ \t]*=[ \t]*local\.(?P=V)(?![\w.\[-]))
+    - focus-metavariable: $D
+  - pattern-regex: (?s)(?P<D>data[ \t]+"aws_ami"[ \t]+"[^"]+")[ \t]*\{(?=(?:(?!\n\}).)*?\bmost_recent[ \t]*=[ \t]*true\b)(?!(?:(?!\n\}).)*?\bname[ \t]*=[ \t]*\"owner-)(?=(?:(?!\n\}).)*?\bowners[ \t]*=[ \t]*local\.(?P<V>[A-Za-z_][\w-]*)(?![\w.\[-]))(?=(?:(?!\n\}).)*?\n\}.*?\blocals[ \t]*\{(?:(?!\n\}).)*?\b(?P=V)[ \t]*=[ \t]*\[[ \t\r\n]*\](?:(?!\n\}).)*\n\})
 - id: sast.web.inline-script-dom-xss
   languages:
   - generic
@@ -3119,4 +4666,13 @@ rules:
     - '*.scss'
     exclude:
     - node_modules
-  pattern-regex: (?i)(?<=[/."'`\s=(,])(?:[a-z0-9-]+\.)*(?:polyfill\.io|polyfill\.com|bsclink\.cn|bootcdn\.net|bootcss\.com|bootcss\.net|staticfile\.net|staticfile\.org)(?=[/"'`:\s?#),;<>\\]|$)
+  pattern-either:
+  - pattern-regex: "(?i)(?:\\b(?:src|href|srcset|imagesrcset|data|data-src|data-href|poster|background|action|formaction|xlink:href)[ \\t\\r\\n]*=[ \\t\\r\\n]*\\{?[ \\t]*[\"'`]?[ \t]*)(?:https?:)?[/\\\\]{2}(?:(?:[a-z0-9-]|%[0-9a-f]{2})+(?:\\.|%2e))*(?:(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:i|%69|%49)(?:o|%6f|%4f)|(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:l|%6c|%4c)(?:i|%69|%49)(?:n|%6e|%4e)(?:k|%6b|%4b)(?:\\.|%2e)(?:c|%63|%43)(?:n|%6e|%4e)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:d|%64|%44)(?:n|%6e|%4e)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\\
+      .|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\.|%2e)(?:o|%6f|%4f)(?:r|%72|%52)(?:g|%67|%47))(?:\\.|%2e)?(?=[/:?#\\\\\\\"'`\\s)>,;]|%2f|%3a|%3f|%23|$)"
+  - pattern-regex: (?i)(?:\b(?:srcset|imagesrcset)[ \t\r\n]*=[ \t\r\n]*["'`]?[^"'`>]*?,[ \t\r\n]*)(?:https?:)?[/\\]{2}(?:(?:[a-z0-9-]|%[0-9a-f]{2})+(?:\.|%2e))*(?:(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\.|%2e)(?:i|%69|%49)(?:o|%6f|%4f)|(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:l|%6c|%4c)(?:i|%69|%49)(?:n|%6e|%4e)(?:k|%6b|%4b)(?:\.|%2e)(?:c|%63|%43)(?:n|%6e|%4e)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:d|%64|%44)(?:n|%6e|%4e)(?:\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\.|%2e)(?:o|%6f|%4f)(?:r|%72|%52)(?:g|%67|%47))(?:\.|%2e)?(?=[/:?#\\\"'`\s)>,;]|%2f|%3a|%3f|%23|$)
+  - pattern-regex: "(?i)(?:(?:\\burl\\([ \\t\\r\\n]*[\"'`]?|@import[ \\t\\r\\n]+[\"'`])[ \t]*)(?:https?:)?[/\\\\]{2}(?:(?:[a-z0-9-]|%[0-9a-f]{2})+(?:\\.|%2e))*(?:(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:i|%69|%49)(?:o|%6f|%4f)|(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:l|%6c|%4c)(?:i|%69|%49)(?:n|%6e|%4e)(?:k|%6b|%4b)(?:\\.|%2e)(?:c|%63|%43)(?:n|%6e|%4e)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:d|%64|%44)(?:n|%6e|%4e)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\\
+      .|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\.|%2e)(?:o|%6f|%4f)(?:r|%72|%52)(?:g|%67|%47))(?:\\.|%2e)?(?=[/:?#\\\\\\\"'`\\s)>,;]|%2f|%3a|%3f|%23|$)"
+  - pattern-regex: "(?i)(?:(?:\\b(?:from|import)[ \\t\\r\\n]*[\"'`]|\\b(?:import|require|fetch|importScripts|getScript|\\w*(?:load|Load|inject|Inject|append|Append|add|Add)\\w*(?:Script|Style|Stylesheet|JS|Js|CSS|Css|Module)s?)[ \\t\\r\\n]*\\([ \\t\\r\\n]*[\"'`]|\\.(?:src|href)[ \\t]*=(?!=)[ \\t]*[\"'`]|setAttribute\\([ \\t]*[\\\"'](?:src|href)[\\\"'][ \\t]*,[ \\t]*[\"'`])[ \t]*)(?:https?:)?[/\\\\]{2}(?:(?:[a-z0-9-]|%[0-9a-f]{2})+(?:\\.|%2e))*(?:(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:i|%69|%49)(?:o|%6f|%4f)|(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:l|%6c|%4c)(?:i|%69|%49)(?:n|%6e|%4e)(?:k|%6b|%4b)(?:\\.|%2e)(?:c|%63|%43)(?:n|%6e|%4e)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:d|%64|%44)(?:n|%6e|%4e)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\\
+      .|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\.|%2e)(?:o|%6f|%4f)(?:r|%72|%52)(?:g|%67|%47))(?:\\.|%2e)?(?=[/:?#\\\\\\\"'`\\s)>,;]|%2f|%3a|%3f|%23|$)"
+  - pattern-regex: "(?i)(?:(?:(?<![=!<>])=(?!=)|:)[ \\t]*[\"'`][ \t]*)(?:https?:)?[/\\\\]{2}(?:(?:[a-z0-9-]|%[0-9a-f]{2})+(?:\\.|%2e))*(?:(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:i|%69|%49)(?:o|%6f|%4f)|(?:p|%70|%50)(?:o|%6f|%4f)(?:l|%6c|%4c)(?:y|%79|%59)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:l|%6c|%4c)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:l|%6c|%4c)(?:i|%69|%49)(?:n|%6e|%4e)(?:k|%6b|%4b)(?:\\.|%2e)(?:c|%63|%43)(?:n|%6e|%4e)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:d|%64|%44)(?:n|%6e|%4e)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\.|%2e)(?:c|%63|%43)(?:o|%6f|%4f)(?:m|%6d|%4d)|(?:b|%62|%42)(?:o|%6f|%4f)(?:o|%6f|%4f)(?:t|%74|%54)(?:c|%63|%43)(?:s|%73|%53)(?:s|%73|%53)(?:\\.|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\\
+      .|%2e)(?:n|%6e|%4e)(?:e|%65|%45)(?:t|%74|%54)|(?:s|%73|%53)(?:t|%74|%54)(?:a|%61|%41)(?:t|%74|%54)(?:i|%69|%49)(?:c|%63|%43)(?:f|%66|%46)(?:i|%69|%49)(?:l|%6c|%4c)(?:e|%65|%45)(?:\\.|%2e)(?:o|%6f|%4f)(?:r|%72|%52)(?:g|%67|%47))(?:\\.|%2e)?(?=[/:?#\\\\\\\"'`\\s)>,;]|%2f|%3a|%3f|%23|$)"

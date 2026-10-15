@@ -78,6 +78,40 @@ rules:
           - metavariable-regex:
               metavariable: $B
               regex: '^(req|request)\.(url|originalUrl)$'
+      # a template literal that starts with a literal path segment ("/items/${id}"), or with a configured base
+      # followed by one ("${process.env.BASE_PATH}/items/${id}"); the base may be empty, so a literal segment must follow
+      - patterns:
+          - pattern: $T
+          - metavariable-regex:
+              metavariable: $T
+              regex: '^`(/|\$\{(process\.env\.\w+|import\.meta\.env\.\w+|config\.[\w.]+|[A-Z][A-Z0-9_]*)\}/)[^/\\$`]'
+      # a configured base, then a literal path segment, then anything: BASE_URL + "/items/" + id
+      - patterns:
+          - pattern: $B + $P + $X
+          - metavariable-regex:
+              metavariable: $B
+              regex: '^(process\.env\.\w+|import\.meta\.env\.\w+|config\.[\w.]+|[A-Z][A-Z0-9_]*)$'
+          - metavariable-regex:
+              metavariable: $P
+              regex: '^["''`]/[^/\\"''`]'
+          # only the tail is cleared, so a base that itself carries request data (const BASE_URL = req.query.base)
+          # still reaches the redirect
+          - focus-metavariable: $X
+      # a value that a digits-only regex accepted: inside the passing branch, or after a rejecting branch that returns or throws
+      - patterns:
+          - pattern: $X
+          - pattern-either:
+              - pattern-inside: |
+                  if ($RE.test($X)) { ... }
+              - pattern-inside: |
+                  if (!$RE.test($X)) { ... return ...; }
+                  ...
+              - pattern-inside: |
+                  if (!$RE.test($X)) { ... throw ...; }
+                  ...
+          - metavariable-regex:
+              metavariable: $RE
+              regex: '^/\^(\\d|\[0-9\])\+\$/$'
       - pattern: encodeURIComponent(...)
       - pattern: Number(...)
       - pattern: parseInt(...)

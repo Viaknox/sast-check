@@ -70,6 +70,92 @@ rules:
       - pattern: Number(...)
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
+      # every character that is not a letter or digit is removed (the g flag is required)
+      - patterns:
+          - pattern-either:
+              - pattern: $X.replace($RE, "")
+              - pattern: $X.replaceAll($RE, "")
+          - metavariable-regex:
+              metavariable: $RE
+              regex: '^/\[\^(A-Za-z0-9|a-zA-Z0-9|a-z0-9|0-9a-z)\]\+?/(?=[gi]*g)[gi]+$'
+      # a regex that accepts only letters and digits decides, and the code inside the branch is the safe one
+      - patterns:
+          - pattern: $X
+          - pattern-inside: |
+              if ($RE.test($X)) { ... }
+          - metavariable-regex:
+              metavariable: $RE
+              regex: '^/\^\[(A-Za-z0-9|a-zA-Z0-9|a-z0-9|0-9a-z)\][+*]\$/i?$'
+      # the same regex used to reject: everything after a rejecting branch that returns or throws is safe
+      - patterns:
+          - pattern: $X
+          - pattern-either:
+              - pattern-inside: |
+                  if (!$RE.test($X)) { ... return ...; }
+                  ...
+              - pattern-inside: |
+                  if (!$RE.test($X)) { ... throw ...; }
+                  ...
+          - metavariable-regex:
+              metavariable: $RE
+              regex: '^/\^\[(A-Za-z0-9|a-zA-Z0-9|a-z0-9|0-9a-z)\][+*]\$/i?$'
+      # a path under a root, kept inside it by a check that ends the request (the separator is part of the test,
+      # so a sibling folder such as /srv/files-private does not pass)
+      - patterns:
+          - pattern: $F
+          - pattern-either:
+              - pattern-inside: |
+                  $F = path.resolve(...);
+                  ...
+                  if ($F.startsWith($R + path.sep)) { ... }
+              - pattern-inside: |
+                  $F = path.resolve(...);
+                  ...
+                  if (!$F.startsWith($R + path.sep)) { ... return ...; }
+                  ...
+              - pattern-inside: |
+                  $F = path.resolve(...);
+                  ...
+                  if (!$F.startsWith($R + path.sep)) { ... throw ...; }
+                  ...
+              - pattern-inside: |
+                  $F = path.normalize(...);
+                  ...
+                  if ($F.startsWith($R + path.sep)) { ... }
+              - pattern-inside: |
+                  $F = path.normalize(...);
+                  ...
+                  if (!$F.startsWith($R + path.sep)) { ... return ...; }
+                  ...
+              - pattern-inside: |
+                  $F = path.normalize(...);
+                  ...
+                  if (!$F.startsWith($R + path.sep)) { ... throw ...; }
+                  ...
+              - pattern-inside: |
+                  $F = path.join(...);
+                  ...
+                  if ($F.startsWith($R + path.sep)) { ... }
+              - pattern-inside: |
+                  $F = path.join(...);
+                  ...
+                  if (!$F.startsWith($R + path.sep)) { ... return ...; }
+                  ...
+              - pattern-inside: |
+                  $F = path.join(...);
+                  ...
+                  if (!$F.startsWith($R + path.sep)) { ... throw ...; }
+                  ...
+              - pattern-inside: |
+                  $REL = path.relative($R, $F);
+                  ...
+                  if ($REL.startsWith("..") || path.isAbsolute($REL)) { ... return ...; }
+                  ...
+              - pattern-inside: |
+                  $REL = path.relative($R, $F);
+                  ...
+                  if ($REL.startsWith("..") || path.isAbsolute($REL)) { ... throw ...; }
+                  ...
     pattern-sinks:
       - patterns:
           - pattern: $FS.$M($P, ...)

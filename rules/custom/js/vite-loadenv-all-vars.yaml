@@ -25,7 +25,42 @@ rules:
       - pattern: $ENV[...]
       - pattern: Object.keys(...)
     pattern-sinks:
+      # define inside defineConfig(...) or the CommonJS export of a config file
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  { ..., define: $D, ... }
+              - pattern: |
+                  $CFG.define = $D
+          - pattern-either:
+              - pattern-inside: |
+                  defineConfig(...)
+              - pattern-inside: |
+                  module.exports = $X
+          - focus-metavariable: $D
+      # the default export is the config, whatever keys it has
       - patterns:
           - pattern: |
               { ..., define: $D, ... }
+          # the default-export object, read as text (3 levels of braces) because the engines disagree on how
+          # `export default` and `export const` differ in the syntax tree
+          - pattern-regex: 'export\s+default\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}'
+          - focus-metavariable: $D
+      # the default export is a config function: the object it returns is the config
+      # (anonymous functions only: the engines treat `export default function f` like `export function f`,
+      # and an arrow after `export default` like any exported arrow, so those forms would match every export)
+      - patterns:
+          - pattern: |
+              { ..., define: $D, ... }
+          # one form is enough: the engines read the async, arrow and function-expression forms as this one
+          - pattern-inside: |
+              export default function (...) { ... }
+          - focus-metavariable: $D
+      # a bare config object (e.g. export default { ... }) is recognised by a Vite-only sibling key
+      - patterns:
+          - pattern: |
+              { ..., define: $D, ..., $K: $V, ... }
+          - metavariable-regex:
+              metavariable: $K
+              regex: ^(plugins|server|build|base|resolve|css|esbuild|optimizeDeps|envPrefix|envDir|publicDir|preview|ssr|appType|worker)$
           - focus-metavariable: $D

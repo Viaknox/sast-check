@@ -17,59 +17,153 @@ rules:
         - https://cwe.mitre.org/data/definitions/94.html
         - https://www.electronjs.org/docs/latest/tutorial/security
     pattern-either:
-      - pattern: |
-          { ..., webPreferences: { ..., nodeIntegration: true, ... }, ... }
-      - pattern: |
-          webPreferences = { ..., nodeIntegration: true, ... }
-      - pattern: |
-          { ..., webPreferences: { ..., nodeIntegrationInWorker: true, ... }, ... }
-      - pattern: |
-          webPreferences = { ..., nodeIntegrationInWorker: true, ... }
-      - pattern: |
-          { ..., webPreferences: { ..., contextIsolation: false, ... }, ... }
-      - pattern: |
-          webPreferences = { ..., contextIsolation: false, ... }
-      - pattern: |
-          { ..., webPreferences: { ..., sandbox: false, ... }, ... }
-      - pattern: |
-          webPreferences = { ..., sandbox: false, ... }
-      - pattern: |
-          { ..., webPreferences: { ..., webSecurity: false, ... }, ... }
-      - pattern: |
-          webPreferences = { ..., webSecurity: false, ... }
+      # settings written inline in the window constructor
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  { ..., webPreferences: { ..., nodeIntegration: true, ... }, ... }
+              - pattern: |
+                  { ..., webPreferences: { ..., nodeIntegrationInWorker: true, ... }, ... }
+              - pattern: |
+                  { ..., webPreferences: { ..., contextIsolation: false, ... }, ... }
+              - pattern: |
+                  { ..., webPreferences: { ..., sandbox: false, ... }, ... }
+              - pattern: |
+                  { ..., webPreferences: { ..., webSecurity: false, ... }, ... }
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      new $W(...)
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              # a constructor renamed on import: bound from the electron module in this file (the import pattern also
+              # matches a require destructure with a rename, on both engines)
+              - patterns:
+                  - pattern-inside: |
+                      new $W(...)
+                  - pattern-inside: |
+                      import { ..., $C as $W, ... } from "electron";
+                      ...
+                  - metavariable-regex:
+                      metavariable: $C
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              # a qualified constructor counts only when the qualifier is bound from the electron module in this file
+              - patterns:
+                  - pattern-inside: |
+                      new $X.$W(...)
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+                  - pattern-either:
+                      - pattern-inside: |
+                          $X = require("electron");
+                          ...
+                      - pattern-inside: |
+                          import * as $X from "electron";
+                          ...
+                      - pattern-inside: |
+                          import $X from "electron";
+                          ...
       # the settings object is built in a variable and passed to a window later in the same scope
       - patterns:
-          - pattern: |
-              $V = { ..., nodeIntegration: true, ... }
-          - pattern-inside: |
-              $V = { ... };
-              ...
-              <... new $W({ ..., webPreferences: $V, ... }) ...>;
+          - pattern-either:
+              - pattern: |
+                  $V = { ..., nodeIntegration: true, ... }
+              - pattern: |
+                  $V = { ..., nodeIntegrationInWorker: true, ... }
+              - pattern: |
+                  $V = { ..., contextIsolation: false, ... }
+              - pattern: |
+                  $V = { ..., sandbox: false, ... }
+              - pattern: |
+                  $V = { ..., webSecurity: false, ... }
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $W({ ..., webPreferences: $V, ... }) ...>;
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $W({ ..., webPreferences: $V, ... }) ...>;
+                  - pattern-inside: |
+                      import { ..., $C as $W, ... } from "electron";
+                      ...
+                  - metavariable-regex:
+                      metavariable: $C
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $X.$W({ ..., webPreferences: $V, ... }) ...>;
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+                  - pattern-either:
+                      - pattern-inside: |
+                          $X = require("electron");
+                          ...
+                      - pattern-inside: |
+                          import * as $X from "electron";
+                          ...
+                      - pattern-inside: |
+                          import $X from "electron";
+                          ...
+      # the whole options object is built in a variable and passed to a window later in the same scope
       - patterns:
-          - pattern: |
-              $V = { ..., nodeIntegrationInWorker: true, ... }
-          - pattern-inside: |
-              $V = { ... };
-              ...
-              <... new $W({ ..., webPreferences: $V, ... }) ...>;
-      - patterns:
-          - pattern: |
-              $V = { ..., contextIsolation: false, ... }
-          - pattern-inside: |
-              $V = { ... };
-              ...
-              <... new $W({ ..., webPreferences: $V, ... }) ...>;
-      - patterns:
-          - pattern: |
-              $V = { ..., sandbox: false, ... }
-          - pattern-inside: |
-              $V = { ... };
-              ...
-              <... new $W({ ..., webPreferences: $V, ... }) ...>;
-      - patterns:
-          - pattern: |
-              $V = { ..., webSecurity: false, ... }
-          - pattern-inside: |
-              $V = { ... };
-              ...
-              <... new $W({ ..., webPreferences: $V, ... }) ...>;
+          - pattern-either:
+              - pattern: |
+                  $V = { ..., webPreferences: { ..., nodeIntegration: true, ... }, ... }
+              - pattern: |
+                  $V = { ..., webPreferences: { ..., nodeIntegrationInWorker: true, ... }, ... }
+              - pattern: |
+                  $V = { ..., webPreferences: { ..., contextIsolation: false, ... }, ... }
+              - pattern: |
+                  $V = { ..., webPreferences: { ..., sandbox: false, ... }, ... }
+              - pattern: |
+                  $V = { ..., webPreferences: { ..., webSecurity: false, ... }, ... }
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $W($V) ...>;
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $W($V) ...>;
+                  - pattern-inside: |
+                      import { ..., $C as $W, ... } from "electron";
+                      ...
+                  - metavariable-regex:
+                      metavariable: $C
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+              - patterns:
+                  - pattern-inside: |
+                      $V = { ... };
+                      ...
+                      <... new $X.$W($V) ...>;
+                  - metavariable-regex:
+                      metavariable: $W
+                      regex: ^(BrowserWindow|BrowserView|WebContentsView)$
+                  - pattern-either:
+                      - pattern-inside: |
+                          $X = require("electron");
+                          ...
+                      - pattern-inside: |
+                          import * as $X from "electron";
+                          ...
+                      - pattern-inside: |
+                          import $X from "electron";
+                          ...

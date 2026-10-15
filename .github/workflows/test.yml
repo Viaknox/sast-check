@@ -13,7 +13,7 @@ jobs:
   test:
     name: rules + e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 60   # a PR that changes many rules mutation-tests each one (about a minute per rule)
+    timeout-minutes: 75   # a PR that changes many rules mutation-tests each one (about a minute per rule)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -76,7 +76,9 @@ jobs:
       - name: Learner rule tests (tools/learner_rules.py, offline with canned drafts)
         run: OPENGREP="$RUNNER_TEMP/opengrep/opengrep" python tests/learner_rules_test.py
       - name: Rule mutation check (changed rules)
-        timeout-minutes: 40
+        # PR #11 (many rules): 34 min on one run, over 40 on two re-runs of the same commit; 60 leaves room
+        # for runner speed. Setup and rule tests take about 6 min and end-to-end about 3, so the job limit is 75.
+        timeout-minutes: 60
         # every pattern element of a changed rule must be exercised by its fixture, unless the baseline
         # (tests/mutation-baseline.json) lists it with a reason; see docs/rule-quality.md
         if: github.event_name == 'pull_request'

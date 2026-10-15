@@ -29,9 +29,50 @@ rules:
     pattern-sanitizers:
       - pattern: secure_filename(...)
       - pattern: werkzeug.utils.secure_filename(...)
-      - pattern: os.path.basename(...)
-      - pattern: basename(...)
-      - pattern: $P.name
+      # os.path.basename / .name still return ".." for the input "..": fine where a file is opened
+      # (a directory cannot be), but a directory sink must not treat them as clean
+      - patterns:
+          - pattern-either:
+              - pattern: os.path.basename(...)
+              - pattern: basename(...)
+          # a basename can still be ".." and a directory sink then climbs out of the base
+          - pattern-not-inside:
+              patterns:
+                - pattern: $DS(...)
+                - metavariable-regex:
+                    metavariable: $DS
+                    regex: '^(os\.(listdir|scandir|walk|rmdir|rename)|shutil\.(rmtree|copytree|move)|glob\.(glob|iglob))$'
+          - pattern-not-inside: $Q.iterdir()
+      # .name is only a safe basename on a pathlib object; any other object's .name is not
+      - patterns:
+          - pattern: pathlib.$C(...).name
+          - metavariable-regex:
+              metavariable: $C
+              regex: '^(Path|PurePath|PurePosixPath|PureWindowsPath)$'
+          # a basename can still be ".." and a directory sink then climbs out of the base
+          - pattern-not-inside:
+              patterns:
+                - pattern: $DS(...)
+                - metavariable-regex:
+                    metavariable: $DS
+                    regex: '^(os\.(listdir|scandir|walk|rmdir|rename)|shutil\.(rmtree|copytree|move)|glob\.(glob|iglob))$'
+          - pattern-not-inside: $Q.iterdir()
+      - patterns:
+          - pattern: $P.name
+          - pattern-inside: |
+              $P = pathlib.$C(...)
+              ...
+          - metavariable-regex:
+              metavariable: $C
+              regex: '^(Path|PurePath|PurePosixPath|PureWindowsPath)$'
+          # a basename can still be ".." and a directory sink then climbs out of the base
+          - pattern-not-inside:
+              patterns:
+                - pattern: $DS(...)
+                - metavariable-regex:
+                    metavariable: $DS
+                    regex: '^(os\.(listdir|scandir|walk|rmdir|rename)|shutil\.(rmtree|copytree|move)|glob\.(glob|iglob))$'
+          - pattern-not-inside: $Q.iterdir()
       - pattern: int(...)
       - pattern: uuid.UUID(...)
     pattern-sinks:
@@ -60,6 +101,11 @@ rules:
               - pattern: os.rename($P, ...)
               - pattern: os.makedirs($P, ...)
               - pattern: os.listdir($P)
+              - pattern: os.scandir($P)
+              - pattern: os.walk($P, ...)
+              - pattern: os.rmdir($P)
+              - pattern: glob.glob($P, ...)
+              - pattern: pathlib.Path($P).iterdir()
               - pattern: shutil.rmtree($P, ...)
           - focus-metavariable: $P
       # joined paths: (base / user).read_text(), base.joinpath(user).open() -- the user part is the focus
@@ -69,5 +115,5 @@ rules:
               - pattern: $Q.joinpath($P).$M(...)
           - metavariable-regex:
               metavariable: $M
-              regex: '^(read_text|read_bytes|open)$'
+              regex: '^(read_text|read_bytes|open|iterdir)$'
           - focus-metavariable: $P
