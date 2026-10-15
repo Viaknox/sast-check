@@ -156,6 +156,16 @@ class Secrets(unittest.TestCase):
         for text in (str(cm.exception), out.getvalue(), err.getvalue()):
             self.assertNotIn(self.KEY, text)
 
+    def test_a_report_path_inside_dist_or_rules_is_refused_before_anything_runs(self):
+        base = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep", "--semgrep", "/x/semgrep"]
+        for report in ("dist/rules.yaml", str(ROOT / "dist" / "rule-ids.lock"), "rules/custom/python/x.yaml"):
+            with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), \
+                    mock.patch.object(sys, "argv", base + ["--report", str(ROOT / report)]), \
+                    mock.patch.object(lr, "run", side_effect=AssertionError("ran with a bad --report")), \
+                    redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(lr.main(), 2, report)
+            self.assertIn("--report must be outside dist/ and rules/", err.getvalue())
+
     def test_no_key_stops_the_run_before_anything_is_drafted(self):
         env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
         argv = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep", "--semgrep", "/x/semgrep"]
