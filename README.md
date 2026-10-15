@@ -67,6 +67,7 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 - **Fingerprints:** every SARIF result has `partialFingerprints["sastCheck/v1"]` = sha256(rule ID + flagged line with whitespace collapsed). No line number, so a moved finding keeps its identity. Secrets use rule ID + file path (never the secret line); dependencies use rule ID + package@version.
 - **Every rule has a CWE** (`properties.tags` + `properties.cwe` in SARIF). Custom rules must set `metadata.cwe` or the build fails.
 - **Custom rules live in `rules/custom/<area>/`** — the learner opens PRs there (rule + fixture), a human merges.
+- **Rules from review patterns:** `tools/learner_rules.py` turns the quality-gate learner's `patterns.json` into rules and opens one PR per run; a draft lands only if it passes every check in [docs/learner-rules.md](docs/learner-rules.md).
 
 ## Design choices
 

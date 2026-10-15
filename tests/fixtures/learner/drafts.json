@@ -1,0 +1,40 @@
+{
+ "lp-py-yaml-unsafe-load": [
+  {
+   "rule": "patterns:\n  - pattern: yaml.load(...)\n  - pattern-not: yaml.load($S, Loader=yaml.SafeLoader)\n  - pattern-not: yaml.load($S, Loader=yaml.CSafeLoader)\n  - pattern-not: yaml.load($S, yaml.SafeLoader)\n  - pattern-not: yaml.load($S, yaml.CSafeLoader)\n",
+   "message": "yaml.load with the default, full or unsafe loader can build arbitrary Python objects, so a crafted YAML document can run code. Use yaml.safe_load or pass Loader=yaml.SafeLoader.",
+   "fix": "Use yaml.safe_load(data), or yaml.load(data, Loader=yaml.SafeLoader).",
+   "fixture": "import yaml\n\n\ndef from_queue(msg):\n    # ruleid: sast.python.lp-py-yaml-unsafe-load\n    return yaml.load(msg.payload)\n\n\ndef from_upload(blob):\n    # ruleid: sast.python.lp-py-yaml-unsafe-load\n    doc = yaml.load(blob, Loader=yaml.FullLoader)\n    return doc\n\n\ndef from_cache(raw):\n    # ruleid: sast.python.lp-py-yaml-unsafe-load\n    return yaml.load(raw, yaml.UnsafeLoader)\n\n\ndef safe_a(blob):\n    # ok: sast.python.lp-py-yaml-unsafe-load\n    return yaml.load(blob, Loader=yaml.SafeLoader)\n\n\ndef safe_b(blob):\n    # ok: sast.python.lp-py-yaml-unsafe-load\n    return yaml.load(blob, Loader=yaml.CSafeLoader)\n\n\ndef safe_c(blob):\n    # ok: sast.python.lp-py-yaml-unsafe-load\n    return yaml.load(blob, yaml.SafeLoader)\n\n\ndef safe_d(blob):\n    # ok: sast.python.lp-py-yaml-unsafe-load\n    return yaml.load(blob, yaml.CSafeLoader)\n\n\ndef safe_e(blob):\n    # ok: sast.python.lp-py-yaml-unsafe-load\n    return yaml.safe_load(blob)\n"
+  }
+ ],
+ "lp-py-tar-extractall-unfiltered": [
+  {
+   "rule": "patterns:\n  - pattern-either:\n      - pattern: tarfile.open(...).extractall(...)\n      - patterns:\n          - pattern-either:\n              - pattern-inside: |\n                  with tarfile.open(...) as $T:\n                    ...\n              - pattern-inside: |\n                  $T = tarfile.open(...)\n                  ...\n          - pattern: $T.extractall(...)\n  - pattern-not: $X.extractall(..., filter=$F, ...)\n",
+   "message": "A tar archive is unpacked with extractall and no extraction filter, so a member named ../x or /etc/x is written outside the target folder. Pass filter=\"data\" (Python 3.12+, backported to 3.8+ security releases).",
+   "fix": "Call extractall(dest, filter=\"data\").",
+   "fixture": "import tarfile\nimport zipfile\n\n\ndef unpack_release(pkg, target):\n    with tarfile.open(pkg, \"r:*\") as bundle:\n        # ruleid: sast.python.lp-py-tar-extractall-unfiltered\n        bundle.extractall(target)\n\n\ndef unpack_backup(pkg, target):\n    bk = tarfile.open(pkg)\n    # ruleid: sast.python.lp-py-tar-extractall-unfiltered\n    bk.extractall(target, members=None)\n\n\ndef unpack_inline(pkg):\n    # ruleid: sast.python.lp-py-tar-extractall-unfiltered\n    tarfile.open(pkg, \"r:bz2\").extractall(\"/tmp/x\")\n\n\ndef filtered(pkg, target):\n    with tarfile.open(pkg) as bundle:\n        # ok: sast.python.lp-py-tar-extractall-unfiltered\n        bundle.extractall(target, filter=\"data\")\n\n\ndef filtered_inline(pkg):\n    # ok: sast.python.lp-py-tar-extractall-unfiltered\n    tarfile.open(pkg).extractall(\"/tmp/y\", filter=\"tar\")\n\n\ndef zipped(pkg, target):\n    with zipfile.ZipFile(pkg) as z:\n        # ok: sast.python.lp-py-tar-extractall-unfiltered\n        z.extractall(target)\n"
+  }
+ ],
+ "lp-py-requests-no-timeout": [
+  {
+   "rule": "pattern-either:\n  - pattern: requests.get(...)\n  - pattern: requests.post(...)\n",
+   "message": "Every requests call is flagged (over-broad first draft).",
+   "fix": "Pass timeout=.",
+   "fixture": "import requests\n\n# ruleid: sast.python.lp-py-requests-no-timeout\nrequests.get(u)\n# ruleid: sast.python.lp-py-requests-no-timeout\nrequests.post(u)\n# ruleid: sast.python.lp-py-requests-no-timeout\nrequests.put(u)\n# ok: sast.python.lp-py-requests-no-timeout\nrequests.get(u, timeout=1)\n# ok: sast.python.lp-py-requests-no-timeout\nrequests.post(u, timeout=1)\n# ok: sast.python.lp-py-requests-no-timeout\nrequests.put(u, timeout=1)\n"
+  },
+  {
+   "rule": "patterns:\n  - pattern-either:\n      - pattern: requests.get(...)\n      - pattern: requests.post(...)\n      - pattern: requests.put(...)\n  - pattern-not: requests.$M(..., timeout=$T, ...)\n",
+   "message": "This HTTP call has no timeout, so a slow or silent server can hang the worker indefinitely. Pass timeout= with a sensible number of seconds.",
+   "fix": "Add timeout=<seconds>, e.g. requests.get(url, timeout=10).",
+   "fixture": "import requests\n\n\ndef pull_feed(feed_url):\n    # ruleid: sast.python.lp-py-requests-no-timeout\n    return requests.get(feed_url, params={\"page\": 1}).text\n\n\ndef push_event(endpoint, event):\n    # ruleid: sast.python.lp-py-requests-no-timeout\n    return requests.post(endpoint, data=event)\n\n\ndef replace_doc(doc_url, doc):\n    # ruleid: sast.python.lp-py-requests-no-timeout\n    requests.put(doc_url, json=doc)\n\n\ndef pull_feed_ok(feed_url):\n    # ok: sast.python.lp-py-requests-no-timeout\n    return requests.get(feed_url, timeout=8).text\n\n\ndef push_event_ok(endpoint, event):\n    # ok: sast.python.lp-py-requests-no-timeout\n    return requests.post(endpoint, data=event, timeout=(3, 10))\n\n\ndef replace_doc_ok(doc_url, doc):\n    # ok: sast.python.lp-py-requests-no-timeout\n    requests.put(doc_url, json=doc, timeout=4)\n"
+  }
+ ],
+ "lp-py-subprocess-unchecked": [
+  {
+   "rule": "patterns:\n  - pattern: subprocess.run(...)\n  - pattern-not: subprocess.run(..., check=True, ...)\n",
+   "message": "The command's exit status is ignored, so a failure goes unnoticed. Pass check=True.",
+   "fix": "Pass check=True.",
+   "fixture": "import subprocess\n\n# ruleid: sast.python.lp-py-subprocess-unchecked\nsubprocess.run([\"a\"])\n# ruleid: sast.python.lp-py-subprocess-unchecked\nsubprocess.run([\"b\"], text=True)\n# ruleid: sast.python.lp-py-subprocess-unchecked\nsubprocess.run([\"c\"], timeout=1)\n# ok: sast.python.lp-py-subprocess-unchecked\nsubprocess.run([\"a\"], check=True)\n# ok: sast.python.lp-py-subprocess-unchecked\nsubprocess.run([\"b\"], text=True, check=True)\n# ok: sast.python.lp-py-subprocess-unchecked\nsubprocess.run([\"c\"], check=True, timeout=1)\n"
+  }
+ ]
+}
