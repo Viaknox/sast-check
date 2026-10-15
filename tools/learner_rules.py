@@ -453,6 +453,10 @@ def main() -> int:
     if a.attempts < 1:
         print("--attempts must be at least 1", file=sys.stderr)
         return 2
+    # the report must never replace a file this run writes (dist/ or a rule/fixture under rules/)
+    if a.report and any(Path(a.report).resolve().is_relative_to(ROOT / d) for d in ("dist", "rules")):
+        print("--report must be outside dist/ and rules/", file=sys.stderr)
+        return 2
     try:
         patterns = load_patterns(Path(a.patterns))
     except (OSError, ValueError) as e:
