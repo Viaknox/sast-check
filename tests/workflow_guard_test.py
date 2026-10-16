@@ -353,8 +353,11 @@ class Docs(unittest.TestCase):
         install = text[text.index("## Add it to a repo"):]
         self.assertLess(install.index("Known limitations — read before installing"), install.index("1. Copy"))
         self.assertIn("**Step 0: read Known limitations above.**", install)
+        self.assertIn("first merge, in its own PR, an `[[ignore]]` entry", install)   # high-blocking bootstrap
         self.assertIn("workflow-guard does not run on `merge_group`, so do not make it a required check in a repository that uses a merge queue", install)
-        for needle in ("write access", "run history", "ALLOW_SELF_APPROVAL", "Code Owner review", "check named `workflow-guard`", "issue #5"):
+        for needle in ("write access", "run history", "ALLOW_SELF_APPROVAL", "Code Owner review", "check named `workflow-guard`", "issue #5",
+                       "Dismiss stale pull request approvals", "Require approval of the most recent reviewable push",
+                       "require `workflow-guard` only on the default branch", "November 2, 2026", "Settings → Actions → Policies"):
             self.assertIn(needle, install[:install.index("1. Copy")], needle)
 
     def test_summary_notes_the_trust_assumption_on_a_label_pass_only(self):
