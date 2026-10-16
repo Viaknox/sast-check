@@ -748,6 +748,38 @@ class NotParsed(unittest.TestCase):
         self.assertIn("- `d.js:7-7` — `config: old`", md)
         self.assertNotIn("c.js:1-2", md)               # an unsuppressed gap is not a suppression
 
+    def test_an_old_suppression_does_not_waive_new_unread_code_the_change_touches(self):
+        """In diff mode an inline not-parsed suppression waives a gap the change touches only if the comment line
+        itself is added or edited in this change; an inherited comment leaves it blocking (Codex security review on
+        839ec24: appending an unreadable block under an old suppression passed). Base-config waivers and full mode
+        are unchanged."""
+        src = "// sast-ignore[opengrep.not-parsed]: generated parser, reviewed\nclass A { static { x } }\n" \
+              "class B { static { eval(req.query.code) } }\n"
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "a.js").write_text(src)
+
+            def run(mode, changed, cfg_ignore=None):
+                ctx = self.ctx(Path(td), mode)
+                ctx.changed_files, ctx.changed_lines = {"a.js"}, {"a.js": set(changed)}
+                if cfg_ignore:
+                    ctx.cfg["ignore"] = [cfg_ignore]
+                g = sast.gap_finding("a.js", {}, 2, 3, False)
+                sast.apply_policy(ctx, [g])
+                return g
+            appended = run("diff", {3})                      # new block, old comment untouched
+            self.assertTrue(appended.blocking)
+            self.assertEqual(appended.suppressed, "")
+            self.assertIn("must be re-stated", appended.message)
+            restated = run("diff", {1, 3})                   # comment edited in this change: visible, waived
+            self.assertFalse(restated.blocking)
+            self.assertEqual(restated.suppressed, "inline: generated parser, reviewed")
+            self.assertEqual(run("full", set()).suppressed, "inline: generated parser, reviewed")
+            base = run("diff", {3}, {"rule": "opengrep.not-parsed", "path": "a.js", "reason": "vendored"})
+            self.assertFalse(base.blocking)                  # trusted base-config waiver still applies
+            untouched = run("diff", set())                   # change elsewhere: gap not in diff, still suppressed
+            self.assertFalse(untouched.in_diff)
+            self.assertEqual(untouched.suppressed, "inline: generated parser, reviewed")
+
     def test_the_report_names_how_many_spans_an_envelope_merged(self):
         two = self.parse([self.partial(self.span(a=1), self.span(a=9, b=9))])
         one = self.parse([self.partial(self.span(a=1))])

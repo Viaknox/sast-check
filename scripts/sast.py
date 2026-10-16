@@ -1262,15 +1262,16 @@ def rule_listed(listed: str, f: Finding) -> bool:
     return listed == f.rule or (listed == "*" and f.rule != NOT_PARSED)
 
 
-def inline_suppression(repo: Path, f: Finding) -> str:
+def inline_suppression(repo: Path, f: Finding, changed: set[int] | None = None) -> str:
     """The reason of a `sast-ignore[rule]: reason` comment on the finding's first line or the line above (read from
-    the source, so it also works for lines Opengrep skipped); "" if there is none or it has no reason."""
+    the source, so it also works for lines Opengrep skipped); "" if there is none or it has no reason.
+    changed: if given, only a comment on one of these (changed) line numbers counts."""
     try:
         lines = (repo / f.path).read_text(errors="ignore").splitlines()
     except OSError:
         return ""
     for idx in (f.line - 1, f.line - 2):          # same line or the line above
-        if 0 <= idx < len(lines):
+        if 0 <= idx < len(lines) and (changed is None or idx + 1 in changed):
             c = comment_text(lines[idx], f.path)
             m = IGNORE_RE.search(c) if c else None
             if m and rule_listed(m.group("rule").strip(), f) and m.group("reason").strip():
@@ -1405,8 +1406,15 @@ def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] | froz
             f.in_diff = f.path in ctx.changed_files
         # a leaked secret always blocks: neither a sast-ignore comment nor an [[ignore]] entry can waive it
         # (the fix is to remove and rotate the secret, not to ignore it)
+        # an unread range that this change touches is waived inline only by a comment added or edited in this
+        # change, so the reviewer sees it: an old comment must not silently cover new unscanned code
+        fresh = ctx.changed_lines.get(f.path, set()) if ctx.mode == "diff" and f.rule == NOT_PARSED and f.in_diff \
+            else None
         f.suppressed = "" if f.kind == "secret" else (
-            inline_suppression(ctx.repo, f) or config_suppression(ctx.cfg, f, today))
+            inline_suppression(ctx.repo, f, fresh) or config_suppression(ctx.cfg, f, today))
+        if fresh is not None and not f.suppressed and inline_suppression(ctx.repo, f):
+            f.message += (" The existing sast-ignore comment above it was not applied: this change touches the "
+                          "unread lines, so the suppression must be re-stated (edited) in this change to count.")
         f.blocking = (
             f.severity in block_on and f.in_diff and not f.suppressed
             and (f.confidence != "low" or pol.get("low_confidence_blocks", False))

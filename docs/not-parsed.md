@@ -144,6 +144,10 @@ class A { static { /* ... */ } }
 - Suppressed gaps stay listed in the report with their reason, and the summary shows a separate count of
   coverage-gap suppressions. Code under a suppressed gap is still **not scanned**: review it by hand.
 - sast-check reads the comment from the source file, so it works even though Opengrep skipped those lines.
+- In a PR, a comment that was already there does **not** waive unreadable lines that the PR adds or edits: the
+  comment must be added or edited in the same PR, so the reviewer sees the suppression being made. (Otherwise a
+  later PR could add new unscanned code under an old comment.) A waiver that should last belongs in
+  `.sast-check.toml` as an `[[ignore]]` entry with a reason and an expiry; it is read from the base branch.
 
 ## If the check errors instead
 
