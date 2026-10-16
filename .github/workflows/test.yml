@@ -84,7 +84,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
-          BASE_REF: ${{ github.base_ref }}
+          # the exact base commit this run was created for, so a base branch that moves meanwhile cannot change it
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
         run: |
           # GitHub API calls: a transient error is retried twice; a 404 is reported to the caller; anything else
           # after three tries fails closed
@@ -98,6 +100,11 @@ jobs:
             cat "$RUNNER_TEMP/gh.err" >&2; exit 1
           }
           gh_get "$RUNNER_TEMP/perf-changed.txt" --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename'
+          # the files API lists at most 3,000 files: a shorter list than the PR's own count would skip rules silently
+          got=$(grep -c . "$RUNNER_TEMP/perf-changed.txt" || true)
+          if [ "$got" -lt "$CHANGED_FILES" ]; then
+            echo "the PR changes $CHANGED_FILES files but the files API listed $got: cannot tell which rules changed" >&2; exit 1
+          fi
           # a renamed rule is compared with its base version under the old name (tab-separated: names may hold spaces)
           gh_get "$RUNNER_TEMP/perf-renames.txt" --paginate "repos/$REPO/pulls/$PR/files" \
             --jq '.[] | select(.previous_filename) | "\(.filename)\t\(.previous_filename)"'
@@ -110,7 +117,7 @@ jobs:
             mkdir -p "$base/$(dirname "$f")"
             src=$(awk -F '\t' -v f="$f" '$1 == f { print $2 }' "$RUNNER_TEMP/perf-renames.txt")
             case "${src:-$f}" in *[!A-Za-z0-9._/-]*) echo "unexpected old name for $f: $src" >&2; exit 1;; esac
-            rc=0; gh_get "$base/$f" -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/${src:-$f}?ref=$BASE_REF" || rc=$?
+            rc=0; gh_get "$base/$f" -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/${src:-$f}?ref=$BASE_SHA" || rc=$?
             if [ "$rc" = 4 ]; then rm -f "$base/$f"; fi
           done < "$RUNNER_TEMP/perf-rules.txt"
           python tools/rule_perf.py --engine "$RUNNER_TEMP/opengrep/opengrep" --base-dir "$base" \
