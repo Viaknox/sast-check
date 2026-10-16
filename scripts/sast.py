@@ -1410,26 +1410,52 @@ def proposed_settings_error(repo: Path, name: str) -> str:
 LFS_POINTER = b"version https://git-lfs.github.com/spec/"
 
 
-def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[str]:
-    """Changes whose content the scanners cannot see in this checkout: a submodule pointer (its code is
-    not checked out) and a Git LFS pointer file (the real content lives on the LFS server)."""
+def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[str, str, str]]:
+    """Changes whose content the scanners cannot see in this checkout, as (kind, path, label): a submodule
+    pointer (its code is not checked out), a Git LFS pointer file (the real content lives on the LFS server)
+    and a link leaving the repository."""
     mb = sh(["git", "merge-base", base, "HEAD"], repo).stdout.strip()
     # a gitlink is compared tree to tree: the working-tree diff skips a submodule that is not checked out
     was = {e.split("\t", 1)[1]: e.split()[2] for e in git_z(repo, ["ls-tree", "-r", "-z", mb]) if e.startswith("160000 ")}
     now = {e.split("\t", 1)[1]: e.split()[1] for e in git_z(repo, ["ls-files", "-z", "-s"]) if e.startswith("160000 ")}
-    out = [f"submodule {md_code(p)}" for p, sha in sorted(now.items()) if was.get(p) != sha]
+    out = [("submodule", p, f"submodule {md_code(p)}") for p, sha in sorted(now.items()) if was.get(p) != sha]
     for f in changed:
         # is_symlink, not exists: a link to a path missing on this machine is still unscanned content
         if ((repo / f).is_symlink() or (repo / f).exists()) and not in_repo(repo, repo / f):
-            out.append(f"symlink {md_code(f)} (points outside the repository)")
+            out.append(("symlink", f, f"symlink {md_code(f)} (points outside the repository)"))
             continue
         try:
             with open(repo / f, "rb") as fh:
                 if fh.read(len(LFS_POINTER)) == LFS_POINTER:
-                    out.append(f"Git LFS file {md_code(f)}")
+                    out.append(("lfs", f, f"Git LFS file {md_code(f)}"))
         except OSError:
             continue
     return out
+
+
+def fetch_lfs(repo: Path, paths: list[str]) -> None:
+    """Best effort: download the LFS content of exactly these changed paths (one `git lfs pull` each, no shell)."""
+    for f in paths:
+        try:
+            sh(["git", "lfs", "pull", f"--include={f}"], repo, timeout=600)
+        except (RuntimeError, OSError):   # no git-lfs, no access, fetch failed: the caller re-checks and fails closed
+            return
+
+
+def unscanned_errors(blind: list[tuple[str, str, str]], allow_submodules: bool) -> list[ToolRun]:
+    """Integrity errors (fail closed) for changed submodules and LFS files whose content was not scanned."""
+    errs = []
+    subs = [p for k, p, _ in blind if k == "submodule"]
+    if subs and not allow_submodules:
+        errs.append(ToolRun("submodules", "error", "changed submodule(s) are not checked out, so their code was not scanned: "
+                            + ", ".join(subs[:10]) + ". Review by hand, then set `policy.allow_unscanned_submodules = true` "
+                            "in .sast-check.toml if submodule updates are routine here."))
+    lfs = [p for k, p, _ in blind if k == "lfs"]
+    if lfs:
+        errs.append(ToolRun("lfs", "error", "changed Git LFS file(s) are only pointer files and could not be fetched (git-lfs missing, "
+                            "no access or fetch failed), so they were not scanned: " + ", ".join(lfs[:10])
+                            + ". Check out with `lfs: true` or make `git lfs pull` work in this job."))
+    return errs
 
 
 # ---------------------------------------------------------------- main
@@ -1497,7 +1523,12 @@ def main(argv=None) -> int:
             enabled = []                       # nothing can be scoped; report the error (fail closed)
         ctx.changed_files = sorted(ctx.changed_lines)
         if not any(r.name == "git-diff" for r in ctx.runs) and (blind := unscanned_changes(repo, a.base, ctx.changed_files)):
-            ctx.notes.append("Not scanned, review by hand: " + ", ".join(blind) + ".")
+            if lfs := [p for k, p, _ in blind if k == "lfs"]:
+                fetch_lfs(repo, lfs)
+                blind = unscanned_changes(repo, a.base, ctx.changed_files)   # still a pointer: fail closed below
+            ctx.runs += unscanned_errors(blind, cfg["policy"]["allow_unscanned_submodules"])
+            if blind:
+                ctx.notes.append("Not scanned, review by hand: " + ", ".join(b[2] for b in blind) + ".")
         # excluded paths are not scanned even when changed: say so, so code placed in vendor/ is seen
         if skipped := [f for f in ctx.changed_files if glob_any(f, cfg["paths"]["exclude"])]:
             ctx.notes.append(f"{len(skipped)} changed file(s) under excluded paths (`paths.exclude`) were not scanned: "
@@ -1529,9 +1560,9 @@ def main(argv=None) -> int:
         except Exception as e:  # noqa: BLE001 - without the base comparison a new finding could pass: fail closed
             ctx.runs.append(ToolRun("baseline", "error", f"base comparison failed: {str(e)[:300]}"))
     apply_policy(ctx, findings, new_by_base)
-    # settings, diff and base-comparison errors and a missing opengrep always fail; fail_on_tool_error covers
+    # settings, diff, base-comparison, submodule and LFS errors and a missing opengrep always fail; fail_on_tool_error covers
     # scanner crashes only
-    integrity = ("settings", "git-diff", "baseline")
+    integrity = ("settings", "git-diff", "baseline", "submodules", "lfs")
     errored = engine_missing or any(r.status == "error" and (r.name in integrity or cfg["policy"].get("fail_on_tool_error", True))
                   for r in ctx.runs)
     verdict = "error" if errored else "fail" if any(f.blocking for f in findings) else "pass"

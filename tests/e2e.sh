@@ -782,15 +782,58 @@ gate --mode diff --base HEAD~1 --only opengrep
 check "identical blocks swapped: the exposed sink blocks" "$(q "[f['line'] for f in d['findings'] if f['path']=='src/dup.js' and f['blocking']]")" "[15]"
 git checkout -q main
 
-# r15: changes the scanners cannot see are named in the report
+# r15/#3/#4: changes the scanners cannot see (submodule pointer, Git LFS pointer) fail closed
+# gate that is expected to exit 2: no "gate errored" failure; the error runs' text lands in $err
+gate2() {
+  set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" "$@" >/dev/null 2>&1; code=$?; set -e
+  err="$(q "' | '.join(r['name']+': '+r['detail'] for r in d['runs'] if r['status']=='error')")"
+}
 git checkout -q -b r15b main
-printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 12\n' 0 > src/big.dat
-git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),libsub"
-git add src/big.dat && git commit -qm blind
+git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),libsub" && git commit -qm blindsub
+gate2 --mode diff --base HEAD~1 --only ruff
+check "changed submodule fails the check"                "$code" "2"
+check "submodule error names the submodule"              "$(echo "$err" | grep -c 'submodules:.*libsub')" "1"
+printf '[policy]\nfail_on_tool_error = false\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm lax
+git update-index --add --cacheinfo "160000,$(git rev-parse HEAD~1),libsub" && git commit -qm movesub
+gate2 --mode diff --base HEAD~1 --only ruff
+check "submodule fails despite fail_on_tool_error=false" "$code" "2"
+printf '[policy]\nallow_unscanned_submodules = true\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm optout
+git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),libsub" && git commit -qm movesub2
 gate --mode diff --base HEAD~1 --only ruff
-check "report names a changed LFS pointer"               "$(grep -c 'Git LFS file `src/big.dat`' sast-results/report.md)" "1"
-check "report names a changed submodule"                 "$(grep -c 'submodule `libsub`' sast-results/report.md)" "1"
+check "allow_unscanned_submodules=true: check passes"    "$code" "0"
+check "opt-out still names the submodule in the report"  "$(grep -c 'submodule `libsub`' sast-results/report.md)" "1"
+printf '[policy]\nallow_unscanned_submodules = "yes"\n' > .sast-check.toml && git commit -qam badtype
+gate2 --mode diff --base HEAD~1 --only ruff
+check "non-boolean allow_unscanned_submodules is a settings error" "$code" "2"
 git checkout -q main
+
+# an LFS pointer that cannot be fetched (no LFS remote here) fails closed and names the file
+git checkout -q -b r15lfs main
+printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 14\n' 0 > src/big.py
+git add src/big.py && git commit -qm lfsptr
+gate2 --mode diff --base HEAD~1 --only opengrep
+check "unfetchable LFS pointer fails the check"          "$code" "2"
+check "LFS error names the file"                         "$(echo "$err" | grep -c 'lfs:.*src/big.py')" "1"
+git checkout -q main
+
+# #4 done-when: an LFS-backed .py containing eval(input()) is fetched and blocks
+if command -v git-lfs >/dev/null; then
+  L="$(mktemp -d)"; cd "$L" && git init -q --bare remote.git && git init -q -b main w && cd w
+  git config user.email t@example.com && git config user.name t && git lfs install --local >/dev/null
+  git lfs track '*.py' >/dev/null && echo 'x = 1' > a.py && git add -A && git commit -qm base
+  git remote add origin ../remote.git && git checkout -q -b pr
+  echo 'eval(input())' > b.py && git add b.py && git commit -qm pr
+  git push -q origin main pr 2>/dev/null || true
+  cd .. && git clone -q remote.git c 2>/dev/null; cd c
+  git config user.email t@example.com && git config user.name t && git fetch -q origin
+  GIT_LFS_SKIP_SMUDGE=1 git checkout -q pr           # like a CI checkout with lfs: false
+  cd "$T"
+  gate --repo "$L/c" --out "$T/sast-results" --mode diff --base origin/main --only ruff
+  check "LFS-backed eval(input()) is fetched and blocks"  "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='b.py')")" "1"
+  rm -rf "$L"                                         # outside $T, so later full-scope scans never see it
+else
+  echo "skip - git-lfs not installed (hydration case not run)"
+fi
 
 # r18: a '#' or '//' inside a JS regex or template literal is not a comment, so it cannot suppress
 git checkout -q -b r18 main
