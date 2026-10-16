@@ -46,8 +46,11 @@ Keep behaviour identical. Each pair below was checked with Opengrep 1.30.2: the 
 class A { static { eval(req.query.code); } }
 // after: same code, same `this`
 class A {}
-(function () { eval(req.query.code); }).call(A);
+(function () { "use strict"; eval(req.query.code); }).call(A);
 ```
+
+Class bodies, static blocks included, are always strict mode code, so the replacement function must start with
+`"use strict"`; otherwise a direct `eval` inside it would run as sloppy code and behave differently.
 
 **`using` declaration** (TypeScript)
 
@@ -80,8 +83,17 @@ class A { #x = 1; get x() { return this.#x; } set x(v) { this.#x = v; } }
 // before
 class A { #p = 1; static has(o) { return #p in o; } }
 // after
-class A { #p = 1; static has(o) { try { o.#p; return true; } catch { return false; } } }
+class A {
+  #p = 1;
+  static has(o) {
+    if (o === null || (typeof o !== "object" && typeof o !== "function")) throw new TypeError("not an object");
+    try { o.#p; return true; } catch { return false; }
+  }
+}
 ```
+
+Per the ECMAScript private-identifier `in` semantics, `#p in o` throws a `TypeError` when `o` is not an object, so the
+rewrite throws it too instead of returning `false`.
 
 **`const` type parameter** (TypeScript)
 

@@ -91,6 +91,16 @@ IGNORE_RE = re.compile(r"(?:#|//|/\*|<!--)\s*sast-ignore\[(?P<rule>[^\]]+)\]\s*:
 NOT_PARSED = "opengrep.not-parsed"        # coverage gap: code Opengrep could not read, so it was not scanned
 SYNTHETIC_RULE_IDS = (NOT_PARSED,)        # first-party rule ids with no rules/custom file; permanent like the rest
 WHOLE_FILE_ERRORS = ("Syntax error", "Lexical error", "Other syntax error")   # opengrep: nothing in the file was read
+# Opengrep/Semgrep error types that are not parse gaps (semgrep_output_v1.atd error_type): the engine or a rule
+# failed, not the parser. They take the tool-error path (fail_on_tool_error applies). Anything not listed here
+# or above fails closed as ParseGapError.
+KNOWN_TOOL_ERRORS = (
+    "Rule parse error", "SemgrepWarning", "SemgrepError", "InvalidRuleSchemaError", "UnknownLanguageError",
+    "Invalid YAML", "Internal matching error", "Semgrep match found", "Too many matches", "Fatal error", "Timeout",
+    "Out of memory", "Fixpoint timeout", "Stack overflow", "Timeout during interfile analysis",
+    "OOM during interfile analysis", "Missing plugin", "PatternParseError", "IncompatibleRule", "Pattern parse error",
+    "Incompatible rule", "DependencyResolutionError")
+NOT_PARSED_DOC = "https://github.com/SathiaAI/sast-check/blob/main/docs/not-parsed.md"   # absolute: the action runs from $GITHUB_ACTION_PATH
 
 
 class ParseGapError(RuntimeError):
@@ -546,11 +556,11 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
             # every error record is classified first: a parse gap becomes a finding, an unknown or malformed
             # record raises ParseGapError (always exit 2); only then the ordinary tool-error path below
             if not ctx.baseline:     # an unparsable old file just has no old findings (base comparison)
-                gaps += not_parsed_findings(ctx, data.get("errors", []), cwd, renamed if cwd == tr else {})
-            # a timeout at any level means a rule stopped on a file: fail closed
-            # (parse gaps and unknown records were handled above; the base comparison still treats level
+                gaps += not_parsed_findings(ctx, data.get("errors", []), cwd, renamed if cwd == tr else {}, files)
+            # a known tool error (timeout, out of memory, ...) at any level means a rule stopped on a file: fail
+            # closed (parse gaps and unknown records were handled above; the base comparison still treats level
             # "error" as fatal, apart from parse errors)
-            errs = [e for e in data.get("errors", []) if "Timeout" in str(e.get("type"))
+            errs = [e for e in data.get("errors", []) if error_name(e) in KNOWN_TOOL_ERRORS
                     or (ctx.baseline and e.get("level") == "error"
                         and not any(g in str(e.get("type")) for g in (*WHOLE_FILE_ERRORS, "PartialParsing")))]
             if errs or p.returncode == 2:
@@ -572,18 +582,34 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     return out
 
 
-def not_parsed_findings(ctx: Ctx, errors: list, cwd: Path, renamed: dict) -> list[Finding]:
+def error_name(e) -> object:
+    """The error type name of an Opengrep error record: the type itself, or the first element of a list-form type."""
+    t = e.get("type") if isinstance(e, dict) else None
+    return t[0] if isinstance(t, list) and t else t
+
+
+def gap_path_ok(cwd: Path, path: str, targets: list) -> bool:
+    """True if path (already normalised by rel) is an existing regular file inside cwd that was one of the targets
+    passed to Opengrep there ("." or a directory target covers the files under it). Rejects sentinels such as
+    Semgrep's "NO FILE INFO YET" and paths outside the scan."""
+    if os.path.isabs(path) or path == ".." or path.startswith("../") or not (cwd / path).is_file():
+        return False
+    return any(t == "." or path == t or path.startswith(t.rstrip("/") + "/") for t in targets)
+
+
+def not_parsed_findings(ctx: Ctx, errors: list, cwd: Path, renamed: dict, targets: list) -> list[Finding]:
     """One opengrep.not-parsed finding per file: the envelope of the spans Opengrep could not read (PartialParsing),
-    or the whole file for a whole-file parse error. Timeouts are left to the caller's tool-error path. A malformed
-    record or span, a missing path or ANY other error type (whatever its level) raises ParseGapError: fail
+    or the whole file for a whole-file parse error. Known tool errors (KNOWN_TOOL_ERRORS) are left to the caller's
+    tool-error path. A malformed record or span, a missing path, a path that is not a scanned target (targets, the
+    files passed to Opengrep in cwd) or ANY other error type (whatever its level) raises ParseGapError: fail
     closed, never ignore. renamed maps a scanned copy's name back to the repo path."""
     out: list[Finding] = []
     for e in errors:
         if not isinstance(e, dict):
             raise ParseGapError(f"opengrep error is not an object: {str(e)[:200]}")
         t = e.get("type")
-        name = t[0] if isinstance(t, list) and t else t
-        if "Timeout" in str(t):
+        name = error_name(e)
+        if name in KNOWN_TOOL_ERRORS:
             continue                     # a known tool error: the caller reports it (fail_on_tool_error applies)
         if name == "PartialParsing":
             spans = e.get("spans")
@@ -596,11 +622,15 @@ def not_parsed_findings(ctx: Ctx, errors: list, cwd: Path, renamed: dict) -> lis
                     raise ParseGapError(f"opengrep span is malformed: {str(sp)[:200]}") from None
                 if not isinstance(path, str) or not path or type(a) is not int or type(b) is not int or a < 1 or b < a:
                     raise ParseGapError(f"opengrep span is malformed: {str(sp)[:200]}")
+                if not gap_path_ok(cwd, rel(cwd, path), targets):
+                    raise ParseGapError(f"opengrep span path is not a scanned file: {str(sp)[:200]}")
                 out.append(gap_finding(rel(cwd, path), renamed, a, b, False))
         elif name in WHOLE_FILE_ERRORS:
             path = e.get("path")
             if not isinstance(path, str) or not path:
                 raise ParseGapError(f"opengrep {name} error without a path: {str(e)[:200]}")
+            if not gap_path_ok(cwd, rel(cwd, path), targets):
+                raise ParseGapError(f"opengrep {name} path is not a scanned file: {str(e)[:200]}")
             path = renamed.get(rel(cwd, path), rel(cwd, path))
             try:
                 n = len((ctx.repo / path).read_text(errors="ignore").splitlines())
@@ -631,7 +661,7 @@ def gap_finding(path: str, renamed: dict, start: int, end: int, whole: bool, spa
     return Finding(
         tool="opengrep", rule=NOT_PARSED, severity="critical", confidence="high", path=path, line=start, end_line=end,
         message=f"{where} of {path} could not be read by Opengrep, so this code was NOT scanned for security problems. "
-                "Rewrite it in a form the scanner can read (see docs/not-parsed.md); suppress only if a rewrite "
+                f"Rewrite it in a form the scanner can read (see {NOT_PARSED_DOC}); suppress only if a rewrite "
                 "is impossible." + (f" (This range merges {spans} separate unreadable spans.)" if spans > 1 else ""),
         cwe="CWE-693", whole_file=whole)
 
@@ -1436,7 +1466,7 @@ def ai_prompt(blocking: list[Finding]) -> str:
     lines += [""]
     if any(f.rule == NOT_PARSED for f in blocking):
         lines += [f"For {NOT_PARSED}: rewrite the listed lines into an equivalent form Opengrep can parse "
-                  "(examples in docs/not-parsed.md). Keep behaviour identical. Then re-run the check.",
+                  f"(examples in {NOT_PARSED_DOC}). Keep behaviour identical. Then re-run the check.",
                   "Do NOT add sast-ignore, delete or disable code, change .sast-check.toml, exclude paths, or edit "
                   "the workflow to make the check pass.",
                   "If a rewrite is truly impossible, stop and tell the human why instead of suppressing.", ""]
@@ -1483,8 +1513,12 @@ def report_md(ctx: Ctx, findings: list[Finding], verdict: str) -> str:
               *[f"- **{f.severity.upper()}** {md_code(f'{f.path}:{f.line}')} {md_code(f.rule)} — "
                 f"{md_code(f.suppressed)}" for f in sup[:100]],
               "" if len(sup) <= 100 else f"\n…and {len(sup) - 100} more", "</details>", ""]
-    if gap_sup := [f for f in sup if f.rule == NOT_PARSED]:
-        L += [f"Coverage-gap suppressions (`{NOT_PARSED}`, code that was not scanned): {len(gap_sup)}", ""]
+    # every suppressed gap, in or out of the diff: the unread range and the reason must always be shown
+    if gap_sup := [f for f in findings if f.rule == NOT_PARSED and f.suppressed]:
+        gap_sup.sort(key=lambda x: (x.path, x.line))
+        L += [f"Coverage-gap suppressions (`{NOT_PARSED}`, code that was not scanned): {len(gap_sup)}", "",
+              *[f"- {md_code(f'{f.path}:{f.line}-{f.end_line}')} — {md_code(f.suppressed)}" for f in gap_sup[:100]],
+              "" if len(gap_sup) <= 100 else f"\n…and {len(gap_sup) - 100} more", ""]
     if old and ctx.mode == "diff":
         L += [f"<sub>{len(old)} pre-existing finding(s) outside changed lines are not shown. "
               "Run with `--mode full` to see them.</sub>", ""]
