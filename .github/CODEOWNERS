@@ -1,0 +1,16 @@
+# Changes here need a code-owner review (branch protection: "Require review from Code Owners").
+# Keep this file listed, or a PR could first remove the protection.
+/.github/CODEOWNERS         @pjpoulose
+/.github/workflows/         @pjpoulose
+/action.yml                 @pjpoulose
+/.sast-check.toml           @pjpoulose
+/.gitleaks.toml             @pjpoulose
+/.gitleaksignore            @pjpoulose
+/.github/zizmor.yml         @pjpoulose
+/.github/zizmor.yaml        @pjpoulose
+/zizmor.yml                 @pjpoulose
+/zizmor.yaml                @pjpoulose
+/osv-scanner.toml           @pjpoulose
+/trivy.yaml                 @pjpoulose
+/.trivyignore               @pjpoulose
+/scripts/workflow_guard.py  @pjpoulose
