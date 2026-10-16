@@ -87,6 +87,7 @@ jobs:
           # the exact base commit this run was created for, so a base branch that moves meanwhile cannot change it
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # GitHub API calls: a transient error is retried twice; a 404 is reported to the caller; anything else
           # after three tries fails closed
@@ -108,6 +109,12 @@ jobs:
           # a renamed rule is compared with its base version under the old name (tab-separated: names may hold spaces)
           gh_get "$RUNNER_TEMP/perf-renames.txt" --paginate "repos/$REPO/pulls/$PR/files" \
             --jq '.[] | select(.previous_filename) | "\(.filename)\t\(.previous_filename)"'
+          # the files API always describes the PR's current head: if a push landed since this run started, these lists
+          # may not match the checked-out commit, so stop (the run for the newer push checks it)
+          gh_get "$RUNNER_TEMP/perf-head.txt" "repos/$REPO/pulls/$PR" --jq .head.sha
+          if [ "$(cat "$RUNNER_TEMP/perf-head.txt")" != "$HEAD_SHA" ]; then
+            echo "the PR's head moved past $HEAD_SHA during this run: re-run on the new head" >&2; exit 1
+          fi
           base="$RUNNER_TEMP/perf-base"
           # only rule paths of letters, digits and . _ - are listed; the check itself reports any other name
           python tools/rule_perf.py --list --changed-files "$RUNNER_TEMP/perf-changed.txt" > "$RUNNER_TEMP/perf-rules.txt"

@@ -55,7 +55,11 @@ def big_target(fx: Path, rule_text: str, out: Path) -> tuple[Path, Path]:
     return out, rel
 
 
-def scan_seconds(engine: str, rule_text: str, cwd: Path, target: Path) -> tuple[float, bool]:
+class OutOfBudget(Exception):
+    """The step's time budget ran out before or during a scan."""
+
+
+def scan_seconds(engine: str, rule_text: str, cwd: Path, target: Path, timeout: float = SCAN_TIMEOUT) -> tuple[float, bool]:
     """(seconds, whether the rule scanned the target) for one scan with the gate's flags. A failed scan raises,
     including one that exits cleanly but reports an engine error in its JSON: an incomplete scan is not 'fast'."""
     conf = cwd / "perf-rule.yaml"
@@ -64,7 +68,7 @@ def scan_seconds(engine: str, rule_text: str, cwd: Path, target: Path) -> tuple[
            "--x-ignore-semgrepignore-files", "--max-target-bytes=0", "--timeout", "0", "--timeout-threshold", "0",
            "--taint-intrafile", str(target)]
     t = time.monotonic()
-    r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=SCAN_TIMEOUT, check=False)
+    r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False)
     took = time.monotonic() - t
     try:
         out = json.loads(r.stdout)
@@ -80,8 +84,8 @@ def scan_seconds(engine: str, rule_text: str, cwd: Path, target: Path) -> tuple[
     return took, str(target) in out.get("paths", {}).get("scanned", [])
 
 
-def check_rule(engine: str, rule: Path, base_dir: Path) -> tuple[str, str]:
-    """('ok' | 'SLOW' | 'ERROR', one-line detail) for one rule."""
+def check_rule(engine: str, rule: Path, base_dir: Path, deadline: float | None = None) -> tuple[str, str]:
+    """('ok' | 'SLOW' | 'ERROR', one-line detail) for one rule. No scan runs past `deadline` (time.monotonic())."""
     rel = rule.relative_to(ROOT)
     head = rule.read_text()
     base_file = base_dir / rel
@@ -92,12 +96,25 @@ def check_rule(engine: str, rule: Path, base_dir: Path) -> tuple[str, str]:
         return "ERROR", "no fixture to build a test file from"
     with tempfile.TemporaryDirectory() as td:
         cwd, target = big_target(fx, head, Path(td))
+
+        def scan(text: str) -> tuple[float, bool]:
+            """One scan, cut short at the deadline: a scan stopped by the budget is OutOfBudget, not slow."""
+            left = SCAN_TIMEOUT if deadline is None else deadline - time.monotonic()
+            if left <= 0:
+                raise OutOfBudget
+            try:
+                return scan_seconds(engine, text, cwd, target, timeout=min(SCAN_TIMEOUT, left))
+            except subprocess.TimeoutExpired:
+                if left < SCAN_TIMEOUT:
+                    raise OutOfBudget from None
+                raise
+
         try:
             times = {"head": [], "base": []}
             for _ in range(RUNS):   # alternate, so a slow patch of the runner hits both versions
                 if base is not None:
                     try:
-                        took, scanned = scan_seconds(engine, base, cwd, target)
+                        took, scanned = scan(base)
                     except subprocess.TimeoutExpired:
                         return "ERROR", f"the base version did not finish in {SCAN_TIMEOUT}s: nothing to compare with"
                     if not scanned:   # the base version's paths or languages skip this file: nothing to compare
@@ -105,7 +122,7 @@ def check_rule(engine: str, rule: Path, base_dir: Path) -> tuple[str, str]:
                     else:
                         times["base"].append(took)
                 try:
-                    took, scanned = scan_seconds(engine, head, cwd, target)
+                    took, scanned = scan(head)
                 except subprocess.TimeoutExpired:
                     return "SLOW", f"the changed version did not finish in {SCAN_TIMEOUT}s"
                 if not scanned:
@@ -115,6 +132,8 @@ def check_rule(engine: str, rule: Path, base_dir: Path) -> tuple[str, str]:
                     break   # a second run only confirms a failure; a pass needs one run of each
         except RuntimeError as e:
             return "ERROR", str(e)
+        except OutOfBudget:
+            return "ERROR", f"not finished: the {BUDGET // 60}-minute budget for this step ran out during this rule"
     h = min(times["head"])
     if base is None:
         return ("SLOW" if too_slow(h, None) else "ok"), f"new rule or no comparable base: {h:.1f}s (cap {NEW_RULE_CAP:.0f}s)"
@@ -154,14 +173,14 @@ def main() -> int:
         print("pass --changed-files or --rules", file=sys.stderr)
         return 2
     bad = err = 0
-    start = time.monotonic()
+    deadline = time.monotonic() + BUDGET   # every scan stops by then, so the step reports before its own limit
     for rule in rules:
         if not SAFE_PATH.match(str(rule.relative_to(ROOT))):
             status, detail = "ERROR", "rule path has characters CI will not fetch (letters, digits, . _ - only)"
-        elif time.monotonic() - start > BUDGET:
+        elif time.monotonic() >= deadline:
             status, detail = "ERROR", f"not checked: the {BUDGET // 60}-minute budget for this step is used up"
         else:
-            status, detail = check_rule(a.engine, rule, Path(a.base_dir))
+            status, detail = check_rule(a.engine, rule, Path(a.base_dir), deadline)
         print(f"{status:5} {rule.relative_to(RULES)}: {detail}", flush=True)
         bad += status == "SLOW"
         err += status == "ERROR"

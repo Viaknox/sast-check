@@ -231,6 +231,17 @@ class RulePerf(unittest.TestCase):
         finally:
             rule_perf.SCAN_TIMEOUT = old
 
+    def test_a_rule_started_near_the_end_of_the_budget_stops_at_the_deadline(self):
+        import time  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as td:
+            base, eng = self.base_and_engine(td, 'sleep 20\n' + self.SCANNED)   # both versions far over the budget left
+            t = time.monotonic()
+            status, detail = rule_perf.check_rule(eng, rm.RULES / "js" / "code-eval.yaml", base, deadline=t + 1)
+            took = time.monotonic() - t
+        self.assertEqual(status, "ERROR", detail)
+        self.assertIn("budget", detail)
+        self.assertLess(took, 5)   # cut at the deadline, not after the 300 s scan limit
+
     def test_an_empty_base_file_is_an_error_not_a_new_rule(self):
         with tempfile.TemporaryDirectory() as td:
             # an empty config makes the engine fail (as opengrep does); it must not count as "new rule"
