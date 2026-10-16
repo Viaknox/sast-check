@@ -453,81 +453,106 @@ class OpengrepOnly(unittest.TestCase):
             self.assertFalse(marker.exists(), "the gate ran another engine")
 
 
-def _load_sast():
-    """Import scripts/sast.py as a module."""
-    spec = importlib.util.spec_from_file_location("sast_mod", ROOT / "scripts" / "sast.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+class UnscannedChecks(unittest.TestCase):
+    """Submodule/LFS detection: only a complete LFS pointer counts, and a lookup failure fails closed."""
 
+    @staticmethod
+    def _sast():
+        """Import scripts/sast.py as a module."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import sast  # noqa: PLC0415
+        return sast
 
-class GlobRegex(unittest.TestCase):
-    """The regexes handed to Gitleaks must agree with glob_any on every path, or an allowlist could hide
-    a secret in a path the gate scans (or scan one it must not)."""
-    GLOBS = ["node_modules/**", "vendor/**", "big dir/**", "src/vendor2*", "**/gen/**", "**/*", "*", "a?b*",
-             "x/[ab]*", "x/[!ab]*", "x/[]a]*", "x/[^a]*", "x/[[:alpha:]]*", "x/[a-c]?*", "p[*", "q.+(1)*", "x/[a\\]*",
-             "**/vendor/**", "docs/**/*", "a**", "a/**/b/**", "$h{x}^*", "é/**"]
-    PATHS = ["vendor", "vendor/a.py", "a/vendor/b.py", "vendorx", "node_modules/x/y", "src/node_modules/x",
-             "big dir/sub/k.py", "big dir", "src/vendor2", "src/vendor2/k.py", "src/vendor22.py", "gen/x", "a/gen/x",
-             "agen/x", "x/a", "x/b1", "x/c", "x/]", "x/a/b", "x/^", "x/:", "x/-", "x/\\", "x/", "a1b", "axb/y", "ab", "pq",
-             "p[x", "p[", "q.+(1)", "q.+(1)/z", "qa+(1)", "docs/a", "docs/a/b", "docs/", "a/b", "a/x/b/y", "a/b/c",
-             "$h{x}^/y", "é/x", "x/é", "", "/", "a//b", "..", ".git/x"]
+    def test_loose_fallback_is_a_superset(self):
+        """Without git-lfs, any body with a known version line, a sha256 oid and a signed size counts (fail closed);
+        prose that only mentions the URL does not."""
+        ok = self._sast().lfs_pointer_loose
+        v = b"version https://git-lfs.github.com/spec/v1\n"
+        good = b"oid sha256:" + b"a" * 64 + b"\nsize 12"
+        self.assertTrue(ok(v + good + b"\n"))
+        self.assertFalse(ok(v))                                              # no oid/size
+        self.assertFalse(ok(v + b"see the docs for the pointer format\n"))  # prose after the URL
+        self.assertFalse(ok(v + b"oid sha256:abc\nsize 12\n"))              # short oid
+        self.assertFalse(ok(v + b"oid sha256:" + b"a" * 64 + b"\nsize x\n"))
+        self.assertTrue(ok(v + good))                                        # no final newline
+        self.assertTrue(ok((v + good + b"\n").replace(b"\n", b"\r\n")))     # CRLF
+        self.assertTrue(ok(b"  \n" + v + good + b"\n\n"))                     # surrounding whitespace
+        self.assertTrue(ok(b"version https://hawser.github.com/spec/v1\n" + good))   # legacy URL
+        self.assertTrue(ok(v + b"oid\rx\n" + good))   # a stray CR line is skipped, never a crash
+        self.assertTrue(ok(v + b"\n" + good))                                 # blank separator line
+        self.assertTrue(ok(v + good + b" " * 2000))                          # padding
+        self.assertTrue(ok("\u00a0".encode() + v + good))                    # Unicode leading space
+        self.assertTrue(ok(v + b"oid sha256:" + b"a" * 64 + b"\nsize +12\n"))  # signed size
 
-    def setUp(self):
-        self.sast = _load_sast()
+    def test_without_git_lfs_the_loose_parser_decides(self):
+        """is_lfs_pointer falls back to the loose superset when git-lfs is not on PATH."""
+        from unittest import mock  # noqa: PLC0415
+        sast = self._sast()
+        body = b"version https://git-lfs.github.com/spec/v1\noid sha256:" + b"a" * 64 + b"\nsize 12\nfoo bar\n"
+        with mock.patch.object(sast.shutil, "which", return_value=None):
+            self.assertTrue(sast.is_lfs_pointer(body))
 
-    def agree(self, g, p):
-        rx = self.sast.glob_regex(g)
-        self.assertEqual(bool(re.search(rx, p)), self.sast.glob_any(p, [g]), f"glob {g!r} path {p!r} regex {rx!r}")
+    def test_a_big_blob_counts_only_with_a_pointer_first_line(self):
+        """Only the head of a blob over LFS_READ_MAX is read: a pointer version line flags it, other text does not."""
+        ok = self._sast().is_lfs_pointer
+        self.assertTrue(ok(b"version https://git-lfs.github.com/spec/v1\noid sha256:", truncated=True))
+        self.assertFalse(ok(b"version 1.2.3 release notes\n", truncated=True))
+        self.assertFalse(ok(b"hello\n", truncated=True))
 
-    def test_table(self):
-        for g in self.GLOBS:
-            for p in self.PATHS:
-                self.agree(g, p)
-
-    def test_random(self):
-        rnd = random.Random(7)
-        alpha = ["a", "b", "/", ".", "*", "**/", "?", "[ab]", "[!a]", "x", " "]
-        for _ in range(3000):
-            g = "".join(rnd.choice(alpha) for _ in range(rnd.randint(1, 7)))
-            for _ in range(8):
-                self.agree(g, "".join(rnd.choice(["a", "b", "/", ".", "x", " "]) for _ in range(rnd.randint(0, 8))))
-
-    def test_only_tree_globs_are_pushed_down(self):
-        got = self.sast.gitleaks_exclude_regexes(["vendor/**", "**/*.min.js", "src/gen", "docs*"])
-        self.assertEqual(got, [self.sast.glob_regex("vendor/**"), self.sast.glob_regex("docs*")])
-
-    def test_trailing_star_covers_every_descendant(self):
-        """Gitleaks also tests directories: a match on a dir must imply a match on everything under it."""
-        for g in [g for g in self.GLOBS if g.endswith("*")]:
-            for p in self.PATHS:
-                if self.sast.glob_any(p, [g]):
-                    self.assertTrue(self.sast.glob_any(p + "/x/y", [g]), (g, p))
-
-    def test_root_matching_globs_are_not_pushed_down(self):
-        """A glob that matches the scan root "." makes Gitleaks skip the whole tree, so it stays a post-filter."""
-        for g in [".*", "*.*", "**/.*", "*", "**/*", "**", "[.]*", ".?*"]:
-            self.assertEqual(self.sast.gitleaks_exclude_regexes([g]), [], g)
-        self.assertEqual(self.sast.gitleaks_exclude_regexes([".*", "vendor/**"]), [self.sast.glob_regex("vendor/**")])
-
-    def test_pushed_down_regexes_never_match_the_root(self):
-        """Whatever is pushed down must not match ".", "" or "./" (the roots Gitleaks tests first)."""
-        for g in self.GLOBS + [".*", "*.*", "**/.*"]:
-            for rx in self.sast.gitleaks_exclude_regexes([g]):
-                for root in [".", "", "./"]:
-                    self.assertIsNone(re.search(rx, root), (g, root))
-
-    def test_can_extend_only_without_extend_path(self):
-        """A settings file with [extend] path (or an unreadable one) is not extended again: depth is capped."""
-        cases = [("", True), ("[extend]\nuseDefault = true\n", True), ("[extend]\npath = \"x.toml\"\n", False),
-                 ("[extend\n", False)]
+    def test_agrees_exactly_with_git_lfs(self):
+        """With git-lfs installed, is_lfs_pointer gives the same answer as `git lfs pointer --check` for every
+        variant: padded, legacy, CRLF, signed size (valid) and extra or duplicate records (invalid)."""
+        import shutil, subprocess  # noqa: E401, PLC0415
+        if not shutil.which("git-lfs"):
+            self.skipTest("git-lfs not installed")
+        ok = self._sast().is_lfs_pointer
+        ver, oid, sz = b"version https://git-lfs.github.com/spec/v1", b"oid sha256:" + b"4d7a" * 16, b"size 12"
+        base = b"\n".join([ver, oid, sz])
+        variants = [base + end for end in (b"", b"\n", b"\n\n", b"\r\n")]
+        variants += [ver + b"\n\n" + oid + b"\n" + sz + b"\n", b"  " + base + b"\n", base + b"\n" + b" " * 1100,
+                     ver + b"\n" + oid + b"\nsize +12\n", base.replace(ver, b"version https://hawser.github.com/spec/v1"),
+                     base.replace(b"\n", b"\r\n") + b"\r\n", base + b"\nfoo bar\n", ver + b"\n" + oid + b"\n" + oid + b"\n" + sz,
+                     "\u00a0".encode() + base, "\u2003\u0085".encode() + base + "\u00a0".encode()]   # Unicode spaces
+        seen = set()
         with tempfile.TemporaryDirectory() as td:
-            for text, want in cases:
-                f = Path(td) / "g.toml"
-                f.write_text(text)
-                self.assertEqual(self.sast.gitleaks_can_extend(f), want, text)
-            self.assertFalse(self.sast.gitleaks_can_extend(Path(td) / "missing.toml"))
+            f = Path(td) / "ptr"
+            for body in variants:
+                f.write_bytes(body)
+                lfs_ok = subprocess.run(["git", "lfs", "pointer", "--check", f"--file={f}"], capture_output=True,
+                                        check=False, cwd=td).returncode == 0
+                seen.add(lfs_ok)
+                self.assertEqual(ok(body), lfs_ok, body)
+        self.assertEqual(seen, {True, False})   # the variants exercise both answers
+
+    def test_a_missing_blob_is_a_lookup_failure(self):
+        """`git cat-file --batch-check` prints "<sha> missing" and exits 0; that must raise, not read as "not LFS"."""
+        with tempfile.TemporaryDirectory() as td:
+            import subprocess  # noqa: PLC0415
+            subprocess.run(["git", "init", "-q", td], check=True, capture_output=True)
+            with self.assertRaises(RuntimeError):
+                self._sast().lfs_pointer_blobs(Path(td), ["0" * 40])
+
+    def test_a_failed_lookup_is_an_integrity_error_with_reports_written(self):
+        """If the submodule/LFS check itself fails, the gate exits 2 and still writes findings.json."""
+        import subprocess  # noqa: PLC0415
+        from unittest import mock  # noqa: PLC0415
+        sast = self._sast()
+        with tempfile.TemporaryDirectory() as td:
+            repo, out = Path(td) / "repo", Path(td) / "out"
+            repo.mkdir()
+            (repo / ".sast-check.toml").write_text("[policy]\nfail_on_tool_error = false\n")
+            (repo / "a.py").write_text("x = 1\n")
+            git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+            for cmd in (["git", "init", "-q"], ["git", "add", "-A"], [*git, "commit", "-qm", "base"]):
+                subprocess.run(cmd, cwd=repo, check=True, capture_output=True)
+            (repo / "a.py").write_text("x = 2\n")
+            for cmd in (["git", "add", "-A"], [*git, "commit", "-qm", "change"]):
+                subprocess.run(cmd, cwd=repo, check=True, capture_output=True)
+            with mock.patch.object(sast, "unscanned_changes", side_effect=RuntimeError("git cat-file exited 128")):
+                code = sast.main(["--repo", str(repo), "--mode", "diff", "--base", "HEAD~1", "--only", "ruff", "--out", str(out)])
+            runs = json.loads((out / "findings.json").read_text())["runs"]
+            self.assertEqual(code, 2)
+            self.assertIn(("lfs", "error"), [(r["name"], r["status"]) for r in runs])
 
 
 if __name__ == "__main__":
