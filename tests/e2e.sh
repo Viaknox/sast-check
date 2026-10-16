@@ -835,6 +835,28 @@ check "unstaged submodule move fails the check"          "$code" "2"
 check "unstaged submodule error names it"                "$(echo "$err" | grep -c 'submodules:.*usub')" "1"
 git checkout -q main
 
+# a committed gitlink move is caught even when the submodule checkout is still at the base commit
+git checkout -q -b r21sub main
+mkdir ssub && git -C ssub init -q -b main && git -C ssub -c user.email=t@e -c user.name=t commit -q --allow-empty -m c1
+git add ssub 2>/dev/null && git commit -qm addssub
+git -C ssub -c user.email=t@e -c user.name=t commit -q --allow-empty -m c2
+git add ssub && git commit -qm movessub
+git -C ssub checkout -q HEAD~1   # stale checkout: matches the base, not the committed gitlink
+gate2 --mode diff --base HEAD~1
+check "committed gitlink move with stale checkout fails"  "$code" "2"
+check "stale-checkout submodule error names it"           "$(echo "$err" | grep -c 'submodules:.*ssub')" "1"
+git checkout -q main
+
+# an LFS file already hydrated in the checkout is judged by its committed blob (still a pointer)
+git checkout -q -b r21lfs main
+printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 16\n' 0 > src/hyd.py
+git add src/hyd.py && git commit -qm lfshyd
+printf 'x = 1\n' > src/hyd.py   # what git-lfs smudge would leave in the working tree
+gate2 --mode diff --base HEAD~1 --only opengrep
+check "hydrated LFS file still fails the check"           "$code" "2"
+check "hydrated LFS error names the file"                 "$(echo "$err" | grep -c 'lfs:.*src/hyd.py')" "1"
+git checkout -q -- src/hyd.py && git checkout -q main
+
 # r18: a '#' or '//' inside a JS regex or template literal is not a comment, so it cannot suppress
 git checkout -q -b r18 main
 cat > src/rx.js <<'JS'

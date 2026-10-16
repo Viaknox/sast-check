@@ -1417,23 +1417,66 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[s
     mb = sh(["git", "merge-base", base, "HEAD"], repo).stdout.strip()
     # a gitlink is compared tree to tree: the working-tree diff skips a submodule that is not checked out
     was = {e.split("\t", 1)[1]: e.split()[2] for e in git_z(repo, ["ls-tree", "-r", "-z", mb]) if e.startswith("160000 ")}
-    now = {e.split("\t", 1)[1]: e.split()[1] for e in git_z(repo, ["ls-files", "-z", "-s"]) if e.startswith("160000 ")}
-    for p in now:   # a checked-out submodule moved to another commit but not staged still counts
-        if (repo / p / ".git").exists() and (head := sh(["git", "-C", p, "rev-parse", "HEAD"], repo, ok_codes=(0, 128)).stdout.strip()):
-            now[p] = head
-    out = [("submodule", p, f"submodule {md_code(p)}") for p, sha in sorted(now.items()) if was.get(p) != sha]
+    index = {e.split("\t", 1)[1]: (e.split()[0], e.split()[1]) for e in git_z(repo, ["ls-files", "-z", "-s"])}
+    moved = set()
+    for p, (mode, sha) in index.items():
+        if mode != "160000":
+            continue
+        if was.get(p) != sha:   # the gitlink itself changed (committed or staged)
+            moved.add(p)
+        # checked out at another commit but not staged: a separate check, so a stale checkout never hides
+        # a changed gitlink
+        if (repo / p / ".git").exists() and (head := sh(["git", "-C", p, "rev-parse", "HEAD"], repo, ok_codes=(0, 128)).stdout.strip()) \
+                and head != was.get(p):
+            moved.add(p)
+    out = [("submodule", p, f"submodule {md_code(p)}") for p in sorted(moved)]
+    lfs = lfs_pointer_blobs(repo, [index[f][1] for f in changed if f in index and index[f][0] != "160000"])
     for f in changed:
         # is_symlink, not exists: a link to a path missing on this machine is still unscanned content
         if ((repo / f).is_symlink() or (repo / f).exists()) and not in_repo(repo, repo / f):
             out.append(("symlink", f, f"symlink {md_code(f)} (points outside the repository)"))
             continue
-        try:
-            with open(repo / f, "rb") as fh:
-                if fh.read(len(LFS_POINTER)) == LFS_POINTER:
-                    out.append(("lfs", f, f"Git LFS file {md_code(f)}"))
-        except OSError:
-            continue
+        # the committed/staged blob decides, not the checkout: a clone that ran git-lfs shows the payload in
+        # the working tree while the scanners of the committed range still see only the pointer
+        hit = f in index and index[f][1] in lfs
+        if not hit:
+            try:
+                with open(repo / f, "rb") as fh:
+                    hit = fh.read(len(LFS_POINTER)) == LFS_POINTER
+            except OSError:
+                pass
+        if hit:
+            out.append(("lfs", f, f"Git LFS file {md_code(f)}"))
     return out
+
+
+def lfs_pointer_blobs(repo: Path, shas: list[str]) -> set[str]:
+    """The blobs among `shas` that are Git LFS pointer files. Pointers are tiny (spec: under 1024 bytes), so
+    only small blobs are read, two git calls in all."""
+    if not shas:
+        return set()
+    def batch(flag: str, items: list[str]) -> bytes:
+        p = subprocess.run(["git", "cat-file", flag], cwd=repo, input="".join(i + "\n" for i in items).encode(),
+                           capture_output=True, timeout=300)
+        if p.returncode:
+            raise RuntimeError(f"git cat-file exited {p.returncode}: {p.stderr.decode(errors='replace')[-800:]}")
+        return p.stdout
+    small = []
+    for line in batch("--batch-check", sorted(set(shas))).decode().splitlines():
+        sha, kind, size = (line.split() + ["", ""])[:3]
+        if kind == "blob" and size.isdigit() and int(size) < 1024:
+            small.append(sha)
+    if not small:
+        return set()
+    found, out, i = set(), batch("--batch", small), 0
+    while i < len(out):   # each entry: "<sha> blob <size>\n<content>\n"
+        nl = out.index(b"\n", i)
+        sha, _, size = out[i:nl].decode().split()
+        body = out[nl + 1: nl + 1 + int(size)]
+        if body.startswith(LFS_POINTER):
+            found.add(sha)
+        i = nl + 1 + int(size) + 1
+    return found
 
 
 def unscanned_errors(blind: list[tuple[str, str, str]], allow_submodules: bool, allow_lfs: bool) -> list[ToolRun]:
