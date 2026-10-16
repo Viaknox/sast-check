@@ -124,7 +124,8 @@ def main() -> int:
     ap.add_argument("--list", action="store_true", help="only print the repo paths of the rules it would check")
     a = ap.parse_args()
     if a.list and a.changed_files:   # CI fetches these rules' base versions into --base-dir first
-        print("\n".join(str(r.relative_to(ROOT)) for r in changed_rules(Path(a.changed_files).read_text().split())))
+        for r in changed_rules(Path(a.changed_files).read_text().split()):
+            print(r.relative_to(ROOT))   # one path per line, and no line at all when no rule changed
         return 0
     if not a.engine or Path(a.engine).name != "opengrep":
         print("opengrep is required (the CI engine); install it or pass --engine", file=sys.stderr)

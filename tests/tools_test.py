@@ -191,6 +191,15 @@ class RulePerf(unittest.TestCase):
         self.assertEqual(status, "ok", detail)
         self.assertIn("no comparable base", detail)
 
+    def test_list_prints_no_line_when_no_rule_changed(self):
+        import subprocess  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as td:
+            changed = Path(td) / "changed.txt"
+            changed.write_text("README.md\n")
+            out = subprocess.run([sys.executable, str(ROOT / "tools" / "rule_perf.py"), "--list", "--changed-files",
+                                  str(changed)], capture_output=True, text=True, check=True).stdout
+        self.assertEqual(out, "")   # an empty line would make CI fetch the directory itself (PR #18 run)
+
     def test_yaml_fixture_becomes_separate_documents_at_a_workflow_path(self):
         rule = rm.RULES / "gha" / "remote-fetch-no-checksum.yaml"
         with tempfile.TemporaryDirectory() as td:

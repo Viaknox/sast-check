@@ -95,6 +95,7 @@ jobs:
           # the base version of each rule; only "not there yet" (404, a new rule) may be missing, any other
           # error fails closed
           while read -r f; do
+            [ -n "$f" ] || continue
             mkdir -p "$base/$(dirname "$f")"
             src=$(awk -v f="$f" '$1 == f { print $2 }' "$RUNNER_TEMP/perf-renames.txt")
             if ! gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/${src:-$f}?ref=$BASE_REF" > "$base/$f" 2> "$RUNNER_TEMP/gh.err"; then
