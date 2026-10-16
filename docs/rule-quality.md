@@ -23,7 +23,7 @@ that element alone (often because a broader pattern also matches). Add a `ruleid
 catches. Deleting a sanitizer, `pattern-not` or `pattern-not-inside` survives when no `ok:` line depends on it.
 Add an `ok:` line that the rule would flag without it.
 
-**CI.** On every pull request, changed rules are mutated, and a survivor not listed in
+**CI.** On every pull request, changed rules are mutated (the changed-file list comes from the GitHub files API with the speed check's protections: retried calls with a 60-second timeout each, a failure if the list is shorter than the PR's file count, and a failure if the PR head moved since the run started), and a survivor not listed in
 `tests/mutation-baseline.json` fails the check. The baseline records the survivors that existed when the tool
 was introduced, each with a `why`. An entry counts only with a written `why`: `{}`, a blank reason or a `TODO` from
 `--write-baseline` fails the check. A partial `--write-baseline` (`--rules`, `--changed-*`) rewrites only the rules it ran. For the rules that ran, a baseline entry that no longer survives fails the check (`STALE BASELINE`):
