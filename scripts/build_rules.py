@@ -13,6 +13,8 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+from sast import SYNTHETIC_RULE_IDS as SYNTHETIC  # noqa: E402 - ids sast.py itself emits (no rule file): locked too
 
 
 def main() -> int:
@@ -51,6 +53,11 @@ def main() -> int:
         if unretired:
             print(f"retired rule ids can never be un-retired: {sorted(unretired)}", file=sys.stderr)
             return 1
+    clash = ids & set(SYNTHETIC)
+    if clash:
+        print(f"rule ids reserved for sast-check itself: {sorted(clash)}", file=sys.stderr)
+        return 1
+    ids |= set(SYNTHETIC)         # a first-party id can be neither renamed nor removed, like a rule's
     reused = ids & retired
     if reused:
         print(f"retired rule ids must never be reused: {sorted(reused)}", file=sys.stderr)

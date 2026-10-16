@@ -89,6 +89,7 @@ IGNORE_RE = re.compile(r"(?:#|//|/\*|<!--)\s*sast-ignore\[(?P<rule>[^\]]+)\]\s*:
 
 
 NOT_PARSED = "opengrep.not-parsed"        # coverage gap: code Opengrep could not read, so it was not scanned
+SYNTHETIC_RULE_IDS = (NOT_PARSED,)        # first-party rule ids with no rules/custom file; permanent like the rest
 WHOLE_FILE_ERRORS = ("Syntax error", "Lexical error", "Other syntax error")   # opengrep: nothing in the file was read
 
 
@@ -542,14 +543,19 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
             # holds only warnings); any exit 2 still fails.
             p = sh(cmd + ["--"] + files, cwd, ok_codes=(0, 1, 2))
             data = json.loads(p.stdout or "{}")
+            # every error record is classified first: a parse gap becomes a finding, an unknown or malformed
+            # record raises ParseGapError (always exit 2); only then the ordinary tool-error path below
+            if not ctx.baseline:     # an unparsable old file just has no old findings (base comparison)
+                gaps += not_parsed_findings(ctx, data.get("errors", []), cwd, renamed if cwd == tr else {})
             # a timeout at any level means a rule stopped on a file: fail closed
-            errs = [e for e in data.get("errors", []) if (e.get("level") == "error" or "Timeout" in str(e.get("type")))
-                    and "Syntax error" not in str(e.get("type"))]
+            # (parse gaps and unknown records were handled above; the base comparison still treats level
+            # "error" as fatal, apart from parse errors)
+            errs = [e for e in data.get("errors", []) if "Timeout" in str(e.get("type"))
+                    or (ctx.baseline and e.get("level") == "error"
+                        and not any(g in str(e.get("type")) for g in (*WHOLE_FILE_ERRORS, "PartialParsing")))]
             if errs or p.returncode == 2:
                 raise RuntimeError(f"{len(errs)} engine errors (exit {p.returncode}): {str(errs[:1])[:300]}")
             results += [(cwd, r, cwd == tr) for r in data.get("results", [])]
-            if not ctx.baseline:     # an unparsable old file just has no old findings (base comparison)
-                gaps += not_parsed_findings(ctx, data.get("errors", []), cwd, renamed if cwd == tr else {})
     out = list(gaps)
     for cwd, r, via_rename in results:
         md = r["extra"].get("metadata", {})
@@ -567,18 +573,18 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
 
 
 def not_parsed_findings(ctx: Ctx, errors: list, cwd: Path, renamed: dict) -> list[Finding]:
-    """One opengrep.not-parsed finding per span Opengrep could not read (PartialParsing), or one covering the
-    whole file for a whole-file parse error. Errors already fatal (level error, timeout) are raised by the
-    caller. A malformed or missing span, a missing path or an unknown error type raises ParseGapError:
-    fail closed, never ignore a gap. renamed maps a scanned copy's name back to the repo path."""
+    """One opengrep.not-parsed finding per file: the envelope of the spans Opengrep could not read (PartialParsing),
+    or the whole file for a whole-file parse error. Timeouts are left to the caller's tool-error path. A malformed
+    record or span, a missing path or ANY other error type (whatever its level) raises ParseGapError: fail
+    closed, never ignore. renamed maps a scanned copy's name back to the repo path."""
     out: list[Finding] = []
     for e in errors:
         if not isinstance(e, dict):
             raise ParseGapError(f"opengrep error is not an object: {str(e)[:200]}")
         t = e.get("type")
         name = t[0] if isinstance(t, list) and t else t
-        if (e.get("level") == "error" or "Timeout" in str(t)) and name not in WHOLE_FILE_ERRORS:
-            continue                     # reported as an engine error by the caller
+        if "Timeout" in str(t):
+            continue                     # a known tool error: the caller reports it (fail_on_tool_error applies)
         if name == "PartialParsing":
             spans = e.get("spans")
             if not isinstance(spans, list) or not spans:
@@ -613,19 +619,21 @@ def envelope(gaps: list[Finding]) -> list[Finding]:
     by_path: dict[str, list[Finding]] = {}
     for g in gaps:
         by_path.setdefault(g.path, []).append(g)
-    return [gap_finding(path, {}, min(g.line for g in gs), max(g.end_line for g in gs), any(g.whole_file for g in gs))
-            for path, gs in by_path.items()]
+    return [gap_finding(path, {}, min(g.line for g in gs), max(g.end_line for g in gs), any(g.whole_file for g in gs),
+                        len(gs)) for path, gs in by_path.items()]
 
 
-def gap_finding(path: str, renamed: dict, start: int, end: int, whole: bool) -> Finding:
-    """The opengrep.not-parsed finding for lines start-end of path (renamed maps a scanned copy back)."""
+def gap_finding(path: str, renamed: dict, start: int, end: int, whole: bool, spans: int = 1) -> Finding:
+    """The opengrep.not-parsed finding for lines start-end of path (renamed maps a scanned copy back); spans is
+    how many raw unreadable spans the range merges, named in the message when more than one."""
     path = renamed.get(path, path)
     where = f"Line {start}" if start == end else f"Lines {start}-{end}"
     return Finding(
         tool="opengrep", rule=NOT_PARSED, severity="critical", confidence="high", path=path, line=start, end_line=end,
         message=f"{where} of {path} could not be read by Opengrep, so this code was NOT scanned for security problems. "
                 "Rewrite it in a form the scanner can read (see docs/not-parsed.md); suppress only if a rewrite "
-                "is impossible.", cwe="CWE-693", whole_file=whole)
+                "is impossible." + (f" (This range merges {spans} separate unreadable spans.)" if spans > 1 else ""),
+        cwe="CWE-693", whole_file=whole)
 
 
 def py_call_end(path: Path, row: int, col: int, cache: dict, cell: int = 0) -> int:

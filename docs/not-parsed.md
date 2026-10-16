@@ -54,10 +54,16 @@ class A {}
 ```ts
 // before
 using res = getRes();
-// after
+// after: read the disposer once, when the resource is acquired; null and undefined are allowed
 const res = getRes();
-try { /* code that used res */ } finally { res[Symbol.dispose](); }
+const dispose = res == null ? undefined : res[Symbol.dispose];
+if (res != null && typeof dispose !== "function") throw new TypeError("not disposable");
+try { /* code that used res */ } finally { dispose?.call(res); }
 ```
+
+This matches `using` for one resource. It is not identical when the body and the disposer both throw (`using`
+reports both in a `SuppressedError`) or when several `using` declarations share a scope (nest one `try` per
+resource, in reverse order). If that matters, use a reasoned suppression instead.
 
 **`accessor` field**
 
@@ -89,11 +95,15 @@ const f = <T,>(x: T) => x;
 **`unique symbol` type**
 
 ```ts
-// before
-declare const s: unique symbol;
+// before (runtime code)
+const s: unique symbol = Symbol("s");
 // after: let TypeScript infer the unique symbol type
 const s = Symbol("s");
 ```
+
+For an ambient or `.d.ts` declaration (`declare const s: unique symbol;`) there is no equivalent rewrite:
+`symbol` is a weaker type and changes what the declaration promises. Use a reasoned suppression, or move the
+declaration to a path a human lists in `paths.exclude` (a declaration holds no executable code). AI agents must not make that change.
 
 **Interface member named `new`**
 

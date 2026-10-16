@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the rule-quality tools (tools/rule_mutation.py, tools/fp_sweep.py). Run: python3 tests/tools_test.py"""
+import contextlib
+import io
 import json
 import os
 import stat
@@ -15,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "scripts"))
+import build_rules  # noqa: E402
 import fp_sweep  # noqa: E402
 import rule_mutation as rm  # noqa: E402
 import rule_perf  # noqa: E402
@@ -563,6 +566,43 @@ class NotParsed(unittest.TestCase):
         cfg = {"ignore": [{"rule": "*", "reason": "all"}]}
         self.assertEqual(sast.config_suppression(cfg, f, "2000-01-01"), "")
         self.assertTrue(sast.config_suppression(cfg, other, "2000-01-01"))
+
+    def test_every_error_record_is_classified_before_the_tool_error_path(self):
+        allow = "[policy]\nfail_on_tool_error = false\n"
+        for errors in ([{"level": "error", "type": "Brand new error", "message": "x"}],
+                       [{"level": "error", "type": ["Other", []]}], ["not an object"], [None],
+                       [{"level": "error", "type": "Lexical error"}]):          # a gap type without a path
+            with tempfile.TemporaryDirectory() as td:
+                code, data = self.run_gate(td, errors, toml=allow)
+            self.assertEqual(code, 2, errors)
+            self.assertEqual([r["name"] for r in data["runs"] if r["status"] == "error"], ["opengrep-parse"], errors)
+        with tempfile.TemporaryDirectory() as td:     # a level-error Lexical error with a path is a gap, not a tool error
+            code, data = self.run_gate(td, [{"level": "error", "type": "Lexical error", "path": "a.js"}], toml=allow)
+        self.assertEqual((code, [f["rule"] for f in data["findings"]]), (1, ["opengrep.not-parsed"]))
+        with tempfile.TemporaryDirectory() as td:     # a timeout stays an ordinary tool error
+            code, data = self.run_gate(td, [{"level": "warn", "type": "Timeout", "message": "t"}], toml=allow)
+        self.assertEqual(code, 0)
+
+    def test_the_report_names_how_many_spans_an_envelope_merged(self):
+        two = sast.not_parsed_findings(self.ctx(), [self.partial(self.span(a=1), self.span(a=9, b=9))], Path("."), {})
+        one = sast.not_parsed_findings(self.ctx(), [self.partial(self.span(a=1))], Path("."), {})
+        self.assertIn("This range merges 2 separate unreadable spans", two[0].message)
+        self.assertNotIn("merges", one[0].message)
+
+    def test_the_first_party_rule_id_is_locked_and_cannot_be_renamed(self):
+        self.assertIn("opengrep.not-parsed", (ROOT / "dist" / "rule-ids.lock").read_text().split())
+        old = build_rules.SYNTHETIC
+        build_rules.SYNTHETIC = ("opengrep.renamed",)
+        argv = sys.argv
+        sys.argv = ["build_rules.py"]
+        try:
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                rc = build_rules.main()
+        finally:
+            build_rules.SYNTHETIC, sys.argv = old, argv
+        self.assertEqual(rc, 1)
+        self.assertIn("opengrep.not-parsed", err.getvalue())
+
 
     def test_ai_prompt_has_the_anti_shortcut_rules_and_stays_inert(self):
         gap = sast.gap_finding("src/a`b.js", {}, 4, 6, False)
