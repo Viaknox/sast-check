@@ -90,7 +90,7 @@ IGNORE_RE = re.compile(r"(?:#|//|/\*|<!--)\s*sast-ignore\[(?P<rule>[^\]]+)\]\s*:
 
 NOT_PARSED = "opengrep.not-parsed"        # coverage gap: code Opengrep could not read, so it was not scanned
 SYNTHETIC_RULE_IDS = (NOT_PARSED,)        # first-party rule ids with no rules/custom file; permanent like the rest
-WHOLE_FILE_ERRORS = ("Syntax error", "Lexical error", "Other syntax error")   # opengrep: nothing in the file was read
+WHOLE_FILE_ERRORS = ("Syntax error", "Lexical error", "Other syntax error", "AST builder error")   # opengrep: nothing in the file was read
 # Opengrep/Semgrep error types that are not parse gaps (semgrep_output_v1.atd error_type): the engine or a rule
 # failed, not the parser. They take the tool-error path (fail_on_tool_error applies). Anything not listed here
 # or above fails closed as ParseGapError.
@@ -153,6 +153,7 @@ class Ctx:
     mode: str
     base: str | None
     changed_lines: dict[str, set[int]] = field(default_factory=dict)
+    edited_lines: dict[str, set[int]] = field(default_factory=dict)   # lines whose text changed (no rename/copy fill)
     changed_files: list[str] = field(default_factory=list)
     runs: list[ToolRun] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
@@ -393,11 +394,14 @@ def name_status_src(repo: Path, base: str) -> list[tuple[str, str, str]]:
     return out
 
 
-def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
-    """Map repo-relative file -> added/modified line numbers (merge-base vs working tree)."""
+def changed_lines(repo: Path, base: str, hunks_only: bool = False) -> dict[str, set[int]]:
+    """Map repo-relative file -> added/modified line numbers (merge-base vs working tree).
+    hunks_only: only lines whose text changed (renames and copies are diffed against their source, and are not
+    filled in as fully changed), plus untracked files; used to tell an edited sast-ignore comment from a moved one."""
     if sh(["git", "rev-parse", "--is-shallow-repository"], repo).stdout.strip() == "true":
         raise RuntimeError("shallow clone: check out with fetch-depth: 0 so the PR diff can be computed")
     out = sh(["git", "diff", "-U0", "--no-color", "--text", "--no-textconv", "--no-ext-diff",
+               *(["-M", "-C"] if hunks_only else []),
                "--diff-filter=ACMRT", "--merge-base", base], repo, raw=True).stdout.decode("utf-8", "replace")
     files: dict[str, set[int]] = {}
     cur = None
@@ -426,6 +430,12 @@ def changed_lines(repo: Path, base: str) -> dict[str, set[int]]:
                 # `owners = [...]`) can create a finding with no added line, so the lines on both sides of
                 # the cut count as changed; a finding spanning the cut then counts as new.
                 files[cur].update(n for n in (start, start + 1) if n >= 1)
+    if hunks_only:
+        for u in untracked_files(repo):                 # a new untracked file (local run) is all new text
+            if (repo / u).is_file() and in_repo(repo, repo / u):
+                with open(repo / u, errors="ignore") as fh:
+                    files[u] = set(range(1, sum(1 for _ in fh) + 1))
+        return files
     # Count as fully changed: a file with no hunk, every rename/copy destination (payload.txt -> payload.py,
     # vendor/x.py -> src/x.py: the move alone makes old code scanned, with or without an edit), and a symlink
     # (its diff is the one-line target path; the scanners read the target's content)
@@ -1498,7 +1508,7 @@ def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] | froz
         # (the fix is to remove and rotate the secret, not to ignore it)
         # an unread range that this change touches is waived inline only by a comment added or edited in this
         # change, so the reviewer sees it: an old comment must not silently cover new unscanned code
-        fresh = ctx.changed_lines.get(f.path, set()) if ctx.mode == "diff" and f.rule == NOT_PARSED and f.in_diff \
+        fresh = ctx.edited_lines.get(f.path, set()) if ctx.mode == "diff" and f.rule == NOT_PARSED and f.in_diff \
             else None
         f.suppressed = "" if f.kind == "secret" else (
             inline_suppression(ctx.repo, f, fresh) or config_suppression(ctx.cfg, f, today))
@@ -1533,17 +1543,6 @@ def fence(text: str) -> str:
     """text as a fenced code block whose fence is longer than any backtick run inside it (inert markdown)."""
     ticks = max([len(m) for m in re.findall(r"`+", text)] + [2]) + 1
     return "`" * ticks + "\n" + text + "\n" + "`" * ticks
-
-
-def excerpt(repo: Path, f: Finding, limit: int = 5) -> str:
-    """The first lines of an unread span (each cut to 160 chars), for the report; "" if the file is unreadable."""
-    try:
-        lines = (repo / f.path).read_text(errors="ignore").splitlines()
-    except OSError:
-        return ""
-    part = lines[max(f.line - 1, 0):max(f.end_line, f.line)]
-    out = [" ".join(ln.split())[:160] for ln in part[:limit]] + (["..."] if len(part) > limit else [])
-    return "\n".join(out)
 
 
 def ai_prompt(blocking: list[Finding]) -> str:
@@ -1595,9 +1594,7 @@ def report_md(ctx: Ctx, findings: list[Finding], verdict: str) -> str:
     if blocking:
         L += ["### Must fix before merge"]
         for f in sorted(blocking, key=lambda x: (x.path, x.line)):
-            L.append(row(f))
-            if f.rule == NOT_PARSED and (code := excerpt(ctx.repo, f)):
-                L += ["", *["  " + ln for ln in fence(code).splitlines()], ""]
+            L.append(row(f))     # no source excerpt: unread code may hold a secret, and the report is published
         L += ["", "<details><summary>🤖 Prompt for AI agents</summary>", "", fence(ai_prompt(blocking)), "", "</details>", ""]
     if new:
         new.sort(key=lambda x: (-SEV_ORDER.index(x.severity), x.path, x.line))
@@ -1891,6 +1888,7 @@ def main(argv=None) -> int:
     if mode == "diff":
         try:
             ctx.changed_lines = changed_lines(repo, a.base)
+            ctx.edited_lines = changed_lines(repo, a.base, hunks_only=True)
         except Exception as e:  # noqa: BLE001 - e.g. MemoryError on a huge file: report it (fail closed), never crash
             ctx.runs.append(ToolRun("git-diff", "error", f"cannot diff against {a.base}: {str(e)[:300]}"))
             enabled = []                       # nothing can be scoped; report the error (fail closed)

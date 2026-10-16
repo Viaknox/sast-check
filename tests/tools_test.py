@@ -788,7 +788,10 @@ class NotParsed(unittest.TestCase):
                 code, data = self.run_gate(td, rec)
             self.assertEqual(code, 2, name)
             self.assertNotIn("opengrep-parse", [r["name"] for r in data["runs"]], name)
-        for name in ("AST builder error", "Brand new error"):
+        with tempfile.TemporaryDirectory() as td:     # AST builder error with a path is a whole-file gap
+            code, data = self.run_gate(td, [{"level": "warn", "type": "AST builder error", "path": "a.js"}], toml=allow)
+        self.assertEqual((code, [(f["rule"], f["whole_file"]) for f in data["findings"]]), (1, [("opengrep.not-parsed", True)]))
+        for name in ("AST builder error", "Brand new error"):     # without a path: unplaceable, fails closed
             with tempfile.TemporaryDirectory() as td:
                 code, data = self.run_gate(td, [{"level": "warn", "type": name}], toml=allow)
             self.assertEqual(code, 2, name)
@@ -806,6 +809,44 @@ class NotParsed(unittest.TestCase):
                 code, data = self.run_gate(td, kw.pop("errors"), toml=allow, **kw)
             self.assertEqual(code, 2, kw)
             self.assertEqual([r["name"] for r in data["runs"] if r["status"] == "error"], ["opengrep-parse"], kw)
+
+    def test_the_report_never_copies_unread_source(self):
+        """The published report names the unread range but never copies its lines (they may hold a secret)."""
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "a.js").write_text("const k = 'AKIAEXAMPLESECRET1234';\nclass A { static { x } }\n")
+            ctx = self.ctx(Path(td))
+            g = sast.gap_finding("a.js", {}, 1, 2, False)
+            g.blocking = g.in_diff = True
+            md = sast.report_md(ctx, [g], "fail")
+        self.assertIn("a.js:1", md)
+        self.assertNotIn("AKIAEXAMPLESECRET1234", md)
+
+    def test_a_renamed_file_does_not_make_an_old_suppression_fresh(self):
+        """A rename fills every destination line into changed_lines; the freshness of a not-parsed sast-ignore comment
+        must come from lines whose text changed, so renaming a file and appending unread code under an old comment
+        still blocks (Codex review on 348783e)."""
+        import subprocess  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+            old = "// sast-ignore[opengrep.not-parsed]: generated, reviewed\nclass A { static { x } }\n" + "".join(
+                f"const v{i} = {i};\n" for i in range(8))
+            (repo / "a.js").write_text(old)
+            for cmd in (["git", "init", "-q", "-b", "main"], ["git", "add", "-A"], [*git, "commit", "-qm", "init"]):
+                subprocess.run(cmd, cwd=repo, check=True, capture_output=True)
+            subprocess.run(["git", "mv", "a.js", "b.js"], cwd=repo, check=True, capture_output=True)
+            (repo / "b.js").write_text(old + "class B { static { eval(q) } }\n")
+            subprocess.run([*git, "commit", "-qam", "rename + append"], cwd=repo, check=True, capture_output=True)
+            ctx = self.ctx(repo, "diff")
+            ctx.changed_files = ["b.js"]
+            ctx.changed_lines = sast.changed_lines(repo, "HEAD~1")
+            ctx.edited_lines = sast.changed_lines(repo, "HEAD~1", hunks_only=True)
+            self.assertIn(1, ctx.changed_lines["b.js"])           # the rename fills every line ...
+            self.assertNotIn(1, ctx.edited_lines.get("b.js", set()))   # ... but the comment's text did not change
+            g = sast.gap_finding("b.js", {}, 2, 11, False)
+            sast.apply_policy(ctx, [g])
+            self.assertTrue(g.blocking)
+            self.assertEqual(g.suppressed, "")
 
     def test_a_tolerated_tool_error_keeps_the_findings_the_scanner_returned(self):
         """With fail_on_tool_error = false, a known tool error (e.g. a "Too many matches" warning from one noisy
@@ -891,6 +932,7 @@ class NotParsed(unittest.TestCase):
             def run(mode, changed, cfg_ignore=None):
                 ctx = self.ctx(Path(td), mode)
                 ctx.changed_files, ctx.changed_lines = {"a.js"}, {"a.js": set(changed)}
+                ctx.edited_lines = {"a.js": set(changed)}
                 if cfg_ignore:
                     ctx.cfg["ignore"] = [cfg_ignore]
                 g = sast.gap_finding("a.js", {}, 2, 3, False)

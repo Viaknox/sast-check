@@ -50,7 +50,9 @@ class A {}
 ```
 
 Class bodies, static blocks included, are always strict mode code, so the replacement function must start with
-`"use strict"`; otherwise a direct `eval` inside it would run as sloppy code and behave differently.
+`"use strict"`; otherwise a direct `eval` inside it would run as sloppy code and behave differently. It is still not identical in every case: inside the function, `arguments` exists (a static block rejects it),
+and `super` and the class's private names (`#x`) are not available. If the block uses those, or evaluates code
+that might, use a reasoned suppression instead.
 
 **`using` declaration** (TypeScript)
 
@@ -103,6 +105,10 @@ const f = <const T,>(x: T) => x;
 // after: drop `const`; pass `x as const` at call sites that relied on it
 const f = <T,>(x: T) => x;
 ```
+
+This changes the inferred type. `x as const` only works on simple literals (not, for example, on a conditional
+expression), so for an exported function or a caller passing a complex expression, keep the signature and use a
+reasoned suppression instead.
 
 **`unique symbol` type**
 
