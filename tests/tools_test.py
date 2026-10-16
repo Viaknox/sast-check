@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fp_sweep  # noqa: E402
 import rule_mutation as rm  # noqa: E402
+import rule_perf  # noqa: E402
 import rules_test  # noqa: E402
 
 RULE = {"rules": [{"id": "sast.x.r", "languages": ["python"], "message": "m", "severity": "ERROR",
@@ -148,6 +149,167 @@ class BatchedMutants(unittest.TestCase):
         self.assertTrue(any(alone) and not all(alone), "pick mutants with both outcomes")
 
 
+class RulePerf(unittest.TestCase):
+    def test_slow_only_when_both_ratio_and_seconds_are_exceeded(self):
+        self.assertTrue(rule_perf.too_slow(20.0, 6.0))      # 3.3x and 14 s slower
+        self.assertFalse(rule_perf.too_slow(2.0, 1.0))      # 2x but only 1 s: runner noise on a short scan
+        self.assertFalse(rule_perf.too_slow(14.0, 10.0))    # 4 s slower but only 1.4x
+        self.assertTrue(rule_perf.too_slow(61.0, None))     # a new rule over the cap
+        self.assertFalse(rule_perf.too_slow(59.0, None))
+
+    def test_a_failed_scan_is_an_error_not_a_pass(self):
+        with tempfile.TemporaryDirectory() as td:
+            eng = Path(td) / "opengrep"
+            eng.write_text("#!/bin/sh\nexit 7\n")
+            eng.chmod(eng.stat().st_mode | stat.S_IEXEC)
+            status, detail = rule_perf.check_rule(str(eng), rm.RULES / "js" / "code-eval.yaml", Path(td) / "base")
+        self.assertEqual(status, "ERROR", detail)
+
+    def fake_engine(self, td, body):
+        eng = Path(td) / "opengrep"
+        eng.write_text("#!/bin/sh\nprev=\"\"\nfor a; do [ \"$prev\" = --config ] && conf=\"$a\"; prev=\"$a\"; t=\"$a\"; done\n" + body)
+        eng.chmod(eng.stat().st_mode | stat.S_IEXEC)
+        return str(eng)
+
+    def test_an_engine_error_in_clean_json_output_is_an_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            eng = self.fake_engine(td, 'echo \'{"results": [], "errors": [{"type": "Rule parse error", "message": "bad"}], '
+                                       '"paths": {"scanned": ["big.js"]}}\'\n')
+            status, detail = rule_perf.check_rule(eng, rm.RULES / "js" / "code-eval.yaml", Path(td) / "base")
+        self.assertEqual(status, "ERROR", detail)
+        self.assertIn("engine error", detail)
+
+    def test_a_base_version_that_skips_the_file_is_not_compared(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "base" / "rules" / "custom" / "js"
+            base.mkdir(parents=True)
+            (base / "code-eval.yaml").write_text("rules: [] # BASEMARK\n")
+            # the base version scans nothing (its paths skip the file); the changed version scans it
+            eng = self.fake_engine(td, 'if grep -q BASEMARK "$conf"; then s=""; else s="\\"$t\\""; fi\n'
+                                       'echo "{\\"results\\": [], \\"errors\\": [], \\"paths\\": {\\"scanned\\": [$s]}}"\n')
+            status, detail = rule_perf.check_rule(eng, rm.RULES / "js" / "code-eval.yaml", Path(td) / "base")
+        self.assertEqual(status, "ok", detail)
+        self.assertIn("no comparable base", detail)
+
+    def test_list_prints_no_line_when_no_rule_changed(self):
+        import subprocess  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as td:
+            changed = Path(td) / "changed.txt"
+            changed.write_text("README.md\n")
+            out = subprocess.run([sys.executable, str(ROOT / "tools" / "rule_perf.py"), "--list", "--changed-files",
+                                  str(changed)], capture_output=True, text=True, check=True).stdout
+        self.assertEqual(out, "")   # an empty line would make CI fetch the directory itself (PR #18 run)
+
+    def base_and_engine(self, td, body, base_text="rules: [] # BASEMARK\n"):
+        """A base version of js/code-eval and a fake engine running BODY ($conf = config, $t = target)."""
+        base = Path(td) / "base" / "rules" / "custom" / "js"
+        base.mkdir(parents=True)
+        (base / "code-eval.yaml").write_text(base_text)
+        return Path(td) / "base", self.fake_engine(td, body)
+
+    SCANNED = 'echo "{\\"results\\": [], \\"errors\\": [], \\"paths\\": {\\"scanned\\": [\\"$t\\"]}}"\n'
+
+    def test_a_much_slower_changed_rule_is_slow(self):
+        with tempfile.TemporaryDirectory() as td:
+            # the base version is instant; the changed version takes 3.5 s (over 1.5x and over 3 s slower)
+            base, eng = self.base_and_engine(td, 'grep -q BASEMARK "$conf" || sleep 3.5\n' + self.SCANNED)
+            status, detail = rule_perf.check_rule(eng, rm.RULES / "js" / "code-eval.yaml", base)
+        self.assertEqual(status, "SLOW", detail)
+
+    def test_a_changed_rule_that_never_finishes_is_slow_and_a_base_that_never_finishes_is_an_error(self):
+        old = rule_perf.SCAN_TIMEOUT
+        rule_perf.SCAN_TIMEOUT = 1
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                base, eng = self.base_and_engine(td, 'grep -q BASEMARK "$conf" || sleep 5\n' + self.SCANNED)
+                status, detail = rule_perf.check_rule(eng, rm.RULES / "js" / "code-eval.yaml", base)
+            self.assertEqual(status, "SLOW", detail)
+            with tempfile.TemporaryDirectory() as td:
+                base, eng = self.base_and_engine(td, 'grep -q BASEMARK "$conf" && sleep 5\n' + self.SCANNED)
+                status, detail = rule_perf.check_rule(eng, rm.RULES / "js" / "code-eval.yaml", base)
+            self.assertEqual(status, "ERROR", detail)
+        finally:
+            rule_perf.SCAN_TIMEOUT = old
+
+    def test_a_rule_started_near_the_end_of_the_budget_stops_at_the_deadline(self):
+        import time  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as td:
+            base, eng = self.base_and_engine(td, 'sleep 20\n' + self.SCANNED)   # both versions far over the budget left
+            t = time.monotonic()
+            status, detail = rule_perf.check_rule(eng, rm.RULES / "js" / "code-eval.yaml", base, deadline=t + 1)
+            took = time.monotonic() - t
+        self.assertEqual(status, "ERROR", detail)
+        self.assertIn("budget", detail)
+        self.assertLess(took, 5)   # cut at the deadline, not after the 300 s scan limit
+
+    def test_an_empty_base_file_is_an_error_not_a_new_rule(self):
+        with tempfile.TemporaryDirectory() as td:
+            # an empty config makes the engine fail (as opengrep does); it must not count as "new rule"
+            base, eng = self.base_and_engine(td, '[ -s "$conf" ] || exit 7\n' + self.SCANNED, base_text="")
+            status, detail = rule_perf.check_rule(eng, rm.RULES / "js" / "code-eval.yaml", base)
+        self.assertEqual(status, "ERROR", detail)
+
+    def test_only_plain_rule_paths_are_fetched(self):
+        for ok in ("rules/custom/js/code-eval.yaml", "rules/custom/k8s/ingress-nginx_v2.yaml"):
+            self.assertTrue(rule_perf.SAFE_PATH.match(ok), ok)
+        for bad in ("rules/custom/js/a b.yaml", "rules/custom/js/a?ref=x.yaml", "rules/custom/js/a#b.yaml",
+                    "rules/custom/../x.yaml", "rules/custom/js/a\\nb.yaml"):
+            self.assertFalse(rule_perf.SAFE_PATH.match(bad), bad)
+
+    def test_a_long_line_fixture_does_not_make_a_huge_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            fx = Path(td) / "x.js"
+            fx.write_text("a" * 1_000_000 + "\n")   # one 1 MB line
+            out = Path(td) / "out"
+            out.mkdir()
+            cwd, rel = rule_perf.big_target(fx, "rules: []\n", out)
+            self.assertLessEqual((cwd / rel).stat().st_size, rule_perf.MAX_BYTES + 1_000_001)
+
+    def test_time_spent_before_the_check_counts_against_the_budget(self):
+        import subprocess  # noqa: PLC0415
+        import time  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as td:
+            changed = Path(td) / "changed.txt"
+            changed.write_text("rules/custom/js/code-eval.yaml\n")
+            # the step started 16 minutes ago (slow fetches): no time is left, so the rule is not scanned
+            r = subprocess.run([sys.executable, str(ROOT / "tools" / "rule_perf.py"), "--engine", "/bin/opengrep-absent/opengrep",
+                                "--base-dir", td, "--changed-files", str(changed), "--started-at", str(time.time() - 16 * 60)],
+                               capture_output=True, text=True, check=False)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("budget", r.stdout)
+
+    def test_the_generated_file_keeps_the_fixture_name_for_name_filters(self):
+        with tempfile.TemporaryDirectory() as td:
+            fx = Path(td) / "eslint-risk.config.js"
+            fx.write_text("x = 1\n")
+            out = Path(td) / "out"
+            out.mkdir()
+            rule = 'rules: [{id: r, paths: {include: ["*.config.js"]}}]\n'
+            _, rel = rule_perf.big_target(fx, rule, out)
+        self.assertEqual(rel.name, "eslint-risk.config.js")
+
+    def test_a_fixture_over_the_size_cap_is_an_error(self):
+        old = rule_perf.MAX_BYTES
+        rule_perf.MAX_BYTES = 10   # every real fixture is over this
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                status, detail = rule_perf.check_rule("/bin/false", rm.RULES / "js" / "code-eval.yaml", Path(td))
+        finally:
+            rule_perf.MAX_BYTES = old
+        self.assertEqual(status, "ERROR", detail)
+        self.assertIn("too large", detail)
+
+    def test_yaml_fixture_becomes_separate_documents_at_a_workflow_path(self):
+        rule = rm.RULES / "gha" / "remote-fetch-no-checksum.yaml"
+        with tempfile.TemporaryDirectory() as td:
+            cwd, rel = rule_perf.big_target(rules_test.fixture_for(rule), rule.read_text(), Path(td))
+            text = (cwd / rel).read_text()
+        self.assertEqual(rel.parent, Path(".github/workflows"))
+        self.assertGreaterEqual(text.count("\n"), rule_perf.LINES // 2)
+        self.assertGreater(text.count("---\n"), 1)
+        self.assertTrue(all(d is None or isinstance(d, dict) for d in yaml.safe_load_all(text)))
+
+
 class FpReport(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.TemporaryDirectory()
@@ -165,7 +327,7 @@ class FpReport(unittest.TestCase):
         self.td.cleanup()
 
     def lab(self, *labels):
-        return [{**f, "label": lab} for f, lab in zip(self.f, labels)]
+        return [{**f, "label": lab} for f, lab in zip(self.f, labels, strict=False)]   # a shorter label list is a test case
 
     def test_counts_per_rule_and_fp_repos(self):
         rep = fp_sweep.report(self.work, self.lab("fp", "tp_test"), self.corpus)

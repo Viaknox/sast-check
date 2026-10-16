@@ -13,7 +13,7 @@ jobs:
   test:
     name: rules + e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 75   # a PR that changes many rules mutation-tests each one (about a minute per rule)
+    timeout-minutes: 90   # setup + rule tests ~6 min, speed check up to 20, mutation check up to 60, end-to-end ~3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,9 +75,72 @@ jobs:
         run: OPENGREP="$RUNNER_TEMP/opengrep/opengrep" python tests/tools_test.py
       - name: Learner rule tests (tools/learner_rules.py, offline with canned drafts)
         run: OPENGREP="$RUNNER_TEMP/opengrep/opengrep" python tests/learner_rules_test.py
+      - name: Rule speed check (changed rules)
+        # a changed rule must not be much slower than the base branch's version on a large file built from its
+        # fixture (tools/rule_perf.py; PR #11 found two 30-45x slowdowns by hand)
+        timeout-minutes: 20
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          # the exact base commit this run was created for, so a base branch that moves meanwhile cannot change it
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          started=$(date +%s)   # the speed check's 15-minute budget counts the fetches below too
+          budget_left() {   # the same 15 minutes as BUDGET in tools/rule_perf.py; stop with a report, not a kill
+            if [ $(( $(date +%s) - started )) -ge 900 ]; then
+              echo "the speed check's 15-minute budget ran out while fetching from GitHub" >&2; exit 1
+            fi
+          }
+          # GitHub API calls: a transient error is retried twice; a 404 is reported to the caller; anything else
+          # after three tries fails closed
+          gh_get() {   # gh_get OUT ARGS...
+            out="$1"; shift
+            for i in 1 2 3; do
+              # a stalled connection counts as a failed try (gh api has no timeout of its own)
+              if timeout 60 gh api "$@" > "$out" 2> "$RUNNER_TEMP/gh.err"; then return 0; fi
+              if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then return 4; fi
+              budget_left
+              [ "$i" = 3 ] || sleep $((i * 10))   # no wait after the last try
+            done
+            echo "GitHub API call failed or timed out 3 times: gh api $*" >&2; cat "$RUNNER_TEMP/gh.err" >&2; exit 1
+          }
+          gh_get "$RUNNER_TEMP/perf-changed.txt" --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename'
+          # the files API lists at most 3,000 files: a shorter list than the PR's own count would skip rules silently
+          got=$(grep -c . "$RUNNER_TEMP/perf-changed.txt" || true)
+          if [ "$got" -lt "$CHANGED_FILES" ]; then
+            echo "the PR changes $CHANGED_FILES files but the files API listed $got: cannot tell which rules changed" >&2; exit 1
+          fi
+          # a renamed rule is compared with its base version under the old name (tab-separated: names may hold spaces)
+          gh_get "$RUNNER_TEMP/perf-renames.txt" --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | select(.previous_filename) | "\(.filename)\t\(.previous_filename)"'
+          # the files API always describes the PR's current head: if a push landed since this run started, these lists
+          # may not match the checked-out commit, so stop (the run for the newer push checks it)
+          gh_get "$RUNNER_TEMP/perf-head.txt" "repos/$REPO/pulls/$PR" --jq .head.sha
+          if [ "$(cat "$RUNNER_TEMP/perf-head.txt")" != "$HEAD_SHA" ]; then
+            echo "the PR's head moved past $HEAD_SHA during this run: re-run on the new head" >&2; exit 1
+          fi
+          base="$RUNNER_TEMP/perf-base"
+          # only rule paths of letters, digits and . _ - are listed; the check itself reports any other name
+          python tools/rule_perf.py --list --changed-files "$RUNNER_TEMP/perf-changed.txt" > "$RUNNER_TEMP/perf-rules.txt"
+          # the base version of each rule; only "not there yet" (404, a new rule) may be missing
+          while read -r f; do
+            [ -n "$f" ] || continue
+            budget_left
+            mkdir -p "$base/$(dirname "$f")"
+            src=$(awk -F '\t' -v f="$f" '$1 == f { print $2 }' "$RUNNER_TEMP/perf-renames.txt")
+            case "${src:-$f}" in *[!A-Za-z0-9._/-]*) echo "unexpected old name for $f: $src" >&2; exit 1;; esac
+            rc=0; gh_get "$base/$f" -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/${src:-$f}?ref=$BASE_SHA" || rc=$?
+            if [ "$rc" = 4 ]; then rm -f "$base/$f"; fi
+          done < "$RUNNER_TEMP/perf-rules.txt"
+          python tools/rule_perf.py --engine "$RUNNER_TEMP/opengrep/opengrep" --base-dir "$base" \
+            --changed-files "$RUNNER_TEMP/perf-changed.txt" --started-at "$started"
       - name: Rule mutation check (changed rules)
         # PR #11 (many rules): 34 min on one run, over 40 on two re-runs of the same commit; 60 leaves room
-        # for runner speed. Setup and rule tests take about 6 min and end-to-end about 3, so the job limit is 75.
+        # for runner speed (the job limit above counts this, the speed check and the other steps)
         timeout-minutes: 60
         # every pattern element of a changed rule must be exercised by its fixture, unless the baseline
         # (tests/mutation-baseline.json) lists it with a reason; see docs/rule-quality.md
