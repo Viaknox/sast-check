@@ -1501,6 +1501,7 @@ def main(argv=None) -> int:
             ctx.notes.append(f"{len(skipped)} changed file(s) under excluded paths (`paths.exclude`) were not scanned: "
                              + ", ".join(md_code(f) for f in skipped[:10]) + (" …" if len(skipped) > 10 else "") + ".")
     findings: list[Finding] = []
+    engine_missing = False
     for name in enabled:
         try:
             res = SCANNERS[name](ctx)
@@ -1508,7 +1509,9 @@ def main(argv=None) -> int:
             ctx.runs.append(ToolRun(name, "ran", count=len(res)))
         except FileNotFoundError as e:
             # opengrep runs the custom rules, the core of the check: without it the scan is incomplete, so a
-            # missing opengrep is an error (other scanners that are not installed are reported as skipped)
+            # missing opengrep fails the check whatever fail_on_tool_error says (other scanners that are not
+            # installed are reported as skipped)
+            engine_missing = engine_missing or name == "opengrep"
             ctx.runs.append(ToolRun(name, "error" if name == "opengrep" else "skipped", str(e)))
         except Exception as e:  # noqa: BLE001 - surface any scanner failure
             ctx.runs.append(ToolRun(name, "error", str(e)[:400]))
@@ -1524,9 +1527,10 @@ def main(argv=None) -> int:
         except Exception as e:  # noqa: BLE001 - without the base comparison a new finding could pass: fail closed
             ctx.runs.append(ToolRun("baseline", "error", f"base comparison failed: {str(e)[:300]}"))
     apply_policy(ctx, findings, new_by_base)
-    # settings, diff and base-comparison errors always fail; fail_on_tool_error covers scanner crashes only
+    # settings, diff and base-comparison errors and a missing opengrep always fail; fail_on_tool_error covers
+    # scanner crashes only
     integrity = ("settings", "git-diff", "baseline")
-    errored = any(r.status == "error" and (r.name in integrity or cfg["policy"].get("fail_on_tool_error", True))
+    errored = engine_missing or any(r.status == "error" and (r.name in integrity or cfg["policy"].get("fail_on_tool_error", True))
                   for r in ctx.runs)
     verdict = "error" if errored else "fail" if any(f.blocking for f in findings) else "pass"
 

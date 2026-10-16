@@ -432,6 +432,8 @@ class OpengrepOnly(unittest.TestCase):
             repo = td / "repo"
             repo.mkdir()
             (repo / "app.py").write_text("x = 1\n")
+            # even a repo that lets scanner crashes pass must fail when the custom-rule engine never ran
+            (repo / ".sast-check.toml").write_text("[policy]\nfail_on_tool_error = false\n")
             git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
             for cmd in (["git", "init", "-q"], ["git", "add", "-A"], [*git, "commit", "-qm", "init"]):
                 subprocess.run(cmd, cwd=repo, check=True, capture_output=True)

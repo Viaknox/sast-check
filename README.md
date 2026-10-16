@@ -51,7 +51,7 @@ All keys and defaults: [config/default.toml](config/default.toml).
 
 Install the scanners (any OS): `pip install ruff==0.16.8 zizmor==1.30.1`, then
 [Opengrep](https://github.com/opengrep/opengrep#installation), [gitleaks](https://github.com/gitleaks/gitleaks#installing),
-[osv-scanner](https://google.github.io/osv-scanner/installation/). Opengrep is required (it runs the custom rules and is the only supported engine): without it the check fails. Any other missing scanner is reported as *skipped*, never silently passed.
+[osv-scanner](https://google.github.io/osv-scanner/installation/). Opengrep is required (it runs the custom rules and is the only supported engine): without it the check fails, even with `fail_on_tool_error = false`. Any other missing scanner is reported as *skipped*, never silently passed.
 
 ```bash
 python3 scripts/sast.py --mode diff --base origin/main     # exit 0 pass · 1 blocking · 2 scanner error
