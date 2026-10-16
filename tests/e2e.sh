@@ -821,14 +821,102 @@ gate --mode diff --base HEAD~1 --only opengrep
 check "identical blocks swapped: the exposed sink blocks" "$(q "[f['line'] for f in d['findings'] if f['path']=='src/dup.js' and f['blocking']]")" "[15]"
 git checkout -q main
 
-# r15: changes the scanners cannot see are named in the report
+# r15/#3/#4: changes the scanners cannot see (submodule pointer, Git LFS pointer) fail closed
+# gate that is expected to exit 2: no "gate errored" failure; the error runs' text lands in $err
+gate2() {
+  set +e; env -u GH_TOKEN -u GITHUB_TOKEN python3 -I "$HERE/scripts/sast.py" "$@" >/dev/null 2>&1; code=$?; set -e
+  err="$(q "' | '.join(r['name']+': '+r['detail'] for r in d['runs'] if r['status']=='error')")"
+}
 git checkout -q -b r15b main
-printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 12\n' 0 > src/big.dat
-git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),libsub"
-git add src/big.dat && git commit -qm blind
+git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),libsub" && git commit -qm blindsub
+gate2 --mode diff --base HEAD~1 --only ruff
+check "changed submodule fails the check"                "$code" "2"
+check "submodule error names the submodule"              "$(echo "$err" | grep -c 'submodules:.*libsub')" "1"
+printf '[policy]\nfail_on_tool_error = false\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm lax
+git update-index --add --cacheinfo "160000,$(git rev-parse HEAD~1),libsub" && git commit -qm movesub
+gate2 --mode diff --base HEAD~1 --only ruff
+check "submodule fails despite fail_on_tool_error=false" "$code" "2"
+printf '[policy]\nallow_unscanned_submodules = true\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm optout
+git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),libsub" && git commit -qm movesub2
 gate --mode diff --base HEAD~1 --only ruff
-check "report names a changed LFS pointer"               "$(grep -c 'Git LFS file `src/big.dat`' sast-results/report.md)" "1"
-check "report names a changed submodule"                 "$(grep -c 'submodule `libsub`' sast-results/report.md)" "1"
+check "allow_unscanned_submodules=true: check passes"    "$code" "0"
+check "opt-out still names the submodule in the report"  "$(grep -c 'submodule `libsub`' sast-results/report.md)" "1"
+printf '[policy]\nallow_unscanned_submodules = "yes"\n' > .sast-check.toml && git commit -qam badtype
+gate2 --mode diff --base HEAD~1 --only ruff
+check "non-boolean allow_unscanned_submodules is a settings error" "$code" "2"
+git checkout -q main
+
+# a changed Git LFS pointer file fails closed and is named, whatever fail_on_tool_error says
+git checkout -q -b r15lfs main
+printf '[policy]\nfail_on_tool_error = false\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm lax
+printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 14\n' 0 > src/big.py
+git add src/big.py && git commit -qm lfsptr
+gate2 --mode diff --base HEAD~1 --only opengrep
+check "changed LFS pointer fails the check"              "$code" "2"
+check "LFS error names the file"                         "$(echo "$err" | grep -c 'lfs:.*src/big.py')" "1"
+printf '[policy]\nallow_unscanned_lfs = true\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm lfsoptout
+printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 15\n' 0 > src/big.py && git commit -qam lfsptr2
+gate --mode diff --base HEAD~1 --only opengrep
+check "allow_unscanned_lfs=true: check passes"           "$code" "0"
+check "LFS opt-out still names the file in the report"   "$(grep -c 'Git LFS file `src/big.py`' sast-results/report.md)" "1"
+printf '[policy]\nallow_unscanned_lfs = 1\n' > .sast-check.toml && git commit -qam lfsbad
+gate2 --mode diff --base HEAD~1 --only opengrep
+check "non-boolean allow_unscanned_lfs is a settings error" "$code" "2"
+git checkout -q main
+
+# a submodule checked out at a new commit but not staged is a changed submodule too
+git checkout -q -b r15u main
+mkdir usub && git -C usub init -q -b main && git -C usub -c user.email=t@e -c user.name=t commit -q --allow-empty -m c1
+git add usub 2>/dev/null && git commit -qm addusub
+git -C usub -c user.email=t@e -c user.name=t commit -q --allow-empty -m c2   # moved, not staged
+gate2 --mode diff --base HEAD
+check "unstaged submodule move fails the check"          "$code" "2"
+check "unstaged submodule error names it"                "$(echo "$err" | grep -c 'submodules:.*usub')" "1"
+git -C usub -c user.email=t@e -c user.name=t reset -q --hard HEAD~1   # back at the gitlink commit
+echo 'x = 1' > usub/edit.py   # same commit, but a new file inside the submodule
+gate2 --mode diff --base HEAD
+check "dirty submodule (same commit) fails the check"   "$code" "2"
+git -C usub config status.showUntrackedFiles no   # a local setting must not hide the new file
+gate2 --mode diff --base HEAD
+check "dirty submodule fails despite showUntrackedFiles=no" "$code" "2"
+git checkout -q main
+
+# a committed gitlink move is caught even when the submodule checkout is still at the base commit
+git checkout -q -b r21sub main
+mkdir ssub && git -C ssub init -q -b main && git -C ssub -c user.email=t@e -c user.name=t commit -q --allow-empty -m c1
+git add ssub 2>/dev/null && git commit -qm addssub
+git -C ssub -c user.email=t@e -c user.name=t commit -q --allow-empty -m c2
+git add ssub && git commit -qm movessub
+git -C ssub checkout -q HEAD~1   # stale checkout: matches the base, not the committed gitlink
+gate2 --mode diff --base HEAD~1
+check "committed gitlink move with stale checkout fails"  "$code" "2"
+check "stale-checkout submodule error names it"           "$(echo "$err" | grep -c 'submodules:.*ssub')" "1"
+git checkout -q main
+
+# an LFS file already hydrated in the checkout is judged by its committed blob (still a pointer)
+git checkout -q -b r21lfs main
+printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 16\n' 0 > src/hyd.py
+git add src/hyd.py && git commit -qm lfshyd
+printf 'x = 1\n' > src/hyd.py   # what git-lfs smudge would leave in the working tree
+gate2 --mode diff --base HEAD~1 --only opengrep
+check "hydrated LFS file still fails the check"           "$code" "2"
+check "hydrated LFS error names the file"                 "$(echo "$err" | grep -c 'lfs:.*src/hyd.py')" "1"
+git checkout -q -- src/hyd.py && git checkout -q main
+
+# a file that only starts with the LFS version URL (docs, fixtures) is ordinary content, not a pointer
+git checkout -q -b r21doc main
+printf 'version https://git-lfs.github.com/spec/v1\nis the URL every pointer starts with\n' > src/lfsdoc.txt
+git add src/lfsdoc.txt && git commit -qm lfsdoc
+gate --mode diff --base HEAD~1 --only opengrep
+check "text starting with the LFS URL is not an LFS pointer" "$code" "0"
+git checkout -q main
+
+# a pointer padded past 1 KiB is still a pointer to git-lfs, so it still fails closed
+git checkout -q -b r21pad main
+{ printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 17\n' 0; head -c 1200 /dev/zero | tr '\0' ' '; } > src/pad.py
+git add src/pad.py && git commit -qm lfspad
+gate2 --mode diff --base HEAD~1 --only opengrep
+check "padded LFS pointer (>1 KiB) fails the check"       "$code" "2"
 git checkout -q main
 
 # r18: a '#' or '//' inside a JS regex or template literal is not a comment, so it cannot suppress
