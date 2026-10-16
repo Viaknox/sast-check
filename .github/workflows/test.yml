@@ -90,6 +90,11 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           started=$(date +%s)   # the speed check's 15-minute budget counts the fetches below too
+          budget_left() {   # the same 15 minutes as BUDGET in tools/rule_perf.py; stop with a report, not a kill
+            if [ $(( $(date +%s) - started )) -ge 900 ]; then
+              echo "the speed check's 15-minute budget ran out while fetching from GitHub" >&2; exit 1
+            fi
+          }
           # GitHub API calls: a transient error is retried twice; a 404 is reported to the caller; anything else
           # after three tries fails closed
           gh_get() {   # gh_get OUT ARGS...
@@ -97,6 +102,7 @@ jobs:
             for i in 1 2 3; do
               if gh api "$@" > "$out" 2> "$RUNNER_TEMP/gh.err"; then return 0; fi
               if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then return 4; fi
+              budget_left
               sleep $((i * 10))
             done
             cat "$RUNNER_TEMP/gh.err" >&2; exit 1
@@ -122,6 +128,7 @@ jobs:
           # the base version of each rule; only "not there yet" (404, a new rule) may be missing
           while read -r f; do
             [ -n "$f" ] || continue
+            budget_left
             mkdir -p "$base/$(dirname "$f")"
             src=$(awk -F '\t' -v f="$f" '$1 == f { print $2 }' "$RUNNER_TEMP/perf-renames.txt")
             case "${src:-$f}" in *[!A-Za-z0-9._/-]*) echo "unexpected old name for $f: $src" >&2; exit 1;; esac
