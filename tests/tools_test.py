@@ -278,6 +278,16 @@ class RulePerf(unittest.TestCase):
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         self.assertIn("budget", r.stdout)
 
+    def test_the_generated_file_keeps_the_fixture_name_for_name_filters(self):
+        with tempfile.TemporaryDirectory() as td:
+            fx = Path(td) / "eslint-risk.config.js"
+            fx.write_text("x = 1\n")
+            out = Path(td) / "out"
+            out.mkdir()
+            rule = 'rules: [{id: r, paths: {include: ["*.config.js"]}}]\n'
+            _, rel = rule_perf.big_target(fx, rule, out)
+        self.assertEqual(rel.name, "eslint-risk.config.js")
+
     def test_a_fixture_over_the_size_cap_is_an_error(self):
         old = rule_perf.MAX_BYTES
         rule_perf.MAX_BYTES = 10   # every real fixture is over this

@@ -100,12 +100,13 @@ jobs:
           gh_get() {   # gh_get OUT ARGS...
             out="$1"; shift
             for i in 1 2 3; do
-              if gh api "$@" > "$out" 2> "$RUNNER_TEMP/gh.err"; then return 0; fi
+              # a stalled connection counts as a failed try (gh api has no timeout of its own)
+              if timeout 60 gh api "$@" > "$out" 2> "$RUNNER_TEMP/gh.err"; then return 0; fi
               if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then return 4; fi
               budget_left
-              sleep $((i * 10))
+              [ "$i" = 3 ] || sleep $((i * 10))   # no wait after the last try
             done
-            cat "$RUNNER_TEMP/gh.err" >&2; exit 1
+            echo "GitHub API call failed or timed out 3 times: gh api $*" >&2; cat "$RUNNER_TEMP/gh.err" >&2; exit 1
           }
           gh_get "$RUNNER_TEMP/perf-changed.txt" --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename'
           # the files API lists at most 3,000 files: a shorter list than the PR's own count would skip rules silently

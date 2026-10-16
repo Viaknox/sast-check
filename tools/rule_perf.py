@@ -49,7 +49,7 @@ def big_target(fx: Path, rule_text: str, out: Path) -> tuple[Path, Path]:
     n = max(1, min(LINES // max(1, text.count("\n")), MAX_BYTES // max(1, len(text.encode()))))
     sep = "---\n" if fx.suffix in (".yml", ".yaml") else ""
     include = [p for r in yaml.safe_load(rule_text)["rules"] for p in r.get("paths", {}).get("include", [])]
-    rel = Path(".github/workflows" if any(p.startswith(".github/workflows/") for p in include) else ".") / f"big{fx.suffix}"
+    rel = Path(".github/workflows" if any(p.startswith(".github/workflows/") for p in include) else ".") / fx.name   # the fixture's own name, so name filters such as *.config.js still match
     (out / rel).parent.mkdir(parents=True, exist_ok=True)
     (out / rel).write_text(sep.join([text] * n))
     return out, rel
