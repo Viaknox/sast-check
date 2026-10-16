@@ -13,6 +13,7 @@ Usage:
   tools/rule_perf.py --rules python/django-httpresponse-xss.yaml --base-dir DIR
 """
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -31,7 +32,7 @@ from rules_test import fixture_for  # noqa: E402
 LINES = 2000         # size of the generated file: large enough that matching, not start-up, dominates
 RATIO = 1.5          # fail when the changed rule is this many times slower...
 SLACK = 3.0          # ...and also this many seconds slower (runner noise on short scans)
-NEW_RULE_CAP = 60.0  # a new rule has no base version: fail only when it is this slow on the generated file
+NEW_RULE_CAP = 60.0  # no base version to compare (a new rule, or one whose old paths skip the file): fail only over this
 RUNS = 2             # at most this many runs per version (the second only to confirm a failure); fastest counts
 
 
@@ -49,8 +50,9 @@ def big_target(fx: Path, rule_text: str, out: Path) -> tuple[Path, Path]:
     return out, rel
 
 
-def scan_seconds(engine: str, rule_text: str, cwd: Path, target: Path) -> float:
-    """Seconds for one scan with the gate's flags. Any failed scan raises: a rule that errors is not 'fast'."""
+def scan_seconds(engine: str, rule_text: str, cwd: Path, target: Path) -> tuple[float, bool]:
+    """(seconds, whether the rule scanned the target) for one scan with the gate's flags. A failed scan raises,
+    including one that exits cleanly but reports an engine error in its JSON: an incomplete scan is not 'fast'."""
     conf = cwd / "perf-rule.yaml"
     conf.write_text(rule_text)
     cmd = [engine, "scan", "--config", str(conf), "--json", "--quiet", "--disable-version-check", "--disable-nosem",
@@ -59,9 +61,18 @@ def scan_seconds(engine: str, rule_text: str, cwd: Path, target: Path) -> float:
     t = time.monotonic()
     r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=900, check=False)
     took = time.monotonic() - t
-    if r.returncode not in (0, 1) or not r.stdout.lstrip().startswith("{"):
+    try:
+        out = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        out = None
+    if r.returncode not in (0, 1) or not isinstance(out, dict):
         raise RuntimeError(f"scan failed (exit {r.returncode}): {r.stderr.strip()[:200]}")
-    return took
+    # the same filter as tests/rules_test.py: only a syntax error in the scanned code is tolerated
+    errs = [e for e in out.get("errors", []) if "Syntax error" not in str(e.get("type"))
+            and "PartialParsing" not in str(e.get("type"))]
+    if errs:
+        raise RuntimeError(f"engine error: {str(errs[0].get('message'))[:200]}")
+    return took, str(target) in out.get("paths", {}).get("scanned", [])
 
 
 def check_rule(engine: str, rule: Path, base_dir: Path) -> tuple[str, str]:
@@ -79,15 +90,22 @@ def check_rule(engine: str, rule: Path, base_dir: Path) -> tuple[str, str]:
             times = {"head": [], "base": []}
             for _ in range(RUNS):   # alternate, so a slow patch of the runner hits both versions
                 if base is not None:
-                    times["base"].append(scan_seconds(engine, base, cwd, target))
-                times["head"].append(scan_seconds(engine, head, cwd, target))
+                    took, scanned = scan_seconds(engine, base, cwd, target)
+                    if not scanned:   # the base version's paths or languages skip this file: nothing to compare
+                        base = None
+                    else:
+                        times["base"].append(took)
+                took, scanned = scan_seconds(engine, head, cwd, target)
+                if not scanned:
+                    return "ERROR", f"the rule does not scan a file built from its own fixture ({target})"
+                times["head"].append(took)
                 if not too_slow(min(times["head"]), min(times["base"]) if base is not None else None):
                     break   # a second run only confirms a failure; a pass needs one run of each
         except (RuntimeError, subprocess.TimeoutExpired) as e:
             return "ERROR", str(e)
     h = min(times["head"])
     if base is None:
-        return ("SLOW" if too_slow(h, None) else "ok"), f"new rule: {h:.1f}s (cap {NEW_RULE_CAP:.0f}s)"
+        return ("SLOW" if too_slow(h, None) else "ok"), f"new rule or no comparable base: {h:.1f}s (cap {NEW_RULE_CAP:.0f}s)"
     b = min(times["base"])
     return ("SLOW" if too_slow(h, b) else "ok"), f"base {b:.1f}s, changed {h:.1f}s ({h / max(b, 0.01):.2f}x)"
 

@@ -13,7 +13,7 @@ jobs:
   test:
     name: rules + e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 75   # a PR that changes many rules mutation-tests each one (about a minute per rule)
+    timeout-minutes: 90   # setup + rule tests ~6 min, speed check up to 20, mutation check up to 60, end-to-end ~3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,7 +78,7 @@ jobs:
       - name: Rule speed check (changed rules)
         # a changed rule must not be much slower than the base branch's version on a large file built from its
         # fixture (tools/rule_perf.py; PR #11 found two 30-45x slowdowns by hand)
-        timeout-minutes: 30
+        timeout-minutes: 20
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -87,13 +87,17 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' > "$RUNNER_TEMP/perf-changed.txt"
+          # a renamed rule is compared with its base version under the old name
+          gh api --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | select(.previous_filename) | "\(.filename) \(.previous_filename)"' > "$RUNNER_TEMP/perf-renames.txt"
           base="$RUNNER_TEMP/perf-base"
           python tools/rule_perf.py --list --changed-files "$RUNNER_TEMP/perf-changed.txt" > "$RUNNER_TEMP/perf-rules.txt"
           # the base version of each rule; only "not there yet" (404, a new rule) may be missing, any other
           # error fails closed
           while read -r f; do
             mkdir -p "$base/$(dirname "$f")"
-            if ! gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/$f?ref=$BASE_REF" > "$base/$f" 2> "$RUNNER_TEMP/gh.err"; then
+            src=$(awk -v f="$f" '$1 == f { print $2 }' "$RUNNER_TEMP/perf-renames.txt")
+            if ! gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/${src:-$f}?ref=$BASE_REF" > "$base/$f" 2> "$RUNNER_TEMP/gh.err"; then
               if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then rm -f "$base/$f"; else cat "$RUNNER_TEMP/gh.err" >&2; exit 1; fi
             fi
           done < "$RUNNER_TEMP/perf-rules.txt"
@@ -101,7 +105,7 @@ jobs:
             --changed-files "$RUNNER_TEMP/perf-changed.txt"
       - name: Rule mutation check (changed rules)
         # PR #11 (many rules): 34 min on one run, over 40 on two re-runs of the same commit; 60 leaves room
-        # for runner speed. Setup and rule tests take about 6 min and end-to-end about 3, so the job limit is 75.
+        # for runner speed (the job limit above counts this, the speed check and the other steps)
         timeout-minutes: 60
         # every pattern element of a changed rule must be exercised by its fixture, unless the baseline
         # (tests/mutation-baseline.json) lists it with a reason; see docs/rule-quality.md

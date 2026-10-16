@@ -165,6 +165,32 @@ class RulePerf(unittest.TestCase):
             status, detail = rule_perf.check_rule(str(eng), rm.RULES / "js" / "code-eval.yaml", Path(td) / "base")
         self.assertEqual(status, "ERROR", detail)
 
+    def fake_engine(self, td, body):
+        eng = Path(td) / "opengrep"
+        eng.write_text("#!/bin/sh\nprev=\"\"\nfor a; do [ \"$prev\" = --config ] && conf=\"$a\"; prev=\"$a\"; t=\"$a\"; done\n" + body)
+        eng.chmod(eng.stat().st_mode | stat.S_IEXEC)
+        return str(eng)
+
+    def test_an_engine_error_in_clean_json_output_is_an_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            eng = self.fake_engine(td, 'echo \'{"results": [], "errors": [{"type": "Rule parse error", "message": "bad"}], '
+                                       '"paths": {"scanned": ["big.js"]}}\'\n')
+            status, detail = rule_perf.check_rule(eng, rm.RULES / "js" / "code-eval.yaml", Path(td) / "base")
+        self.assertEqual(status, "ERROR", detail)
+        self.assertIn("engine error", detail)
+
+    def test_a_base_version_that_skips_the_file_is_not_compared(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "base" / "rules" / "custom" / "js"
+            base.mkdir(parents=True)
+            (base / "code-eval.yaml").write_text("rules: [] # BASEMARK\n")
+            # the base version scans nothing (its paths skip the file); the changed version scans it
+            eng = self.fake_engine(td, 'if grep -q BASEMARK "$conf"; then s=""; else s="\\"$t\\""; fi\n'
+                                       'echo "{\\"results\\": [], \\"errors\\": [], \\"paths\\": {\\"scanned\\": [$s]}}"\n')
+            status, detail = rule_perf.check_rule(eng, rm.RULES / "js" / "code-eval.yaml", Path(td) / "base")
+        self.assertEqual(status, "ok", detail)
+        self.assertIn("no comparable base", detail)
+
     def test_yaml_fixture_becomes_separate_documents_at_a_workflow_path(self):
         rule = rm.RULES / "gha" / "remote-fetch-no-checksum.yaml"
         with tempfile.TemporaryDirectory() as td:
