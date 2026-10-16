@@ -470,6 +470,17 @@ class UnscannedChecks(unittest.TestCase):
         self.assertFalse(ok(v + b"oid sha256:abc\nsize 12\n"))              # short oid
         self.assertFalse(ok(v + b"oid sha256:" + b"a" * 64 + b"\nsize x\n"))
         self.assertFalse(ok(v + b"oid sha256:" + b"a" * 64 + b"\nsize 12\n" + b"x" * 1100))   # too big
+        good = b"oid sha256:" + b"a" * 64 + b"\nsize 12"
+        self.assertTrue(ok(v + good))                                        # no final newline
+        self.assertTrue(ok((v + good + b"\n").replace(b"\n", b"\r\n")))     # CRLF
+
+    def test_a_missing_blob_is_a_lookup_failure(self):
+        """`git cat-file --batch-check` prints "<sha> missing" and exits 0; that must raise, not read as "not LFS"."""
+        with tempfile.TemporaryDirectory() as td:
+            import subprocess  # noqa: PLC0415
+            subprocess.run(["git", "init", "-q", td], check=True, capture_output=True)
+            with self.assertRaises(RuntimeError):
+                self._sast().lfs_pointer_blobs(Path(td), ["0" * 40])
 
     def test_a_failed_lookup_is_an_integrity_error_with_reports_written(self):
         """If the submodule/LFS check itself fails, the gate exits 2 and still writes findings.json."""

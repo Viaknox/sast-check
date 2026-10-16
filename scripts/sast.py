@@ -1407,12 +1407,14 @@ def proposed_settings_error(repo: Path, name: str) -> str:
     return ""
 
 
-LFS_POINTER_RE = re.compile(rb"version https://git-lfs\.github\.com/spec/v1\n(?:[a-z0-9.-]+ [^\n]*\n)*")
+LFS_POINTER_RE = re.compile(rb"version https://git-lfs\.github\.com/spec/v1(?:\n[a-z0-9.-]+ [^\n]*)*\n?")
 
 
 def is_lfs_pointer(body: bytes) -> bool:
     """True if `body` is a complete Git LFS pointer (spec v1: version line, then key/value lines including
-    `oid sha256:<64 hex>` and `size <n>`), not merely a file that starts with the version URL."""
+    `oid sha256:<64 hex>` and `size <n>`), not merely a file that starts with the version URL. CRLF line
+    endings and a missing final newline are accepted, as `git lfs pointer --check` does."""
+    body = body.replace(b"\r\n", b"\n")
     if len(body) >= 1024 or not LFS_POINTER_RE.fullmatch(body):
         return False
     keys = dict(line.split(b" ", 1) for line in body.splitlines()[1:])
@@ -1435,9 +1437,12 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[s
             moved.add(p)
         # checked out at another commit but not staged: a separate check, so a stale checkout never hides
         # a changed gitlink
-        if (repo / p / ".git").exists() and (head := sh(["git", "-C", p, "rev-parse", "HEAD"], repo, ok_codes=(0, 128)).stdout.strip()) \
-                and head != was.get(p):
-            moved.add(p)
+        if (repo / p / ".git").exists() and (head := sh(["git", "-C", p, "rev-parse", "HEAD"], repo, ok_codes=(0, 128)).stdout.strip()):
+            if head != was.get(p):
+                moved.add(p)
+            # same commit but edited, staged or new files inside it: still code the root scanners never see
+            elif sh(["git", "-C", p, "status", "--porcelain"], repo).stdout.strip():
+                moved.add(p)
     out = [("submodule", p, f"submodule {md_code(p)}") for p in sorted(moved)]
     lfs = lfs_pointer_blobs(repo, [index[f][1] for f in changed if f in index and index[f][0] != "160000"])
     for f in changed:
@@ -1473,7 +1478,9 @@ def lfs_pointer_blobs(repo: Path, shas: list[str]) -> set[str]:
     small = []
     for line in batch("--batch-check", sorted(set(shas))).decode().splitlines():
         sha, kind, size = (line.split() + ["", ""])[:3]
-        if kind == "blob" and size.isdigit() and int(size) < 1024:
+        if kind != "blob" or not size.isdigit():   # "<sha> missing" (partial or damaged clone) is a failure, not "no"
+            raise RuntimeError(f"git cat-file cannot read changed blob {sha}: {line.strip()[:120]}")
+        if int(size) < 1024:
             small.append(sha)
     if not small:
         return set()

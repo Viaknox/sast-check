@@ -833,6 +833,10 @@ git -C usub -c user.email=t@e -c user.name=t commit -q --allow-empty -m c2   # m
 gate2 --mode diff --base HEAD
 check "unstaged submodule move fails the check"          "$code" "2"
 check "unstaged submodule error names it"                "$(echo "$err" | grep -c 'submodules:.*usub')" "1"
+git -C usub -c user.email=t@e -c user.name=t reset -q --hard HEAD~1   # back at the gitlink commit
+echo 'x = 1' > usub/edit.py   # same commit, but a new file inside the submodule
+gate2 --mode diff --base HEAD
+check "dirty submodule (same commit) fails the check"   "$code" "2"
 git checkout -q main
 
 # a committed gitlink move is caught even when the submodule checkout is still at the base commit
