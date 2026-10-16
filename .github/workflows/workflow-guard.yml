@@ -1,21 +1,26 @@
 name: workflow-guard
 
-# SECURITY: this workflow runs from the base branch with pull_request_target / workflow_run and must NEVER check out
-# or run PR code. It reads the PR only through the GitHub API (the script is the base branch's own copy).
-# A PR that touches workflows, action.yml or the gate's settings files fails until a repo admin/maintainer or a
-# CODEOWNER approves the PR's current head commit.
+# SECURITY: this workflow runs from the base branch with pull_request_target and must NEVER check out or run PR code.
+# It reads the PR only through the GitHub API (the script is the base branch's own copy). A PR that touches workflows,
+# action.yml or the gate's settings files fails until a repo admin adds the `workflow-change-approved` label after the
+# PR's current head was pushed (see scripts/workflow_guard.py). Label events re-run this workflow on the PR head, so the
+# result lands on the commit that the required check is evaluated against.
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
-  # pull_request_review runs the PR's own copy of a workflow (a PR could change it), so a review event cannot run
-  # the guard. workflow-guard-retrigger.yml reacts to reviews; this trigger then re-runs the guard from the base branch.
-  workflow_run:
-    workflows: [workflow-guard-retrigger]
-    types: [completed]
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
 
+# contents: read for the checkout; pull-requests: write to remove the label (REST "Remove a label from an issue" accepts
+# Issues or Pull requests write); actions: read to list this repo's workflow runs (private repo; the runs API needs it).
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
+  actions: read
+
+# Serializes runs per PR but is NOT relied on for security: a pending run can be replaced, so every run re-derives the
+# verdict from server state.
+concurrency:
+  group: workflow-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   guard:
@@ -23,14 +28,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # default ref = the base branch (pull_request_target) or the default branch (workflow_run); never the PR head
+      # default ref = the base branch (pull_request_target); never the PR head
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Require a trusted approval for protected files
+      - name: Require the approval label for protected files
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_ACTION: ${{ github.event.action }}
+          # settings live here (base branch) and nowhere a PR can change
+          APPROVAL_LABEL: workflow-change-approved
+          # one-person repo: the owner opens every PR and cannot approve it on GitHub, so the label may come from the PR
+          # author. Set "false" once there is a second admin, and the label must come from someone else.
+          ALLOW_SELF_APPROVAL: "true"
         run: python3 -I scripts/workflow_guard.py

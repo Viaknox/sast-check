@@ -1,6 +1,6 @@
 rules:
   dangerous-triggers:
     ignore:
-      # The guard must run from the base branch (pull_request_target / workflow_run). It never checks out PR code,
-      # runs no PR-controlled script and has read-only permissions; see the comments in the file.
+      # The guard must run from the base branch (pull_request_target). It never checks out PR code,
+      # runs no PR-controlled script and its token can only read, plus remove one label; see the comments in the file.
       - workflow-guard.yml

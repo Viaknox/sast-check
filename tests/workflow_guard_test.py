@@ -1,21 +1,68 @@
 #!/usr/bin/env python3
-"""Tests for scripts/workflow_guard.py. Run: python3 tests/workflow_guard_test.py"""
-import base64
+"""Tests for scripts/workflow_guard.py (label-based approval). Run: python3 tests/workflow_guard_test.py"""
 import sys
 import unittest
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import workflow_guard as wg  # noqa: E402
 
 HEAD, OLD = "b" * 40, "a" * 40
-PR = {"head": {"sha": HEAD}, "base": {"ref": "main"}, "changed_files": 1}
+LABEL = wg.APPROVAL_LABEL
+T_PUSH, T_BEFORE, T_AFTER = "2026-01-01T10:00:00Z", "2026-01-01T09:00:00Z", "2026-01-01T11:00:00Z"
+WF = [{"filename": ".github/workflows/test.yml"}]
+ADMIN = {"role_name": "admin", "permission": "admin"}
 
 
-def review(user, state="APPROVED", sha=HEAD):
-    """Build a review record shaped like the GitHub API's."""
-    return {"user": {"login": user}, "state": state, "commit_id": sha}
+def labeled(actor="own", at=T_AFTER, eid=10, kind="User", name=LABEL, event="labeled"):
+    """Build an issue event shaped like the GitHub API's."""
+    return {"id": eid, "event": event, "created_at": at, "label": {"name": name},
+            "actor": None if actor is None else {"login": actor, "type": kind}}
+
+
+def run(at=T_PUSH, sha=HEAD, path=".github/workflows/workflow-guard.yml@refs/heads/main", prs=(), event="pull_request_target"):
+    """Build a workflow run shaped like the GitHub API's."""
+    return {"head_sha": sha, "created_at": at, "path": path, "event": event, "pull_requests": [{"number": n} for n in prs]}
+
+
+class Fake:
+    """Fake GitHub API over mutable canned state; records label deletions."""
+
+    def __init__(self, files=WF, labels=(LABEL,), events=None, runs=None, perms=None, author="own", **pr):
+        self.pr = {"head": {"sha": HEAD}, "changed_files": len(files), "user": {"login": author}, **pr}
+        self.labels = list(labels)
+        self.files = files
+        self.events = [labeled()] if events is None else events
+        self.runs = [run()] if runs is None else runs
+        self.perms = {"own": ADMIN} if perms is None else perms
+        self.deleted = []
+        self.fail_delete = False
+
+    def get(self, path):
+        """Answer a GET path from the canned state."""
+        if path.endswith("/files"):
+            return self.files
+        if path.endswith("/events"):
+            return self.events
+        if "/collaborators/" in path:
+            return self.perms[path.split("/")[-2]]
+        if "/actions/runs" in path:
+            return {"workflow_runs": self.runs}
+        return {**self.pr, "labels": [{"name": n} for n in self.labels]}
+
+    def delete(self, path):
+        """Handle a label DELETE: remove it from the state or raise like gh would."""
+        if self.fail_delete:
+            raise RuntimeError("HTTP 403")
+        self.deleted.append(path)
+        self.labels = []
+
+    def check(self, event_head=HEAD, **kw):
+        """Run wg.check against this fake."""
+        return wg.check("o/r", 5, event_head, self.get, self.delete, **kw)
 
 
 class Protected(unittest.TestCase):
@@ -28,145 +75,189 @@ class Protected(unittest.TestCase):
             self.assertFalse(wg.is_protected(p), p)
 
 
-class Evaluate(unittest.TestCase):
-    def run_guard(self, changed, reviews, roles=None, owners=()):
-        """Run the decision with defaults; roles maps login to a role, owners are logins owning everything."""
-        trusted = {u for u, r in (roles or {}).items() if r in wg.TRUSTED_ROLES}
-        rules = wg.parse_codeowners("* " + " ".join("@" + o for o in owners)) if owners else []
-        return wg.evaluate(changed, HEAD, reviews, trusted, rules)
+class Verdict(unittest.TestCase):
+    def test_no_protected_paths_passes_without_label(self):
+        f = Fake(files=[{"filename": "README.md"}], labels=[], events=[], runs=[])
+        self.assertTrue(f.check()[0])
+        self.assertTrue(Fake(files=[{"filename": "README.md"}]).check()[0])   # and whatever the label
 
-    def test_no_protected_files_passes(self):
-        self.assertTrue(self.run_guard(["README.md", "tools/x.py"], [])[0])
-
-    def test_workflow_change_without_approval_fails(self):
-        self.assertFalse(self.run_guard([".github/workflows/test.yml"], [])[0])
-
-    def test_maintainer_approval_on_current_head_passes(self):
-        self.assertTrue(self.run_guard(["action.yml"], [review("m")], {"m": "maintain"})[0])
-        self.assertTrue(self.run_guard(["action.yml"], [review("a")], {"a": "admin"})[0])
-
-    def test_approval_on_older_commit_fails(self):
-        self.assertFalse(self.run_guard(["action.yml"], [review("m", sha=OLD)], {"m": "admin"})[0])
-
-    def test_non_maintainer_approval_fails(self):
-        self.assertFalse(self.run_guard(["action.yml"], [review("w")], {"w": "write"})[0])
-        self.assertFalse(self.run_guard(["action.yml"], [review("w")], {"w": "none"})[0])
-
-    def test_codeowner_approval_passes(self):
-        self.assertTrue(self.run_guard(["action.yml"], [review("Owner")], {"Owner": "write"}, ["owner"])[0])
-
-    def test_later_changes_requested_or_dismissed_revokes(self):
-        for state in ("CHANGES_REQUESTED", "DISMISSED"):
-            reviews = [review("m"), review("m", state)]
-            self.assertFalse(self.run_guard(["action.yml"], reviews, {"m": "admin"})[0], state)
-
-    def test_comment_after_approval_keeps_it(self):
-        reviews = [review("m"), review("m", "COMMENTED")]
-        self.assertTrue(self.run_guard(["action.yml"], reviews, {"m": "admin"})[0])
-
-    def test_missing_role_fails_closed(self):
-        self.assertFalse(self.run_guard(["action.yml"], [review("m")], {})[0])
-
-
-class Main(unittest.TestCase):
-    def api(self, pr, reviews, perms, files, codeowners=""):
-        """Return a fake GitHub API function over canned data."""
-        def get(path):
-            if path.endswith("/files"):
-                return files
-            if path.endswith("/reviews"):
-                return reviews
-            if "/collaborators/" in path:
-                return perms[path.split("/")[-2]]
-            if "/contents/.github/CODEOWNERS" in path:
-                return {"content": base64.b64encode(codeowners.encode()).decode()}
-            return pr
-        return get
-
-    def test_api_error_fails(self):
-        def boom(path):
-            raise RuntimeError("HTTP 502")
-        ok, msg = wg.check("o/r", 5, "", boom)
+    def test_protected_without_label_fails_with_clear_message(self):
+        ok, msg = Fake(labels=[]).check()
         self.assertFalse(ok)
-        self.assertIn("502", msg)
+        self.assertIn("This PR changes protected files (.github/workflows/test.yml)", msg)
+        self.assertIn(f"A repo admin must review it and add the label `{LABEL}`. Any new commit removes the approval.", msg)
+
+    def test_label_by_trusted_human_after_push_passes(self):
+        self.assertTrue(Fake().check()[0])
+        self.assertTrue(Fake(perms={"own": {"role_name": "maintain"}}).check()[0])
+
+    def test_label_before_latest_push_fails(self):
+        for at in (T_BEFORE, T_PUSH):   # strictly later is required
+            ok, msg = Fake(events=[labeled(at=at)]).check()
+            self.assertFalse(ok, at)
+            self.assertIn("before the current head", msg)
+
+    def test_label_by_non_admin_fails(self):
+        for resp in ({"role_name": "write", "permission": "write"}, {"permission": "read"}, {}):
+            self.assertFalse(Fake(perms={"own": resp}).check()[0], resp)
+
+    def test_label_by_bot_fails(self):
+        self.assertFalse(Fake(events=[labeled(actor="github-actions[bot]", kind="Bot")], perms={"github-actions[bot]": ADMIN}).check()[0])
+        self.assertFalse(Fake(events=[labeled(actor="x[bot]", kind="User")], perms={"x[bot]": ADMIN}).check()[0])
+        self.assertFalse(Fake(events=[labeled(actor="own", kind="Bot")]).check()[0])
+        self.assertFalse(Fake(events=[labeled(actor=None)]).check()[0])
+
+    def test_latest_labeled_event_wins(self):
+        f = Fake(events=[labeled("own", eid=10), labeled("rando", eid=11)], perms={"own": ADMIN, "rando": {"permission": "write"}})
+        self.assertFalse(f.check()[0])
+        f = Fake(events=[labeled("rando", eid=3), labeled("own", eid=9)], perms={"own": ADMIN, "rando": {"permission": "write"}})
+        self.assertTrue(f.check()[0])   # order in the list does not matter, the highest id does
+        self.assertTrue(Fake(events=[labeled("own", eid=9), labeled("rando", eid=3)], perms={"own": ADMIN}).check()[0])
+
+    def test_other_labels_and_events_are_ignored(self):
+        events = [labeled(name="bug", eid=50), labeled(event="unlabeled", eid=60, actor="rando")]
+        self.assertFalse(Fake(events=events).check()[0])                       # no labeled event for ours
+        self.assertTrue(Fake(events=[labeled(eid=1)] + events).check()[0])
 
     def test_stale_event_head_fails(self):
-        get = self.api({**PR, "changed_files": 0}, [], {}, [])
-        self.assertFalse(wg.check("o/r", 5, OLD, get)[0])
+        self.assertFalse(Fake().check(event_head=OLD)[0])
+        self.assertFalse(Fake().check(event_head="")[0])
+
+    def test_no_workflow_run_for_head_fails(self):
+        for runs in ([], [run(sha=OLD)], [run(path=".github/workflows/other.yml@refs/heads/main")], [run(event="pull_request")],
+                     [run(prs=[99])]):
+            ok, msg = Fake(runs=runs).check()
+            self.assertFalse(ok, runs)
+            self.assertIn("no workflow-guard run found", msg)
+
+    def test_earliest_run_dates_the_push(self):
+        runs = [run(at=T_AFTER), run(at=T_PUSH, prs=[5])]   # later labeled/unlabeled runs do not move the push time
+        self.assertTrue(Fake(runs=runs).check()[0])
+        self.assertTrue(wg.first_push_time([{"workflow_runs": [run(at=T_AFTER)]}, {"workflow_runs": [run(at=T_PUSH)]}], HEAD, 5) is not None)
+
+    def test_api_error_fails(self):
+        f = Fake()
+        def boom(path):
+            raise RuntimeError("HTTP 502")
+        ok, msg = wg.check("o/r", 5, HEAD, boom, f.delete)
+        self.assertFalse(ok)
+        self.assertIn("502", msg)
+        def runs_boom(path):
+            if "/actions/runs" in path:
+                raise RuntimeError("HTTP 500")
+            return f.get(path)
+        self.assertFalse(wg.check("o/r", 5, HEAD, runs_boom, f.delete)[0])
+
+    def test_unparseable_or_missing_timestamp_fails(self):
+        for bad in ("yesterday", "2026-01-01T10:00:00", None, 5):
+            self.assertFalse(Fake(events=[labeled(at=bad)]).check()[0], bad)
+            self.assertFalse(Fake(runs=[run(at=bad)]).check()[0], bad)
+
+    def test_malformed_responses_fail_closed(self):
+        self.assertFalse(Fake(events="nope").check()[0])
+        self.assertFalse(Fake(events=[labeled(eid="x")]).check()[0])
+        self.assertFalse(Fake(events=[{"id": 1, "event": "labeled", "label": {"name": LABEL}, "created_at": T_AFTER}]).check()[0])
+        f = Fake()
+        def odd(path):
+            r = f.get(path)
+            return {**r, "labels": "x"} if path.endswith("/pulls/5") else r
+        self.assertFalse(wg.check("o/r", 5, HEAD, odd, f.delete)[0])
+
+    def test_self_approval_setting(self):
+        self.assertTrue(Fake(author="own").check(allow_self=True)[0])
+        ok, msg = Fake(author="own").check(allow_self=False)
+        self.assertFalse(ok)
+        self.assertIn("self-approval is disabled", msg)
+        self.assertFalse(Fake(author="OWN").check(allow_self=False)[0])
+        self.assertTrue(Fake(author="someone").check(allow_self=False)[0])
+
+    def test_synchronize_removes_label_and_failed_removal_fails(self):
+        f = Fake()
+        ok, msg = f.check(action="synchronize")
+        self.assertEqual(f.deleted, [f"repos/o/r/issues/5/labels/{LABEL}"])
+        self.assertFalse(ok)                       # the label is gone, so the PR needs a fresh approval
+        self.assertIn("add the label", msg)
+        f = Fake(files=[{"filename": "README.md"}])
+        self.assertTrue(f.check(action="synchronize")[0])
+        self.assertEqual(len(f.deleted), 1)        # cleanup happens even when nothing is protected
+        f = Fake()
+        f.fail_delete = True
+        ok, msg = f.check(action="synchronize")
+        self.assertFalse(ok)
+        self.assertIn("could not remove", msg)
+        f = Fake(files=[{"filename": "README.md"}])
+        f.fail_delete = True
+        self.assertFalse(f.check(action="synchronize")[0])
+        f = Fake()
+        f.check(action="labeled")
+        self.assertEqual(f.deleted, [])            # other actions never remove it
+
+    def test_old_label_is_invalid_without_cleanup(self):
+        """Security must not depend on the cleanup: a label from before the push fails even if it was never removed."""
+        self.assertFalse(Fake(events=[labeled(at=T_BEFORE)]).check(action="labeled")[0])
 
     def test_rename_out_of_protected_path_counts(self):
         files = [{"filename": "x.yml", "previous_filename": ".github/workflows/test.yml"}]
-        get = self.api(PR, [], {}, files)
-        self.assertFalse(wg.check("o/r", 5, HEAD, get)[0])
-
-    def test_approved_end_to_end(self):
-        get = self.api(PR, [review("m")],
-                       {"m": {"role_name": "maintain"}}, [{"filename": "action.yml"}])
-        self.assertTrue(wg.check("o/r", 5, HEAD, get)[0])
+        self.assertFalse(Fake(files=files, labels=[]).check()[0])
 
     def test_truncated_file_list_fails_closed(self):
-        """Fewer files listed than changed_files, or the 3000 cap, must fail (threads 4298042457/4298076538/4298129563)."""
+        """Fewer files listed than changed_files, or the 3000 cap, must fail."""
         files = [{"filename": "a.txt"}]
-        ok, msg = wg.check("o/r", 5, HEAD, self.api({**PR, "changed_files": 2}, [], {}, files))
+        f = Fake(files=files)
+        f.pr["changed_files"] = 2
+        ok, msg = f.check()
         self.assertFalse(ok)
         self.assertIn("incomplete", msg)
-        capped = [{"filename": f"f{i}"} for i in range(3000)]
-        self.assertFalse(wg.check("o/r", 5, HEAD, self.api({**PR, "changed_files": 3000}, [], {}, capped))[0])
-        self.assertFalse(wg.check("o/r", 5, HEAD, self.api({k: v for k, v in PR.items() if k != "changed_files"}, [], {}, files))[0])
-        self.assertTrue(wg.check("o/r", 5, HEAD, self.api(PR, [], {}, files))[0])
+        f = Fake(files=[{"filename": f"f{i}"} for i in range(3000)])
+        self.assertFalse(f.check()[0])
+        f = Fake(files=files)
+        del f.pr["changed_files"]
+        self.assertFalse(f.check()[0])
 
     def test_custom_role_inheriting_admin_or_maintain_is_trusted(self):
-        """Custom role names are judged by privilege booleans / legacy permission (thread 4298042477)."""
+        """Custom role names are judged by privilege booleans / legacy permission."""
         for resp in ({"role_name": "release-captain", "permission": "write", "user": {"permissions": {"maintain": True}}},
                      {"role_name": "super", "permission": "admin", "user": {"permissions": {}}},
                      {"role_name": "super", "permission": "write", "user": {"permissions": {"admin": True}}}):
-            get = self.api(PR, [review("c")], {"c": resp}, [{"filename": "action.yml"}])
-            self.assertTrue(wg.check("o/r", 5, HEAD, get)[0], resp)
+            self.assertTrue(Fake(perms={"own": resp}).check()[0], resp)
         for resp in ({"role_name": "triager", "permission": "read", "user": {"permissions": {"push": True}}},
                      {"role_name": "x"}, {"permission": "write"}, {}):
-            get = self.api(PR, [review("c")], {"c": resp}, [{"filename": "action.yml"}])
-            self.assertFalse(wg.check("o/r", 5, HEAD, get)[0], resp)
-
-    def test_codeowners_last_matching_rule_per_path(self):
-        """Only an individual owner of the path's last matching rule counts (thread 4298042472)."""
-        text = "* @alice\n/docs/ @docsguy\n/.github/workflows/ @ciguy @org/team\n"
-        wf = [{"filename": ".github/workflows/test.yml"}]
-        low = {"d": {"permission": "write"}}
-        for who, want in (("ciguy", True), ("docsguy", False), ("alice", False), ("org", False)):
-            get = self.api(PR, [review(who)], {who: low["d"]}, wf, text)
-            self.assertEqual(wg.check("o/r", 5, HEAD, get)[0], want, who)
-
-    def test_codeowners_every_path_needs_cover(self):
-        """Two protected paths with different owners: one owner is not enough, two together are."""
-        text = "action.yml @a\n.sast-check.toml @b\n"
-        files = [{"filename": "action.yml"}, {"filename": ".sast-check.toml"}]
-        pr = {**PR, "changed_files": 2}
-        w = {"permission": "write"}
-        self.assertFalse(wg.check("o/r", 5, HEAD, self.api(pr, [review("a")], {"a": w}, files, text))[0])
-        self.assertTrue(wg.check("o/r", 5, HEAD, self.api(pr, [review("a"), review("b")], {"a": w, "b": w}, files, text))[0])
-        self.assertTrue(wg.check("o/r", 5, HEAD, self.api(pr, [review("m")], {"m": {"permission": "admin"}}, files, text))[0])
+            self.assertFalse(Fake(perms={"own": resp}).check()[0], resp)
 
 
-class CodeownersMatch(unittest.TestCase):
-    def owners(self, text, path):
-        """Owners of path under the given CODEOWNERS text."""
-        return wg.owners_for(path, wg.parse_codeowners(text))
+class WorkflowFile(unittest.TestCase):
+    def load(self):
+        """Parse the guard workflow with yaml (YAML 1.1 reads `on` as True)."""
+        doc = yaml.safe_load((ROOT / ".github/workflows/workflow-guard.yml").read_text())
+        return doc, doc.get("on", doc.get(True))
 
-    def test_patterns(self):
-        t = "* @s\n/a/*.yml @x\ndocs/ @d\n**/logs @l\n/build/** @b\n"
-        self.assertEqual(self.owners(t, "README.md"), {"s"})
-        self.assertEqual(self.owners(t, "a/k.yml"), {"x"})
-        self.assertEqual(self.owners(t, "a/sub/k.yml"), {"s"})
-        self.assertEqual(self.owners(t, "z/docs/n.md"), {"d"})
-        self.assertEqual(self.owners(t, "p/logs/x"), {"l"})
-        self.assertEqual(self.owners(t, "build/o/p"), {"b"})
+    def test_triggers_permissions_concurrency(self):
+        doc, on = self.load()
+        self.assertEqual(set(on), {"pull_request_target"})
+        self.assertEqual(sorted(on["pull_request_target"]["types"]),
+                         sorted(["opened", "reopened", "synchronize", "ready_for_review", "labeled", "unlabeled"]))
+        self.assertNotIn("workflow_run", on)
+        self.assertEqual(doc["permissions"], {"contents": "read", "pull-requests": "write", "actions": "read"})
+        self.assertEqual(doc["concurrency"], {"group": "workflow-guard-${{ github.event.pull_request.number }}", "cancel-in-progress": False})
+        self.assertEqual(list(doc["jobs"]), ["guard"])
 
-    def test_no_owner_and_unparseable_fail_closed(self):
-        self.assertEqual(self.owners("* @s\n/a.yml\n", "a.yml"), set())
-        self.assertEqual(self.owners("* @s\n[ab].yml @t\n", "a.yml"), set())
-        self.assertEqual(self.owners("* @s\n!x.yml @t\n", "q"), set())
-        self.assertEqual(self.owners("", "a"), set())
+    def test_no_pr_code_and_no_expressions_in_run(self):
+        doc, _ = self.load()
+        steps = doc["jobs"]["guard"]["steps"]
+        self.assertEqual(steps[0]["uses"].split("@")[0], "actions/checkout")
+        self.assertNotIn("ref", steps[0].get("with", {}))
+        self.assertFalse(steps[0]["with"].get("persist-credentials", True))
+        for s in steps:
+            self.assertNotIn("${{", s.get("run", ""))
+        self.assertEqual(steps[1]["env"]["ALLOW_SELF_APPROVAL"], "true")
+        self.assertEqual(steps[1]["env"]["APPROVAL_LABEL"], wg.APPROVAL_LABEL)
 
+    def test_retrigger_workflow_is_gone(self):
+        self.assertFalse((ROOT / ".github/workflows/workflow-guard-retrigger.yml").exists())
+        for f in (ROOT / ".github/workflows").glob("*.y*ml"):
+            doc = yaml.safe_load(f.read_text())
+            triggers = doc.get("on", doc.get(True))
+            self.assertNotIn("workflow_run", triggers if isinstance(triggers, (dict, list)) else [triggers], f.name)
 
 if __name__ == "__main__":
     unittest.main()
