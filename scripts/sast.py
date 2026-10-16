@@ -1418,6 +1418,9 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[s
     # a gitlink is compared tree to tree: the working-tree diff skips a submodule that is not checked out
     was = {e.split("\t", 1)[1]: e.split()[2] for e in git_z(repo, ["ls-tree", "-r", "-z", mb]) if e.startswith("160000 ")}
     now = {e.split("\t", 1)[1]: e.split()[1] for e in git_z(repo, ["ls-files", "-z", "-s"]) if e.startswith("160000 ")}
+    for p in now:   # a checked-out submodule moved to another commit but not staged still counts
+        if (repo / p / ".git").exists() and (head := sh(["git", "-C", p, "rev-parse", "HEAD"], repo, ok_codes=(0, 128)).stdout.strip()):
+            now[p] = head
     out = [("submodule", p, f"submodule {md_code(p)}") for p, sha in sorted(now.items()) if was.get(p) != sha]
     for f in changed:
         # is_symlink, not exists: a link to a path missing on this machine is still unscanned content
@@ -1433,17 +1436,8 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[s
     return out
 
 
-def fetch_lfs(repo: Path, paths: list[str]) -> None:
-    """Best effort: download the LFS content of exactly these changed paths (one `git lfs pull` each, no shell)."""
-    for f in paths:
-        try:
-            sh(["git", "lfs", "pull", f"--include={f}"], repo, timeout=600)
-        except (RuntimeError, OSError):   # no git-lfs, no access, fetch failed: the caller re-checks and fails closed
-            return
-
-
-def unscanned_errors(blind: list[tuple[str, str, str]], allow_submodules: bool) -> list[ToolRun]:
-    """Integrity errors (fail closed) for changed submodules and LFS files whose content was not scanned."""
+def unscanned_errors(blind: list[tuple[str, str, str]], allow_submodules: bool, allow_lfs: bool) -> list[ToolRun]:
+    """Integrity errors (fail closed) for changed submodules and LFS pointer files, unless the settings accept them."""
     errs = []
     subs = [p for k, p, _ in blind if k == "submodule"]
     if subs and not allow_submodules:
@@ -1451,10 +1445,10 @@ def unscanned_errors(blind: list[tuple[str, str, str]], allow_submodules: bool) 
                             + ", ".join(subs[:10]) + ". Review by hand, then set `policy.allow_unscanned_submodules = true` "
                             "in .sast-check.toml if submodule updates are routine here."))
     lfs = [p for k, p, _ in blind if k == "lfs"]
-    if lfs:
-        errs.append(ToolRun("lfs", "error", "changed Git LFS file(s) are only pointer files and could not be fetched (git-lfs missing, "
-                            "no access or fetch failed), so they were not scanned: " + ", ".join(lfs[:10])
-                            + ". Check out with `lfs: true` or make `git lfs pull` work in this job."))
+    if lfs and not allow_lfs:
+        errs.append(ToolRun("lfs", "error", "changed Git LFS file(s) are only pointer files in this checkout, so their content was not scanned: "
+                            + ", ".join(lfs[:10]) + ". Review by hand, then set `policy.allow_unscanned_lfs = true` "
+                            "in .sast-check.toml if LFS changes are routine here."))
     return errs
 
 
@@ -1523,10 +1517,7 @@ def main(argv=None) -> int:
             enabled = []                       # nothing can be scoped; report the error (fail closed)
         ctx.changed_files = sorted(ctx.changed_lines)
         if not any(r.name == "git-diff" for r in ctx.runs) and (blind := unscanned_changes(repo, a.base, ctx.changed_files)):
-            if lfs := [p for k, p, _ in blind if k == "lfs"]:
-                fetch_lfs(repo, lfs)
-                blind = unscanned_changes(repo, a.base, ctx.changed_files)   # still a pointer: fail closed below
-            ctx.runs += unscanned_errors(blind, cfg["policy"]["allow_unscanned_submodules"])
+            ctx.runs += unscanned_errors(blind, cfg["policy"]["allow_unscanned_submodules"], cfg["policy"]["allow_unscanned_lfs"])
             if blind:
                 ctx.notes.append("Not scanned, review by hand: " + ", ".join(b[2] for b in blind) + ".")
         # excluded paths are not scanned even when changed: say so, so code placed in vendor/ is seen

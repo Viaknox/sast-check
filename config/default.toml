@@ -17,6 +17,8 @@ fail_on_tool_error = true
 # A PR that moves a submodule pointer fails the check (its code is not checked out, so it is not scanned).
 # Set true only if submodule updates are routine and reviewed by hand.
 allow_unscanned_submodules = false
+# Same for a changed Git LFS pointer file (the content is on the LFS server and is not scanned).
+allow_unscanned_lfs = false
 
 [tools]
 opengrep = true     # custom MIT rules (JS/TS, Python, GitHub Actions, Docker, K8s, Terraform)

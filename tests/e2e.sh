@@ -807,33 +807,33 @@ gate2 --mode diff --base HEAD~1 --only ruff
 check "non-boolean allow_unscanned_submodules is a settings error" "$code" "2"
 git checkout -q main
 
-# an LFS pointer that cannot be fetched (no LFS remote here) fails closed and names the file
+# a changed Git LFS pointer file fails closed and is named, whatever fail_on_tool_error says
 git checkout -q -b r15lfs main
+printf '[policy]\nfail_on_tool_error = false\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm lax
 printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 14\n' 0 > src/big.py
 git add src/big.py && git commit -qm lfsptr
 gate2 --mode diff --base HEAD~1 --only opengrep
-check "unfetchable LFS pointer fails the check"          "$code" "2"
+check "changed LFS pointer fails the check"              "$code" "2"
 check "LFS error names the file"                         "$(echo "$err" | grep -c 'lfs:.*src/big.py')" "1"
+printf '[policy]\nallow_unscanned_lfs = true\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm lfsoptout
+printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 15\n' 0 > src/big.py && git commit -qam lfsptr2
+gate --mode diff --base HEAD~1 --only opengrep
+check "allow_unscanned_lfs=true: check passes"           "$code" "0"
+check "LFS opt-out still names the file in the report"   "$(grep -c 'Git LFS file `src/big.py`' sast-results/report.md)" "1"
+printf '[policy]\nallow_unscanned_lfs = 1\n' > .sast-check.toml && git commit -qam lfsbad
+gate2 --mode diff --base HEAD~1 --only opengrep
+check "non-boolean allow_unscanned_lfs is a settings error" "$code" "2"
 git checkout -q main
 
-# #4 done-when: an LFS-backed .py containing eval(input()) is fetched and blocks
-if command -v git-lfs >/dev/null; then
-  L="$(mktemp -d)"; cd "$L" && git init -q --bare remote.git && git init -q -b main w && cd w
-  git config user.email t@example.com && git config user.name t && git lfs install --local >/dev/null
-  git lfs track '*.py' >/dev/null && echo 'x = 1' > a.py && git add -A && git commit -qm base
-  git remote add origin ../remote.git && git checkout -q -b pr
-  echo 'eval(input())' > b.py && git add b.py && git commit -qm pr
-  git push -q origin main pr 2>/dev/null || true
-  cd .. && git clone -q remote.git c 2>/dev/null; cd c
-  git config user.email t@example.com && git config user.name t && git fetch -q origin
-  GIT_LFS_SKIP_SMUDGE=1 git checkout -q pr           # like a CI checkout with lfs: false
-  cd "$T"
-  gate --repo "$L/c" --out "$T/sast-results" --mode diff --base origin/main --only ruff
-  check "LFS-backed eval(input()) is fetched and blocks"  "$(q "sum(f['blocking'] for f in d['findings'] if f['path']=='b.py')")" "1"
-  rm -rf "$L"                                         # outside $T, so later full-scope scans never see it
-else
-  echo "skip - git-lfs not installed (hydration case not run)"
-fi
+# a submodule checked out at a new commit but not staged is a changed submodule too
+git checkout -q -b r15u main
+mkdir usub && git -C usub init -q -b main && git -C usub -c user.email=t@e -c user.name=t commit -q --allow-empty -m c1
+git add usub 2>/dev/null && git commit -qm addusub
+git -C usub -c user.email=t@e -c user.name=t commit -q --allow-empty -m c2   # moved, not staged
+gate2 --mode diff --base HEAD
+check "unstaged submodule move fails the check"          "$code" "2"
+check "unstaged submodule error names it"                "$(echo "$err" | grep -c 'submodules:.*usub')" "1"
+git checkout -q main
 
 # r18: a '#' or '//' inside a JS regex or template literal is not a comment, so it cannot suppress
 git checkout -q -b r18 main
