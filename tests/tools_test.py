@@ -473,6 +473,34 @@ class UnscannedChecks(unittest.TestCase):
         good = b"oid sha256:" + b"a" * 64 + b"\nsize 12"
         self.assertTrue(ok(v + good))                                        # no final newline
         self.assertTrue(ok((v + good + b"\n").replace(b"\n", b"\r\n")))     # CRLF
+        self.assertTrue(ok(b"  \n" + v + good + b"\n\n"))                     # surrounding whitespace
+        self.assertTrue(ok(b"version https://hawser.github.com/spec/v1\n" + good))   # legacy URL
+        self.assertTrue(ok(v + b"oid\rx\n" + good))   # a stray CR line is skipped, never a crash
+        self.assertTrue(ok(v + b"\n" + good))                                 # blank separator line
+        self.assertTrue(ok(v + b"oid sha256:" + b"a" * 64 + b"\nsize +12\n"))  # signed size
+
+    def test_every_form_git_lfs_accepts_is_a_pointer(self):
+        """Whatever `git lfs pointer --check` calls a valid pointer, is_lfs_pointer must too (fail closed)."""
+        import shutil, subprocess  # noqa: E401, PLC0415
+        if not shutil.which("git-lfs"):
+            self.skipTest("git-lfs not installed")
+        ok = self._sast().is_lfs_pointer
+        oid, sz = b"oid sha256:" + b"4d7a" * 16, b"size 12"
+        variants = [b"\n".join([b"version https://git-lfs.github.com/spec/v1", oid, sz]) + end
+                    for end in (b"", b"\n", b"\n\n", b"\r\n")]
+        variants += [b"version https://git-lfs.github.com/spec/v1\n\n" + oid + b"\n" + sz + b"\n",
+                     b"  version https://git-lfs.github.com/spec/v1\n" + oid + b"\n" + sz + b"\n",
+                     b"version https://git-lfs.github.com/spec/v1\n" + oid + b"\nsize +12\n",
+                     b"version https://hawser.github.com/spec/v1\n" + oid + b"\n" + sz + b"\n",
+                     b"version https://git-lfs.github.com/spec/v1\r\n" + oid + b"\r\n" + sz + b"\r\n"]
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "ptr"
+            for body in variants:
+                f.write_bytes(body)
+                lfs_ok = subprocess.run(["git", "lfs", "pointer", "--check", f"--file={f}"], capture_output=True,
+                                        check=False, cwd=td).returncode == 0
+                if lfs_ok:
+                    self.assertTrue(ok(body), body)
 
     def test_a_missing_blob_is_a_lookup_failure(self):
         """`git cat-file --batch-check` prints "<sha> missing" and exits 0; that must raise, not read as "not LFS"."""

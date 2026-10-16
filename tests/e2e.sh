@@ -837,6 +837,9 @@ git -C usub -c user.email=t@e -c user.name=t reset -q --hard HEAD~1   # back at 
 echo 'x = 1' > usub/edit.py   # same commit, but a new file inside the submodule
 gate2 --mode diff --base HEAD
 check "dirty submodule (same commit) fails the check"   "$code" "2"
+git -C usub config status.showUntrackedFiles no   # a local setting must not hide the new file
+gate2 --mode diff --base HEAD
+check "dirty submodule fails despite showUntrackedFiles=no" "$code" "2"
 git checkout -q main
 
 # a committed gitlink move is caught even when the submodule checkout is still at the base commit

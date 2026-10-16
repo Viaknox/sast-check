@@ -1407,18 +1407,24 @@ def proposed_settings_error(repo: Path, name: str) -> str:
     return ""
 
 
-LFS_POINTER_RE = re.compile(rb"version https://git-lfs\.github\.com/spec/v1(?:\n[a-z0-9.-]+ [^\n]*)*\n?")
+# version URLs git-lfs still accepts when decoding a pointer (current spec plus the legacy ones)
+LFS_VERSIONS = (b"https://git-lfs.github.com/spec/v1", b"https://hawser.github.com/spec/v1", b"http://git-media.io/v/2")
 
 
 def is_lfs_pointer(body: bytes) -> bool:
-    """True if `body` is a complete Git LFS pointer (spec v1: version line, then key/value lines including
-    `oid sha256:<64 hex>` and `size <n>`), not merely a file that starts with the version URL. CRLF line
-    endings and a missing final newline are accepted, as `git lfs pointer --check` does."""
-    body = body.replace(b"\r\n", b"\n")
-    if len(body) >= 1024 or not LFS_POINTER_RE.fullmatch(body):
+    """True if `body` would be read as a Git LFS pointer: a known version line, then key/value lines with
+    `oid sha256:<64 hex>` and `size <n>`. Parsed as loosely as git-lfs does (surrounding whitespace, CRLF,
+    any final newline, legacy version URLs), because a miss here lets LFS content through unscanned; a file
+    that only mentions the URL, without oid and size, is not a pointer."""
+    if len(body) >= 1024:
         return False
-    keys = dict(line.split(b" ", 1) for line in body.splitlines()[1:])
-    return bool(re.fullmatch(rb"sha256:[0-9a-f]{64}", keys.get(b"oid", b""))) and keys.get(b"size", b"").isdigit()
+    lines = [ln.strip() for ln in body.replace(b"\r\n", b"\n").split(b"\n") if ln.strip()]   # blank lines are skipped
+    if not lines or not lines[0].startswith(b"version ") or lines[0][8:].strip() not in LFS_VERSIONS:
+        return False
+    keys = dict(ln.split(b" ", 1) for ln in lines[1:] if b" " in ln)
+    # size is read as a signed integer, as git-lfs does ("+12" is valid)
+    return bool(re.fullmatch(rb"sha256:[0-9a-f]{64}", keys.get(b"oid", b"").strip())) \
+        and bool(re.fullmatch(rb"[+-]?[0-9]+", keys.get(b"size", b"").strip()))
 
 
 def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[str, str, str]]:
@@ -1441,7 +1447,8 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[s
             if head != was.get(p):
                 moved.add(p)
             # same commit but edited, staged or new files inside it: still code the root scanners never see
-            elif sh(["git", "-C", p, "status", "--porcelain"], repo).stdout.strip():
+            # flags pinned: status.showUntrackedFiles=no or a submodule ignore setting must not hide changes
+            elif sh(["git", "-C", p, "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"], repo).stdout.strip():
                 moved.add(p)
     out = [("submodule", p, f"submodule {md_code(p)}") for p in sorted(moved)]
     lfs = lfs_pointer_blobs(repo, [index[f][1] for f in changed if f in index and index[f][0] != "160000"])
