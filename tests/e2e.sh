@@ -675,6 +675,26 @@ gate --mode full --base HEAD~1 --only gitleaks
 check "full: a link to an excluded secret file blocks"    "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/key14.py')")" "1"
 git checkout -q main
 
+# full scope: an excluded tree is never opened by Gitleaks (strace records every openat of the real run;
+# git's own .gitattributes probes during the history scan are not Gitleaks reading the tree)
+if command -v strace >/dev/null && strace -o /dev/null true 2>/dev/null; then
+  git checkout -q -b gl-excl main
+  mkdir -p "big dir/sub" src/vendor2 && printf '[paths]\nexclude = ["big dir/**", "src/vendor2*", "sast-results/**"]\n' > .sast-check.toml
+  echo 'K16 = "AKIAIOSFODNN7ABCDEFG"' > "big dir/sub/k.py"; echo 'K16 = "AKIAIOSFODNN7ABCDEFG"' > src/vendor2/k.py
+  echo 'K16 = "AKIAIOSFODNN7ABCDEFG"' > src/live16.py
+  git add .sast-check.toml "big dir" src/vendor2 src/live16.py && git commit -qm r16
+  mkdir -p "$T/shim" && printf '#!/bin/sh\nexec strace -A -f -e trace=openat -o "$T_STRACE" "%s" "$@"\n' "$(command -v gitleaks)" > "$T/shim/gitleaks" && chmod +x "$T/shim/gitleaks"
+  rm -f "$T/strace.log"; T_STRACE="$T/strace.log" PATH="$T/shim:$PATH" gate --mode full --only gitleaks
+  check "full: gitleaks opens a non-excluded file (strace works)" "$(grep -c 'live16.py' "$T/strace.log")" "1"
+  check "full: gitleaks never opens a file in an excluded dir"    "$(grep -E 'big dir/|vendor2/' "$T/strace.log" | grep -vc '\.gitattributes')" "0"
+  check "full: secret in a non-excluded path still blocks"        "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/live16.py')")" "1"
+  check "full: nothing is reported from excluded dirs"            "$(q "sum(1 for f in d['findings'] if f['path'].startswith(('big dir','src/vendor2')))")" "0"
+  rm -f "$T/strace.log"; T_STRACE="$T/strace.log" PATH="$T/shim:$PATH" gate --mode full --base HEAD --only gitleaks   # PR scan: settings come from the base
+  check "full + base: an excluded dir is never opened"           "$(grep -E 'big dir/|vendor2/' "$T/strace.log" | grep -vc '\.gitattributes')" "0"
+  check "full + base: secret in a non-excluded path still blocks" "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/live16.py')")" "1"
+  git checkout -q main
+fi
+
 # r15: proposed settings are checked by the parser that will read them (once merged, a broken one fails every PR)
 git checkout -q -b r15s main
 printf '[tools]\nopengrepp = true\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm badkey

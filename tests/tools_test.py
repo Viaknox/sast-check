@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Tests for the rule-quality tools (tools/rule_mutation.py, tools/fp_sweep.py). Run: python3 tests/tools_test.py"""
+import importlib.util
 import json
 import os
+import random
+import re
 import stat
 import sys
 import tempfile
@@ -448,6 +451,59 @@ class OpengrepOnly(unittest.TestCase):
             self.assertEqual([(x["name"], x["status"]) for x in runs], [("opengrep", "error")])
             self.assertIn("runs Opengrep only", runs[0]["detail"])
             self.assertFalse(marker.exists(), "the gate ran another engine")
+
+
+def _load_sast():
+    """Import scripts/sast.py as a module."""
+    spec = importlib.util.spec_from_file_location("sast_mod", ROOT / "scripts" / "sast.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class GlobRegex(unittest.TestCase):
+    """The regexes handed to Gitleaks must agree with glob_any on every path, or an allowlist could hide
+    a secret in a path the gate scans (or scan one it must not)."""
+    GLOBS = ["node_modules/**", "vendor/**", "big dir/**", "src/vendor2*", "**/gen/**", "**/*", "*", "a?b*",
+             "x/[ab]*", "x/[!ab]*", "x/[]a]*", "x/[^a]*", "x/[[:alpha:]]*", "x/[a-c]?*", "p[*", "q.+(1)*", "x/[a\\]*",
+             "**/vendor/**", "docs/**/*", "a**", "a/**/b/**", "$h{x}^*", "é/**"]
+    PATHS = ["vendor", "vendor/a.py", "a/vendor/b.py", "vendorx", "node_modules/x/y", "src/node_modules/x",
+             "big dir/sub/k.py", "big dir", "src/vendor2", "src/vendor2/k.py", "src/vendor22.py", "gen/x", "a/gen/x",
+             "agen/x", "x/a", "x/b1", "x/c", "x/]", "x/a/b", "x/^", "x/:", "x/-", "x/\\", "x/", "a1b", "axb/y", "ab", "pq",
+             "p[x", "p[", "q.+(1)", "q.+(1)/z", "qa+(1)", "docs/a", "docs/a/b", "docs/", "a/b", "a/x/b/y", "a/b/c",
+             "$h{x}^/y", "é/x", "x/é", "", "/", "a//b", "..", ".git/x"]
+
+    def setUp(self):
+        self.sast = _load_sast()
+
+    def agree(self, g, p):
+        rx = self.sast.glob_regex(g)
+        self.assertEqual(bool(re.search(rx, p)), self.sast.glob_any(p, [g]), f"glob {g!r} path {p!r} regex {rx!r}")
+
+    def test_table(self):
+        for g in self.GLOBS:
+            for p in self.PATHS:
+                self.agree(g, p)
+
+    def test_random(self):
+        rnd = random.Random(7)
+        alpha = ["a", "b", "/", ".", "*", "**/", "?", "[ab]", "[!a]", "x", " "]
+        for _ in range(3000):
+            g = "".join(rnd.choice(alpha) for _ in range(rnd.randint(1, 7)))
+            for _ in range(8):
+                self.agree(g, "".join(rnd.choice(["a", "b", "/", ".", "x", " "]) for _ in range(rnd.randint(0, 8))))
+
+    def test_only_tree_globs_are_pushed_down(self):
+        got = self.sast.gitleaks_exclude_regexes(["vendor/**", "**/*.min.js", "src/gen", "docs*"])
+        self.assertEqual(got, [self.sast.glob_regex("vendor/**"), self.sast.glob_regex("docs*")])
+
+    def test_trailing_star_covers_every_descendant(self):
+        """Gitleaks also tests directories: a match on a dir must imply a match on everything under it."""
+        for g in [g for g in self.GLOBS if g.endswith("*")]:
+            for p in self.PATHS:
+                if self.sast.glob_any(p, [g]):
+                    self.assertTrue(self.sast.glob_any(p + "/x/y", [g]), (g, p))
 
 
 if __name__ == "__main__":
