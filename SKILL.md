@@ -15,7 +15,7 @@ python3 "<this skill's folder>/scripts/sast.py" --mode diff --base origin/main
 - Use the PR's real base branch for `--base` (`git merge-base` is computed for you).
 - Output: `sast-results/report.md` (human summary) and `sast-results/findings.json` (machine-readable).
 - Exit code: `0` pass, `1` blocking findings, `2` a scanner crashed (result incomplete — treat as not passed).
-- Report lines marked `⏭ skipped` mean that scanner is not installed. Tell the user which one and the install line from README → "Run locally / with an AI agent". Do not claim a pass while a scanner is skipped without saying so.
+- A missing Opengrep fails the check (it is required); install it first. Other report lines marked `⏭ skipped` mean that scanner is not installed. Tell the user which one and the install line from README → "Run locally / with an AI agent". Do not claim a pass while a scanner is skipped without saying so.
 - A `✗` line (for example `zizmor-online error`) means a scanner ran but failed or ran only partly; the check fails. Report the error detail and fix its cause; do not suggest installing anything.
 
 ## 2. Fix loop (only blocking findings are mandatory)

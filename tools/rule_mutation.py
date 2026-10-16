@@ -193,8 +193,9 @@ def summary(results: list[dict], engine: str) -> dict:
 
 
 def main() -> int:
+    """Mutate the selected rules, score how well their fixtures catch each mutant, and check the baseline."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--engine", default=shutil.which("opengrep") or shutil.which("semgrep"))
+    ap.add_argument("--engine", default=shutil.which("opengrep"))
     ap.add_argument("--rules", nargs="*", help="rule files under rules/custom (default: all)")
     ap.add_argument("--changed-since", help="only rules whose yaml or fixture changed since this git ref")
     ap.add_argument("--changed-files", help="only rules whose yaml or fixture is listed in this file (one path per line)")

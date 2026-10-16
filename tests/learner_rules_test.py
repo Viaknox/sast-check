@@ -2,7 +2,7 @@
 """Tests for tools/learner_rules.py (learner P3). Run: python3 tests/learner_rules_test.py
 
 The model is replaced by canned drafts (tests/fixtures/learner/drafts.json), so the tests are offline and
-deterministic. The engine tests need opengrep and semgrep: $OPENGREP / $SEMGREP or on PATH."""
+deterministic. The engine tests need opengrep: $OPENGREP or on PATH."""
 import io
 import json
 import os
@@ -26,8 +26,7 @@ FX = ROOT / "tests" / "fixtures" / "learner"
 PATTERNS = lr.load_patterns(FX / "patterns.json")
 DRAFTS = json.loads((FX / "drafts.json").read_text())
 OPENGREP = os.environ.get("OPENGREP") or shutil.which("opengrep")
-SEMGREP = os.environ.get("SEMGREP") or shutil.which("semgrep")
-ENGINES = [OPENGREP, SEMGREP]
+ENGINES = [OPENGREP]
 YAML_ID = "sast.python.lp-py-yaml-unsafe-load"
 
 
@@ -57,8 +56,9 @@ def repo_copy(td: str) -> Path:
 
 
 def need_engines():
-    if not (OPENGREP and Path(OPENGREP).name == "opengrep" and SEMGREP):
-        raise RuntimeError("these tests need opengrep and semgrep (set $OPENGREP / $SEMGREP or put them on PATH)")
+    """Stop the engine tests with a clear message when opengrep is not available."""
+    if not (OPENGREP and Path(OPENGREP).name == "opengrep"):
+        raise RuntimeError("these tests need opengrep (set $OPENGREP or put it on PATH)")
 
 
 class Patterns(unittest.TestCase):
@@ -184,7 +184,8 @@ class Secrets(unittest.TestCase):
             self.assertNotIn(self.KEY, text)
 
     def test_a_report_path_inside_dist_or_rules_is_refused_before_anything_runs(self):
-        base = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep", "--semgrep", "/x/semgrep"]
+        """A --report path inside dist/ or rules/ exits 2 before any draft runs."""
+        base = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep"]
         for report in ("dist/rules.yaml", str(ROOT / "dist" / "rule-ids.lock"), "rules/custom/python/x.yaml"):
             with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), \
                     mock.patch.object(sys, "argv", base + ["--report", str(ROOT / report)]), \
@@ -194,8 +195,9 @@ class Secrets(unittest.TestCase):
             self.assertIn("--report must be outside dist/ and rules/", err.getvalue())
 
     def test_no_key_stops_the_run_before_anything_is_drafted(self):
+        """Without OPENROUTER_API_KEY the tool exits 2 before drafting anything."""
         env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
-        argv = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep", "--semgrep", "/x/semgrep"]
+        argv = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep"]
         with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(sys, "argv", argv), \
                 mock.patch.object(lr, "run", side_effect=AssertionError("drafted without a key")), redirect_stderr(io.StringIO()):
             self.assertEqual(lr.main(), 2)
