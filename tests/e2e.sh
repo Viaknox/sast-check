@@ -6,6 +6,8 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 for t in ${E2E_REQUIRE:-}; do   # optional scanners whose checks must run (CI sets this)
   command -v "$t" >/dev/null || { echo "FAIL - $t required by E2E_REQUIRE but not installed"; exit 1; }
 done
+case " ${E2E_REQUIRE:-} " in *" strace "*)   # required: strace that cannot trace its own child (ptrace blocked) fails
+  strace -o /dev/null true 2>/dev/null || { echo "FAIL - strace required by E2E_REQUIRE but cannot trace"; exit 1; };; esac
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 cd "$T"
 git init -q -b main && git config user.email t@example.com && git config user.name t
