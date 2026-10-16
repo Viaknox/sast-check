@@ -147,8 +147,32 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' > "$RUNNER_TEMP/changed.txt"
+          # same helper as the speed check above (duplicated: steps cannot share shell functions); this step's own
+          # timeout-minutes bounds the retries, so there is no separate budget check
+          gh_get() {   # gh_get OUT ARGS...
+            out="$1"; shift
+            for i in 1 2 3; do
+              # a stalled connection counts as a failed try (gh api has no timeout of its own)
+              if timeout 60 gh api "$@" > "$out" 2> "$RUNNER_TEMP/gh.err"; then return 0; fi
+              [ "$i" = 3 ] || sleep $((i * 10))   # no wait after the last try
+            done
+            echo "GitHub API call failed or timed out 3 times: gh api $*" >&2; cat "$RUNNER_TEMP/gh.err" >&2; exit 1
+          }
+          gh_get "$RUNNER_TEMP/changed.txt" --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename'
+          # the files API lists at most 3,000 files: a shorter list than the PR's own count would skip rules silently
+          got=$(grep -c . "$RUNNER_TEMP/changed.txt" || true)
+          if [ "$got" -lt "$CHANGED_FILES" ]; then
+            echo "the PR changes $CHANGED_FILES files but the files API listed $got: cannot tell which rules changed" >&2; exit 1
+          fi
+          # the files API always describes the PR's current head: if a push landed since this run started, the list
+          # may not match the checked-out commit, so stop (the run for the newer push checks it)
+          gh_get "$RUNNER_TEMP/head.txt" "repos/$REPO/pulls/$PR" --jq .head.sha
+          if [ "$(cat "$RUNNER_TEMP/head.txt")" != "$HEAD_SHA" ]; then
+            echo "the PR's head moved past $HEAD_SHA during this run: re-run on the new head" >&2; exit 1
+          fi
           python tools/rule_mutation.py --engine "$RUNNER_TEMP/opengrep/opengrep" \
             --changed-files "$RUNNER_TEMP/changed.txt" --check tests/mutation-baseline.json
       - name: End-to-end
