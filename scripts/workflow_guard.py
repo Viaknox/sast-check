@@ -130,11 +130,12 @@ def latest_label_event(events: list, label: str):
     return best
 
 
-def first_push_time(resp, head: str, pr: int):
+def first_push_time(resp, head: str, pr: int, ref: str, head_repo: str):
     """Earliest created_at of this guard's runs for head (when GitHub first saw the head), or None if there is none.
 
-    resp is the actions/runs response: one object, or a list of page objects. Runs of other workflows, other events or
-    other PRs are ignored; a matching run with a bad timestamp raises (fail closed).
+    resp is the actions/runs response: one object, or a list of page objects. Runs of other workflows, events or PRs, and
+    runs for the same commit on another branch or repository (head_branch / head_repository must match the PR's head ref
+    and repo; a run without head_repository is skipped), are ignored; a matching run with a bad timestamp raises (fail closed).
     """
     pages = [resp] if isinstance(resp, dict) else resp
     if not isinstance(pages, list) or not all(isinstance(pg, dict) and isinstance(pg.get("workflow_runs"), list) for pg in pages):
@@ -146,6 +147,10 @@ def first_push_time(resp, head: str, pr: int):
                 continue
             if str(run.get("path") or "").split("@")[0] != WORKFLOW_FILE:
                 continue
+            repo_of_run = run.get("head_repository")
+            if (run.get("head_branch") != ref or not isinstance(repo_of_run, dict)
+                    or not same_label(repo_of_run.get("full_name"), head_repo)):
+                continue   # the same commit pushed earlier elsewhere does not date this PR's push
             prs = run.get("pull_requests")
             if isinstance(prs, list) and prs and not any(isinstance(p, dict) and p.get("number") == pr for p in prs):
                 continue   # the same commit pushed for a different PR does not date this PR's push
@@ -205,7 +210,11 @@ def check(repo: str, pr: int, event_head: str, get=gh_get, delete=gh_delete, act
             author = info["user"]["login"]
             if not isinstance(author, str) or author.casefold() == login.casefold():
                 return False, f"`{clean(login)}` is the PR author and self-approval is disabled; another admin must add the label"
-        pushed = first_push_time(get(f"repos/{repo}/actions/runs?head_sha={head}&event=pull_request_target&per_page=100"), head, pr)
+        ref, head_repo = info["head"]["ref"], info["head"]["repo"]["full_name"]   # a deleted fork has repo null: fails closed
+        if not isinstance(ref, str) or not isinstance(head_repo, str):
+            raise TypeError("PR head ref or repository is malformed")
+        pushed = first_push_time(get(f"repos/{repo}/actions/runs?head_sha={head}&event=pull_request_target&per_page=100"),
+                                 head, pr, ref, head_repo)
         if pushed is None:
             return False, f"no workflow-guard run found for {head[:7]}, so its push time is unknown (failing closed); " + need
         if not parse_ts(ev.get("created_at")) > pushed:

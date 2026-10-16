@@ -27,6 +27,7 @@ Full list: [docs/coverage.md](docs/coverage.md).
    - **Self-approval:** GitHub forbids approving your own PR, so a one-person repo could never use review approval. `ALLOW_SELF_APPROVAL: "true"` in the guard workflow lets the PR author add the label. With a second admin, set it to `"false"` and the label must come from someone else. The setting lives in the base workflow file, so a PR cannot change it.
    - **Fails closed:** a stale event, an API error, an unparseable timestamp, no guard run found for the head, or a file list cut off at 3000 files all fail the check.
    - **Known limit:** a PR's own workflow can still post a status check named `workflow-guard`; only a check from a trusted GitHub App closes that (planned, step 2).
+   - **Known limit (re-pushed commit):** re-pushing an older commit that was already pushed to the same branch before the label was added can be dated by its earlier run. The `synchronize` run removes the label, so only a cancelled or failed cleanup race leaves a window. The GitHub App (step 2) closes it fully.
 
 Each PR gets one sticky comment and a job summary. Fork PRs get the summary only (no write token).
 
@@ -85,6 +86,7 @@ findings, and re-runs until it passes ([SKILL.md](SKILL.md)). It never adds igno
 
 ## Known limits (v1)
 
+- **Workflow guard, re-pushed commit:** re-pushing an older commit that was already pushed to the same branch before the label was added can be dated by its earlier run. The `synchronize` run removes the label, so only a cancelled or failed cleanup race leaves a window. The GitHub App (step 2) closes it fully.
 - **Runners:** Linux x64 only (the action stops with a clear error elsewhere).
 - **Languages:** JS/TS, Python, HTML (inline scripts and script sources), GitHub Actions, Dockerfiles, Kubernetes YAML, Terraform. Anything else is not scanned by custom rules.
 - **Secrets** (gitleaks) are always critical and block when they appear in the PR's commits, staged files, or untracked files that are not git-ignored (a git-ignored file such as `.env` cannot be committed, so local runs leave it alone).

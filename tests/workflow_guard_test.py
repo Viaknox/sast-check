@@ -23,16 +23,18 @@ def labeled(actor="own", at=T_AFTER, eid=10, kind="User", name=LABEL, event="lab
             "actor": None if actor is None else {"login": actor, "type": kind}}
 
 
-def run(at=T_PUSH, sha=HEAD, path=".github/workflows/workflow-guard.yml@refs/heads/main", prs=(), event="pull_request_target"):
+def run(at=T_PUSH, sha=HEAD, path=".github/workflows/workflow-guard.yml@refs/heads/main", prs=(), event="pull_request_target",
+        branch="feat", repo="o/r"):
     """Build a workflow run shaped like the GitHub API's."""
-    return {"head_sha": sha, "created_at": at, "path": path, "event": event, "pull_requests": [{"number": n} for n in prs]}
+    return {"head_sha": sha, "created_at": at, "path": path, "event": event, "head_branch": branch,
+            "head_repository": None if repo is None else {"full_name": repo}, "pull_requests": [{"number": n} for n in prs]}
 
 
 class Fake:
     """Fake GitHub API over mutable canned state; records label deletions."""
 
     def __init__(self, files=WF, labels=(LABEL,), events=None, runs=None, perms=None, author="own", **pr):
-        self.pr = {"head": {"sha": HEAD}, "changed_files": len(files), "user": {"login": author}, **pr}
+        self.pr = {"head": {"sha": HEAD, "ref": "feat", "repo": {"full_name": "o/r"}}, "changed_files": len(files), "user": {"login": author}, **pr}
         self.labels = list(labels)
         self.files = files
         self.events = [labeled()] if events is None else events
@@ -125,7 +127,7 @@ class Verdict(unittest.TestCase):
 
     def test_no_workflow_run_for_head_fails(self):
         for runs in ([], [run(sha=OLD)], [run(path=".github/workflows/other.yml@refs/heads/main")], [run(event="pull_request")],
-                     [run(prs=[99])]):
+                     [run(prs=[99]), run(branch="other"), run(repo="evil/fork"), run(repo=None)]):
             ok, msg = Fake(runs=runs).check()
             self.assertFalse(ok, runs)
             self.assertIn("no workflow-guard run found", msg)
@@ -133,7 +135,17 @@ class Verdict(unittest.TestCase):
     def test_earliest_run_dates_the_push(self):
         runs = [run(at=T_AFTER), run(at=T_PUSH, prs=[5])]   # later labeled/unlabeled runs do not move the push time
         self.assertTrue(Fake(runs=runs).check()[0])
-        self.assertTrue(wg.first_push_time([{"workflow_runs": [run(at=T_AFTER)]}, {"workflow_runs": [run(at=T_PUSH)]}], HEAD, 5) is not None)
+        self.assertTrue(wg.first_push_time([{"workflow_runs": [run(at=T_AFTER)]}, {"workflow_runs": [run(at=T_PUSH)]}], HEAD, 5, "feat", "o/r") is not None)
+
+    def test_earlier_run_on_other_branch_or_repo_is_ignored(self):
+        """A run for the same sha on another branch / repo / without head_repository must not date this PR's push."""
+        late = [run(at=T_AFTER)]
+        for early in (run(at=T_BEFORE, branch="other"), run(at=T_BEFORE, repo="evil/fork"), run(at=T_BEFORE, repo=None)):
+            self.assertFalse(Fake(events=[labeled(at=T_PUSH)], runs=[early] + [run(at=T_AFTER)]).check()[0], early)
+            self.assertTrue(Fake(events=[labeled(at=T_AFTER, eid=1)], runs=[early, run(at=T_PUSH)] + late).check()[0], early)
+        f = Fake()
+        f.pr["head"]["repo"] = None   # deleted fork
+        self.assertFalse(f.check()[0])
 
     def test_api_error_fails(self):
         f = Fake()
