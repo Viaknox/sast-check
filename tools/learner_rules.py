@@ -2,7 +2,7 @@
 """Learner P3: turn recurring review findings (patterns.json from the quality-gate learner) into custom rules.
 
 For each pattern with >= 3 hits, a cheap model on OpenRouter drafts an Opengrep rule and a synthetic
-fixture. The draft is accepted only if, with every engine CI uses:
+fixture. The draft is accepted only if, with Opengrep (the only engine):
   - it matches every "before" example, including the held-out ones the model never saw (every third example),
   - it matches none of the "after" examples,
   - it is silent on this repo's own code of that language (rules/custom fixtures, dist/ and tests/fixtures/ excluded),
