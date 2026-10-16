@@ -450,6 +450,108 @@ class OpengrepOnly(unittest.TestCase):
             self.assertFalse(marker.exists(), "the gate ran another engine")
 
 
+class UnscannedChecks(unittest.TestCase):
+    """Submodule/LFS detection: only a complete LFS pointer counts, and a lookup failure fails closed."""
+
+    @staticmethod
+    def _sast():
+        """Import scripts/sast.py as a module."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import sast  # noqa: PLC0415
+        return sast
+
+    def test_loose_fallback_is_a_superset(self):
+        """Without git-lfs, any body with a known version line, a sha256 oid and a signed size counts (fail closed);
+        prose that only mentions the URL does not."""
+        ok = self._sast().lfs_pointer_loose
+        v = b"version https://git-lfs.github.com/spec/v1\n"
+        good = b"oid sha256:" + b"a" * 64 + b"\nsize 12"
+        self.assertTrue(ok(v + good + b"\n"))
+        self.assertFalse(ok(v))                                              # no oid/size
+        self.assertFalse(ok(v + b"see the docs for the pointer format\n"))  # prose after the URL
+        self.assertFalse(ok(v + b"oid sha256:abc\nsize 12\n"))              # short oid
+        self.assertFalse(ok(v + b"oid sha256:" + b"a" * 64 + b"\nsize x\n"))
+        self.assertTrue(ok(v + good))                                        # no final newline
+        self.assertTrue(ok((v + good + b"\n").replace(b"\n", b"\r\n")))     # CRLF
+        self.assertTrue(ok(b"  \n" + v + good + b"\n\n"))                     # surrounding whitespace
+        self.assertTrue(ok(b"version https://hawser.github.com/spec/v1\n" + good))   # legacy URL
+        self.assertTrue(ok(v + b"oid\rx\n" + good))   # a stray CR line is skipped, never a crash
+        self.assertTrue(ok(v + b"\n" + good))                                 # blank separator line
+        self.assertTrue(ok(v + good + b" " * 2000))                          # padding
+        self.assertTrue(ok("\u00a0".encode() + v + good))                    # Unicode leading space
+        self.assertTrue(ok(v + b"oid sha256:" + b"a" * 64 + b"\nsize +12\n"))  # signed size
+
+    def test_without_git_lfs_the_loose_parser_decides(self):
+        """is_lfs_pointer falls back to the loose superset when git-lfs is not on PATH."""
+        from unittest import mock  # noqa: PLC0415
+        sast = self._sast()
+        body = b"version https://git-lfs.github.com/spec/v1\noid sha256:" + b"a" * 64 + b"\nsize 12\nfoo bar\n"
+        with mock.patch.object(sast.shutil, "which", return_value=None):
+            self.assertTrue(sast.is_lfs_pointer(body))
+
+    def test_a_big_blob_counts_only_with_a_pointer_first_line(self):
+        """Only the head of a blob over LFS_READ_MAX is read: a pointer version line flags it, other text does not."""
+        ok = self._sast().is_lfs_pointer
+        self.assertTrue(ok(b"version https://git-lfs.github.com/spec/v1\noid sha256:", truncated=True))
+        self.assertFalse(ok(b"version 1.2.3 release notes\n", truncated=True))
+        self.assertFalse(ok(b"hello\n", truncated=True))
+
+    def test_agrees_exactly_with_git_lfs(self):
+        """With git-lfs installed, is_lfs_pointer gives the same answer as `git lfs pointer --check` for every
+        variant: padded, legacy, CRLF, signed size (valid) and extra or duplicate records (invalid)."""
+        import shutil, subprocess  # noqa: E401, PLC0415
+        if not shutil.which("git-lfs"):
+            self.skipTest("git-lfs not installed")
+        ok = self._sast().is_lfs_pointer
+        ver, oid, sz = b"version https://git-lfs.github.com/spec/v1", b"oid sha256:" + b"4d7a" * 16, b"size 12"
+        base = b"\n".join([ver, oid, sz])
+        variants = [base + end for end in (b"", b"\n", b"\n\n", b"\r\n")]
+        variants += [ver + b"\n\n" + oid + b"\n" + sz + b"\n", b"  " + base + b"\n", base + b"\n" + b" " * 1100,
+                     ver + b"\n" + oid + b"\nsize +12\n", base.replace(ver, b"version https://hawser.github.com/spec/v1"),
+                     base.replace(b"\n", b"\r\n") + b"\r\n", base + b"\nfoo bar\n", ver + b"\n" + oid + b"\n" + oid + b"\n" + sz,
+                     "\u00a0".encode() + base, "\u2003\u0085".encode() + base + "\u00a0".encode()]   # Unicode spaces
+        seen = set()
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "ptr"
+            for body in variants:
+                f.write_bytes(body)
+                lfs_ok = subprocess.run(["git", "lfs", "pointer", "--check", f"--file={f}"], capture_output=True,
+                                        check=False, cwd=td).returncode == 0
+                seen.add(lfs_ok)
+                self.assertEqual(ok(body), lfs_ok, body)
+        self.assertEqual(seen, {True, False})   # the variants exercise both answers
+
+    def test_a_missing_blob_is_a_lookup_failure(self):
+        """`git cat-file --batch-check` prints "<sha> missing" and exits 0; that must raise, not read as "not LFS"."""
+        with tempfile.TemporaryDirectory() as td:
+            import subprocess  # noqa: PLC0415
+            subprocess.run(["git", "init", "-q", td], check=True, capture_output=True)
+            with self.assertRaises(RuntimeError):
+                self._sast().lfs_pointer_blobs(Path(td), ["0" * 40])
+
+    def test_a_failed_lookup_is_an_integrity_error_with_reports_written(self):
+        """If the submodule/LFS check itself fails, the gate exits 2 and still writes findings.json."""
+        import subprocess  # noqa: PLC0415
+        from unittest import mock  # noqa: PLC0415
+        sast = self._sast()
+        with tempfile.TemporaryDirectory() as td:
+            repo, out = Path(td) / "repo", Path(td) / "out"
+            repo.mkdir()
+            (repo / ".sast-check.toml").write_text("[policy]\nfail_on_tool_error = false\n")
+            (repo / "a.py").write_text("x = 1\n")
+            git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+            for cmd in (["git", "init", "-q"], ["git", "add", "-A"], [*git, "commit", "-qm", "base"]):
+                subprocess.run(cmd, cwd=repo, check=True, capture_output=True)
+            (repo / "a.py").write_text("x = 2\n")
+            for cmd in (["git", "add", "-A"], [*git, "commit", "-qm", "change"]):
+                subprocess.run(cmd, cwd=repo, check=True, capture_output=True)
+            with mock.patch.object(sast, "unscanned_changes", side_effect=RuntimeError("git cat-file exited 128")):
+                code = sast.main(["--repo", str(repo), "--mode", "diff", "--base", "HEAD~1", "--only", "ruff", "--out", str(out)])
+            runs = json.loads((out / "findings.json").read_text())["runs"]
+            self.assertEqual(code, 2)
+            self.assertIn(("lfs", "error"), [(r["name"], r["status"]) for r in runs])
+
+
 if __name__ == "__main__":
     os.chdir(ROOT)
     unittest.main(verbosity=1)

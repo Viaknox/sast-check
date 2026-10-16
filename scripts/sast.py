@@ -1407,29 +1407,146 @@ def proposed_settings_error(repo: Path, name: str) -> str:
     return ""
 
 
-LFS_POINTER = b"version https://git-lfs.github.com/spec/"
+# version URLs git-lfs still accepts when decoding a pointer (current spec plus the legacy ones)
+LFS_VERSIONS = (b"https://git-lfs.github.com/spec/v1", b"https://hawser.github.com/spec/v1", b"http://git-media.io/v/2")
 
 
-def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[str]:
-    """Changes whose content the scanners cannot see in this checkout: a submodule pointer (its code is
-    not checked out) and a Git LFS pointer file (the real content lives on the LFS server)."""
+LFS_READ_MAX = 1 << 20   # blobs up to 1 MiB are checked in full; a larger one that starts like a pointer is LFS
+
+
+def lfs_pointer_loose(body: bytes) -> bool:
+    """Fallback when git-lfs is not installed: a superset of what git-lfs accepts (a version line, then
+    `oid sha256:<64 hex>` and a signed `size`, any whitespace, CRLF or padding), so a real pointer is never
+    missed; the price is that an odd file that looks like one is also flagged."""
+    text = body.decode("utf-8", "replace").replace("\r\n", "\n")
+    lines = [ln.strip().encode() for ln in text.split("\n") if ln.strip()]   # Unicode-aware strip, like git-lfs
+    if not lines or not lines[0].startswith(b"version") or lines[0][7:].strip() not in LFS_VERSIONS:
+        return False
+    keys = dict(ln.split(b" ", 1) for ln in lines[1:] if b" " in ln)
+    return bool(re.fullmatch(rb"sha256:[0-9a-f]{64}", keys.get(b"oid", b"").strip())) \
+        and bool(re.fullmatch(rb"[+-]?[0-9]+", keys.get(b"size", b"").strip()))
+
+
+def is_lfs_pointer(body: bytes, truncated: bool = False) -> bool:
+    """True if `body` is a Git LFS pointer. git-lfs itself decides (`git lfs pointer --check`), so every form
+    it accepts (padding, legacy URLs, CRLF, ...) is caught and nothing it rejects is; without git-lfs, a loose
+    superset is used. `truncated` means only the start of a large blob was read: then starting like a pointer
+    is enough (fail closed)."""
+    # git-lfs trims Unicode whitespace (NBSP, NEL, em space...) before parsing, so the cheap pre-check does too
+    text = body.decode("utf-8", "replace").lstrip()
+    if not text.startswith("version"):
+        return False
+    if truncated:   # only the head of a big blob was read: a pointer's first line is enough
+        first = text.split("\n", 1)[0].strip()
+        return first[7:].strip().encode() in LFS_VERSIONS
+    if not shutil.which("git-lfs"):
+        return lfs_pointer_loose(body)
+    with tempfile.NamedTemporaryFile(prefix="sast-lfs-") as tf:
+        tf.write(body)
+        tf.flush()
+        rc = subprocess.run(["git", "lfs", "pointer", "--check", f"--file={tf.name}"], capture_output=True,
+                            timeout=60).returncode
+    if rc not in (0, 1):   # 0 = valid pointer, 1 = not one (git lfs pointer --help); anything else: can't tell
+        raise RuntimeError(f"git lfs pointer --check exited {rc}")
+    return rc == 0
+
+
+def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[str, str, str]]:
+    """Changes whose content the scanners cannot see in this checkout, as (kind, path, label): a submodule
+    pointer (its code is not checked out), a Git LFS pointer file (the real content lives on the LFS server)
+    and a link leaving the repository."""
     mb = sh(["git", "merge-base", base, "HEAD"], repo).stdout.strip()
     # a gitlink is compared tree to tree: the working-tree diff skips a submodule that is not checked out
     was = {e.split("\t", 1)[1]: e.split()[2] for e in git_z(repo, ["ls-tree", "-r", "-z", mb]) if e.startswith("160000 ")}
-    now = {e.split("\t", 1)[1]: e.split()[1] for e in git_z(repo, ["ls-files", "-z", "-s"]) if e.startswith("160000 ")}
-    out = [f"submodule {md_code(p)}" for p, sha in sorted(now.items()) if was.get(p) != sha]
+    index = {e.split("\t", 1)[1]: (e.split()[0], e.split()[1]) for e in git_z(repo, ["ls-files", "-z", "-s"])}
+    moved = set()
+    for p, (mode, sha) in index.items():
+        if mode != "160000":
+            continue
+        if was.get(p) != sha:   # the gitlink itself changed (committed or staged)
+            moved.add(p)
+        # checked out at another commit but not staged: a separate check, so a stale checkout never hides
+        # a changed gitlink
+        if (repo / p / ".git").exists() and (head := sh(["git", "-C", p, "rev-parse", "HEAD"], repo, ok_codes=(0, 128)).stdout.strip()):
+            if head != was.get(p):
+                moved.add(p)
+            # same commit but edited, staged or new files inside it: still code the root scanners never see
+            # flags pinned: status.showUntrackedFiles=no or a submodule ignore setting must not hide changes
+            elif sh(["git", "-C", p, "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"], repo).stdout.strip():
+                moved.add(p)
+    out = [("submodule", p, f"submodule {md_code(p)}") for p in sorted(moved)]
+    lfs = lfs_pointer_blobs(repo, [index[f][1] for f in changed if f in index and index[f][0] != "160000"])
     for f in changed:
         # is_symlink, not exists: a link to a path missing on this machine is still unscanned content
         if ((repo / f).is_symlink() or (repo / f).exists()) and not in_repo(repo, repo / f):
-            out.append(f"symlink {md_code(f)} (points outside the repository)")
+            out.append(("symlink", f, f"symlink {md_code(f)} (points outside the repository)"))
             continue
-        try:
-            with open(repo / f, "rb") as fh:
-                if fh.read(len(LFS_POINTER)) == LFS_POINTER:
-                    out.append(f"Git LFS file {md_code(f)}")
-        except OSError:
-            continue
+        # the committed/staged blob decides, not the checkout: a clone that ran git-lfs shows the payload in
+        # the working tree while the scanners of the committed range still see only the pointer
+        hit = f in index and index[f][1] in lfs
+        if not hit:
+            try:
+                with open(repo / f, "rb") as fh:
+                    head = fh.read(LFS_READ_MAX + 1)
+                hit = is_lfs_pointer(head[:LFS_READ_MAX], truncated=len(head) > LFS_READ_MAX)
+            except OSError:
+                pass
+        if hit:
+            out.append(("lfs", f, f"Git LFS file {md_code(f)}"))
     return out
+
+
+def lfs_pointer_blobs(repo: Path, shas: list[str]) -> set[str]:
+    """The blobs among `shas` that are Git LFS pointer files. Blobs up to LFS_READ_MAX are read in full in one
+    batch call; a larger blob is read only up to its first KiB (a padded pointer can be any size)."""
+    if not shas:
+        return set()
+    def batch(flag: str, items: list[str]) -> bytes:
+        p = subprocess.run(["git", "cat-file", flag], cwd=repo, input="".join(i + "\n" for i in items).encode(),
+                           capture_output=True, timeout=300)
+        if p.returncode:
+            raise RuntimeError(f"git cat-file exited {p.returncode}: {p.stderr.decode(errors='replace')[-800:]}")
+        return p.stdout
+    small, big = [], []
+    for line in batch("--batch-check", sorted(set(shas))).decode().splitlines():
+        sha, kind, size = (line.split() + ["", ""])[:3]
+        if kind != "blob" or not size.isdigit():   # "<sha> missing" (partial or damaged clone) is a failure, not "no"
+            raise RuntimeError(f"git cat-file cannot read changed blob {sha}: {line.strip()[:120]}")
+        (small if int(size) <= LFS_READ_MAX else big).append(sha)
+    found = set()
+    for sha in big:
+        with subprocess.Popen(["git", "cat-file", "blob", sha], cwd=repo, stdout=subprocess.PIPE) as pr:
+            head = pr.stdout.read(1024)
+            pr.kill()
+        if is_lfs_pointer(head, truncated=True):
+            found.add(sha)
+    if not small:
+        return found
+    out, i = batch("--batch", small), 0
+    while i < len(out):   # each entry: "<sha> blob <size>\n<content>\n"
+        nl = out.index(b"\n", i)
+        sha, _, size = out[i:nl].decode().split()
+        body = out[nl + 1: nl + 1 + int(size)]
+        if is_lfs_pointer(body):
+            found.add(sha)
+        i = nl + 1 + int(size) + 1
+    return found
+
+
+def unscanned_errors(blind: list[tuple[str, str, str]], allow_submodules: bool, allow_lfs: bool) -> list[ToolRun]:
+    """Integrity errors (fail closed) for changed submodules and LFS pointer files, unless the settings accept them."""
+    errs = []
+    subs = [p for k, p, _ in blind if k == "submodule"]
+    if subs and not allow_submodules:
+        errs.append(ToolRun("submodules", "error", "changed submodule(s) are not checked out, so their code was not scanned: "
+                            + ", ".join(subs[:10]) + ". Review by hand, then set `policy.allow_unscanned_submodules = true` "
+                            "in .sast-check.toml if submodule updates are routine here."))
+    lfs = [p for k, p, _ in blind if k == "lfs"]
+    if lfs and not allow_lfs:
+        errs.append(ToolRun("lfs", "error", "changed Git LFS file(s) are only pointer files in this checkout, so their content was not scanned: "
+                            + ", ".join(lfs[:10]) + ". Review by hand, then set `policy.allow_unscanned_lfs = true` "
+                            "in .sast-check.toml if LFS changes are routine here."))
+    return errs
 
 
 # ---------------------------------------------------------------- main
@@ -1496,8 +1613,15 @@ def main(argv=None) -> int:
             ctx.runs.append(ToolRun("git-diff", "error", f"cannot diff against {a.base}: {str(e)[:300]}"))
             enabled = []                       # nothing can be scoped; report the error (fail closed)
         ctx.changed_files = sorted(ctx.changed_lines)
-        if not any(r.name == "git-diff" for r in ctx.runs) and (blind := unscanned_changes(repo, a.base, ctx.changed_files)):
-            ctx.notes.append("Not scanned, review by hand: " + ", ".join(blind) + ".")
+        blind = []
+        if not any(r.name == "git-diff" for r in ctx.runs):
+            try:
+                blind = unscanned_changes(repo, a.base, ctx.changed_files)
+            except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:   # cannot tell what is unscanned: fail closed
+                ctx.runs.append(ToolRun("lfs", "error", f"cannot check changed files for submodules/LFS pointers: {str(e)[:300]}"))
+        if blind:
+            ctx.runs += unscanned_errors(blind, cfg["policy"]["allow_unscanned_submodules"], cfg["policy"]["allow_unscanned_lfs"])
+            ctx.notes.append("Not scanned, review by hand: " + ", ".join(b[2] for b in blind) + ".")
         # excluded paths are not scanned even when changed: say so, so code placed in vendor/ is seen
         if skipped := [f for f in ctx.changed_files if glob_any(f, cfg["paths"]["exclude"])]:
             ctx.notes.append(f"{len(skipped)} changed file(s) under excluded paths (`paths.exclude`) were not scanned: "
@@ -1529,9 +1653,9 @@ def main(argv=None) -> int:
         except Exception as e:  # noqa: BLE001 - without the base comparison a new finding could pass: fail closed
             ctx.runs.append(ToolRun("baseline", "error", f"base comparison failed: {str(e)[:300]}"))
     apply_policy(ctx, findings, new_by_base)
-    # settings, diff and base-comparison errors and a missing opengrep always fail; fail_on_tool_error covers
+    # settings, diff, base-comparison, submodule and LFS errors and a missing opengrep always fail; fail_on_tool_error covers
     # scanner crashes only
-    integrity = ("settings", "git-diff", "baseline")
+    integrity = ("settings", "git-diff", "baseline", "submodules", "lfs")
     errored = engine_missing or any(r.status == "error" and (r.name in integrity or cfg["policy"].get("fail_on_tool_error", True))
                   for r in ctx.runs)
     verdict = "error" if errored else "fail" if any(f.blocking for f in findings) else "pass"
