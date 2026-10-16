@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for scripts/workflow_guard.py. Run: python3 tests/workflow_guard_test.py"""
+import base64
 import sys
 import unittest
 from pathlib import Path
@@ -9,6 +10,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import workflow_guard as wg  # noqa: E402
 
 HEAD, OLD = "b" * 40, "a" * 40
+PR = {"head": {"sha": HEAD}, "base": {"ref": "main"}, "changed_files": 1}
 
 
 def review(user, state="APPROVED", sha=HEAD):
@@ -28,8 +30,10 @@ class Protected(unittest.TestCase):
 
 class Evaluate(unittest.TestCase):
     def run_guard(self, changed, reviews, roles=None, owners=()):
-        """Run the decision with defaults; returns (ok, message)."""
-        return wg.evaluate(changed, HEAD, reviews, roles or {}, set(owners))
+        """Run the decision with defaults; roles maps login to a role, owners are logins owning everything."""
+        trusted = {u for u, r in (roles or {}).items() if r in wg.TRUSTED_ROLES}
+        rules = wg.parse_codeowners("* " + " ".join("@" + o for o in owners)) if owners else []
+        return wg.evaluate(changed, HEAD, reviews, trusted, rules)
 
     def test_no_protected_files_passes(self):
         self.assertTrue(self.run_guard(["README.md", "tools/x.py"], [])[0])
@@ -65,7 +69,7 @@ class Evaluate(unittest.TestCase):
 
 
 class Main(unittest.TestCase):
-    def api(self, pr, reviews, perms, files):
+    def api(self, pr, reviews, perms, files, codeowners=""):
         """Return a fake GitHub API function over canned data."""
         def get(path):
             if path.endswith("/files"):
@@ -75,7 +79,7 @@ class Main(unittest.TestCase):
             if "/collaborators/" in path:
                 return perms[path.split("/")[-2]]
             if "/contents/.github/CODEOWNERS" in path:
-                return {"content": ""}
+                return {"content": base64.b64encode(codeowners.encode()).decode()}
             return pr
         return get
 
@@ -87,18 +91,81 @@ class Main(unittest.TestCase):
         self.assertIn("502", msg)
 
     def test_stale_event_head_fails(self):
-        get = self.api({"head": {"sha": HEAD}, "base": {"ref": "main"}}, [], {}, [])
+        get = self.api({**PR, "changed_files": 0}, [], {}, [])
         self.assertFalse(wg.check("o/r", 5, OLD, get)[0])
 
     def test_rename_out_of_protected_path_counts(self):
         files = [{"filename": "x.yml", "previous_filename": ".github/workflows/test.yml"}]
-        get = self.api({"head": {"sha": HEAD}, "base": {"ref": "main"}}, [], {}, files)
+        get = self.api(PR, [], {}, files)
         self.assertFalse(wg.check("o/r", 5, HEAD, get)[0])
 
     def test_approved_end_to_end(self):
-        get = self.api({"head": {"sha": HEAD}, "base": {"ref": "main"}}, [review("m")],
+        get = self.api(PR, [review("m")],
                        {"m": {"role_name": "maintain"}}, [{"filename": "action.yml"}])
         self.assertTrue(wg.check("o/r", 5, HEAD, get)[0])
+
+    def test_truncated_file_list_fails_closed(self):
+        """Fewer files listed than changed_files, or the 3000 cap, must fail (threads 4298042457/4298076538/4298129563)."""
+        files = [{"filename": "a.txt"}]
+        ok, msg = wg.check("o/r", 5, HEAD, self.api({**PR, "changed_files": 2}, [], {}, files))
+        self.assertFalse(ok)
+        self.assertIn("incomplete", msg)
+        capped = [{"filename": f"f{i}"} for i in range(3000)]
+        self.assertFalse(wg.check("o/r", 5, HEAD, self.api({**PR, "changed_files": 3000}, [], {}, capped))[0])
+        self.assertFalse(wg.check("o/r", 5, HEAD, self.api({k: v for k, v in PR.items() if k != "changed_files"}, [], {}, files))[0])
+        self.assertTrue(wg.check("o/r", 5, HEAD, self.api(PR, [], {}, files))[0])
+
+    def test_custom_role_inheriting_admin_or_maintain_is_trusted(self):
+        """Custom role names are judged by privilege booleans / legacy permission (thread 4298042477)."""
+        for resp in ({"role_name": "release-captain", "permission": "write", "user": {"permissions": {"maintain": True}}},
+                     {"role_name": "super", "permission": "admin", "user": {"permissions": {}}},
+                     {"role_name": "super", "permission": "write", "user": {"permissions": {"admin": True}}}):
+            get = self.api(PR, [review("c")], {"c": resp}, [{"filename": "action.yml"}])
+            self.assertTrue(wg.check("o/r", 5, HEAD, get)[0], resp)
+        for resp in ({"role_name": "triager", "permission": "read", "user": {"permissions": {"push": True}}},
+                     {"role_name": "x"}, {"permission": "write"}, {}):
+            get = self.api(PR, [review("c")], {"c": resp}, [{"filename": "action.yml"}])
+            self.assertFalse(wg.check("o/r", 5, HEAD, get)[0], resp)
+
+    def test_codeowners_last_matching_rule_per_path(self):
+        """Only an individual owner of the path's last matching rule counts (thread 4298042472)."""
+        text = "* @alice\n/docs/ @docsguy\n/.github/workflows/ @ciguy @org/team\n"
+        wf = [{"filename": ".github/workflows/test.yml"}]
+        low = {"d": {"permission": "write"}}
+        for who, want in (("ciguy", True), ("docsguy", False), ("alice", False), ("org", False)):
+            get = self.api(PR, [review(who)], {who: low["d"]}, wf, text)
+            self.assertEqual(wg.check("o/r", 5, HEAD, get)[0], want, who)
+
+    def test_codeowners_every_path_needs_cover(self):
+        """Two protected paths with different owners: one owner is not enough, two together are."""
+        text = "action.yml @a\n.sast-check.toml @b\n"
+        files = [{"filename": "action.yml"}, {"filename": ".sast-check.toml"}]
+        pr = {**PR, "changed_files": 2}
+        w = {"permission": "write"}
+        self.assertFalse(wg.check("o/r", 5, HEAD, self.api(pr, [review("a")], {"a": w}, files, text))[0])
+        self.assertTrue(wg.check("o/r", 5, HEAD, self.api(pr, [review("a"), review("b")], {"a": w, "b": w}, files, text))[0])
+        self.assertTrue(wg.check("o/r", 5, HEAD, self.api(pr, [review("m")], {"m": {"permission": "admin"}}, files, text))[0])
+
+
+class CodeownersMatch(unittest.TestCase):
+    def owners(self, text, path):
+        """Owners of path under the given CODEOWNERS text."""
+        return wg.owners_for(path, wg.parse_codeowners(text))
+
+    def test_patterns(self):
+        t = "* @s\n/a/*.yml @x\ndocs/ @d\n**/logs @l\n/build/** @b\n"
+        self.assertEqual(self.owners(t, "README.md"), {"s"})
+        self.assertEqual(self.owners(t, "a/k.yml"), {"x"})
+        self.assertEqual(self.owners(t, "a/sub/k.yml"), {"s"})
+        self.assertEqual(self.owners(t, "z/docs/n.md"), {"d"})
+        self.assertEqual(self.owners(t, "p/logs/x"), {"l"})
+        self.assertEqual(self.owners(t, "build/o/p"), {"b"})
+
+    def test_no_owner_and_unparseable_fail_closed(self):
+        self.assertEqual(self.owners("* @s\n/a.yml\n", "a.yml"), set())
+        self.assertEqual(self.owners("* @s\n[ab].yml @t\n", "a.yml"), set())
+        self.assertEqual(self.owners("* @s\n!x.yml @t\n", "q"), set())
+        self.assertEqual(self.owners("", "a"), set())
 
 
 if __name__ == "__main__":
