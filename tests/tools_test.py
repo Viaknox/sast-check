@@ -265,6 +265,17 @@ class RulePerf(unittest.TestCase):
             cwd, rel = rule_perf.big_target(fx, "rules: []\n", out)
             self.assertLessEqual((cwd / rel).stat().st_size, rule_perf.MAX_BYTES + 1_000_001)
 
+    def test_a_fixture_over_the_size_cap_is_an_error(self):
+        old = rule_perf.MAX_BYTES
+        rule_perf.MAX_BYTES = 10   # every real fixture is over this
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                status, detail = rule_perf.check_rule("/bin/false", rm.RULES / "js" / "code-eval.yaml", Path(td))
+        finally:
+            rule_perf.MAX_BYTES = old
+        self.assertEqual(status, "ERROR", detail)
+        self.assertIn("too large", detail)
+
     def test_yaml_fixture_becomes_separate_documents_at_a_workflow_path(self):
         rule = rm.RULES / "gha" / "remote-fetch-no-checksum.yaml"
         with tempfile.TemporaryDirectory() as td:

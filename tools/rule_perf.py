@@ -94,6 +94,8 @@ def check_rule(engine: str, rule: Path, base_dir: Path, deadline: float | None =
     fx = fixture_for(rule)
     if not fx:
         return "ERROR", "no fixture to build a test file from"
+    if fx.stat().st_size > MAX_BYTES:   # one copy alone would break the size cap on the generated file
+        return "ERROR", f"fixture is over {MAX_BYTES // 1_000_000} MB: too large to build a test file from"
     with tempfile.TemporaryDirectory() as td:
         cwd, target = big_target(fx, head, Path(td))
 

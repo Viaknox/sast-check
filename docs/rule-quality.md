@@ -49,7 +49,7 @@ the PR past the commit being checked (GitHub's file list always describes the ne
 version that is empty. A changed version that takes over 5 minutes on the generated file counts as slow; a base
 version that does is an error. No scan runs past a 15-minute budget, so the step stops with an error rather than be cut off at its
 20-minute limit, retries a GitHub API error twice, and only fetches rule paths made of letters, digits and `. _ -`
-(any other name fails the check). The generated file is capped at 4 MB. It catches large
+(any other name fails the check). The generated file is capped at 4 MB; a fixture over that is an error. It catches large
 slowdowns, like the 30-45x ones PR #11 found by hand; a slowdown that shows only on a different shape of code
 (PR #11's Django rule was 1.5x slower on a big handler file but 1.2x on its repeated fixture) can still pass.
 
