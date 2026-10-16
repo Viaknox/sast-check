@@ -1407,7 +1407,16 @@ def proposed_settings_error(repo: Path, name: str) -> str:
     return ""
 
 
-LFS_POINTER = b"version https://git-lfs.github.com/spec/"
+LFS_POINTER_RE = re.compile(rb"version https://git-lfs\.github\.com/spec/v1\n(?:[a-z0-9.-]+ [^\n]*\n)*")
+
+
+def is_lfs_pointer(body: bytes) -> bool:
+    """True if `body` is a complete Git LFS pointer (spec v1: version line, then key/value lines including
+    `oid sha256:<64 hex>` and `size <n>`), not merely a file that starts with the version URL."""
+    if len(body) >= 1024 or not LFS_POINTER_RE.fullmatch(body):
+        return False
+    keys = dict(line.split(b" ", 1) for line in body.splitlines()[1:])
+    return bool(re.fullmatch(rb"sha256:[0-9a-f]{64}", keys.get(b"oid", b""))) and keys.get(b"size", b"").isdigit()
 
 
 def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[str, str, str]]:
@@ -1442,7 +1451,7 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[s
         if not hit:
             try:
                 with open(repo / f, "rb") as fh:
-                    hit = fh.read(len(LFS_POINTER)) == LFS_POINTER
+                    hit = is_lfs_pointer(fh.read(1024))
             except OSError:
                 pass
         if hit:
@@ -1473,7 +1482,7 @@ def lfs_pointer_blobs(repo: Path, shas: list[str]) -> set[str]:
         nl = out.index(b"\n", i)
         sha, _, size = out[i:nl].decode().split()
         body = out[nl + 1: nl + 1 + int(size)]
-        if body.startswith(LFS_POINTER):
+        if is_lfs_pointer(body):
             found.add(sha)
         i = nl + 1 + int(size) + 1
     return found
@@ -1559,10 +1568,15 @@ def main(argv=None) -> int:
             ctx.runs.append(ToolRun("git-diff", "error", f"cannot diff against {a.base}: {str(e)[:300]}"))
             enabled = []                       # nothing can be scoped; report the error (fail closed)
         ctx.changed_files = sorted(ctx.changed_lines)
-        if not any(r.name == "git-diff" for r in ctx.runs) and (blind := unscanned_changes(repo, a.base, ctx.changed_files)):
+        blind = []
+        if not any(r.name == "git-diff" for r in ctx.runs):
+            try:
+                blind = unscanned_changes(repo, a.base, ctx.changed_files)
+            except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:   # cannot tell what is unscanned: fail closed
+                ctx.runs.append(ToolRun("lfs", "error", f"cannot check changed files for submodules/LFS pointers: {str(e)[:300]}"))
+        if blind:
             ctx.runs += unscanned_errors(blind, cfg["policy"]["allow_unscanned_submodules"], cfg["policy"]["allow_unscanned_lfs"])
-            if blind:
-                ctx.notes.append("Not scanned, review by hand: " + ", ".join(b[2] for b in blind) + ".")
+            ctx.notes.append("Not scanned, review by hand: " + ", ".join(b[2] for b in blind) + ".")
         # excluded paths are not scanned even when changed: say so, so code placed in vendor/ is seen
         if skipped := [f for f in ctx.changed_files if glob_any(f, cfg["paths"]["exclude"])]:
             ctx.notes.append(f"{len(skipped)} changed file(s) under excluded paths (`paths.exclude`) were not scanned: "

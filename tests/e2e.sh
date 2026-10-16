@@ -857,6 +857,14 @@ check "hydrated LFS file still fails the check"           "$code" "2"
 check "hydrated LFS error names the file"                 "$(echo "$err" | grep -c 'lfs:.*src/hyd.py')" "1"
 git checkout -q -- src/hyd.py && git checkout -q main
 
+# a file that only starts with the LFS version URL (docs, fixtures) is ordinary content, not a pointer
+git checkout -q -b r21doc main
+printf 'version https://git-lfs.github.com/spec/v1\nis the URL every pointer starts with\n' > src/lfsdoc.txt
+git add src/lfsdoc.txt && git commit -qm lfsdoc
+gate --mode diff --base HEAD~1 --only opengrep
+check "text starting with the LFS URL is not an LFS pointer" "$code" "0"
+git checkout -q main
+
 # r18: a '#' or '//' inside a JS regex or template literal is not a comment, so it cannot suppress
 git checkout -q -b r18 main
 cat > src/rx.js <<'JS'

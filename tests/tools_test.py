@@ -450,6 +450,50 @@ class OpengrepOnly(unittest.TestCase):
             self.assertFalse(marker.exists(), "the gate ran another engine")
 
 
+class UnscannedChecks(unittest.TestCase):
+    """Submodule/LFS detection: only a complete LFS pointer counts, and a lookup failure fails closed."""
+
+    @staticmethod
+    def _sast():
+        """Import scripts/sast.py as a module."""
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import sast  # noqa: PLC0415
+        return sast
+
+    def test_only_a_complete_lfs_pointer_counts(self):
+        """A file that merely starts with the LFS version URL is ordinary content, not a pointer."""
+        ok = self._sast().is_lfs_pointer
+        v = b"version https://git-lfs.github.com/spec/v1\n"
+        self.assertTrue(ok(v + b"oid sha256:" + b"a" * 64 + b"\nsize 12\n"))
+        self.assertFalse(ok(v))                                              # no oid/size
+        self.assertFalse(ok(v + b"see the docs for the pointer format\n"))  # prose after the URL
+        self.assertFalse(ok(v + b"oid sha256:abc\nsize 12\n"))              # short oid
+        self.assertFalse(ok(v + b"oid sha256:" + b"a" * 64 + b"\nsize x\n"))
+        self.assertFalse(ok(v + b"oid sha256:" + b"a" * 64 + b"\nsize 12\n" + b"x" * 1100))   # too big
+
+    def test_a_failed_lookup_is_an_integrity_error_with_reports_written(self):
+        """If the submodule/LFS check itself fails, the gate exits 2 and still writes findings.json."""
+        import subprocess  # noqa: PLC0415
+        from unittest import mock  # noqa: PLC0415
+        sast = self._sast()
+        with tempfile.TemporaryDirectory() as td:
+            repo, out = Path(td) / "repo", Path(td) / "out"
+            repo.mkdir()
+            (repo / ".sast-check.toml").write_text("[policy]\nfail_on_tool_error = false\n")
+            (repo / "a.py").write_text("x = 1\n")
+            git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+            for cmd in (["git", "init", "-q"], ["git", "add", "-A"], [*git, "commit", "-qm", "base"]):
+                subprocess.run(cmd, cwd=repo, check=True, capture_output=True)
+            (repo / "a.py").write_text("x = 2\n")
+            for cmd in (["git", "add", "-A"], [*git, "commit", "-qm", "change"]):
+                subprocess.run(cmd, cwd=repo, check=True, capture_output=True)
+            with mock.patch.object(sast, "unscanned_changes", side_effect=RuntimeError("git cat-file exited 128")):
+                code = sast.main(["--repo", str(repo), "--mode", "diff", "--base", "HEAD~1", "--only", "ruff", "--out", str(out)])
+            runs = json.loads((out / "findings.json").read_text())["runs"]
+            self.assertEqual(code, 2)
+            self.assertIn(("lfs", "error"), [(r["name"], r["status"]) for r in runs])
+
+
 if __name__ == "__main__":
     os.chdir(ROOT)
     unittest.main(verbosity=1)
