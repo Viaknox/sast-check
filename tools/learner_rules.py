@@ -469,6 +469,7 @@ def open_pr(repo: Path, report: dict, base: str, model: str, runner=sh) -> str:
 
 
 def main() -> int:
+    """Draft, check and (optionally) open a PR for rules from the learner's recurring patterns."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--patterns", required=True, help="patterns.json from the quality-gate learner (learner-patterns/v1)")
     ap.add_argument("--engine", default=shutil.which("opengrep"), help="opengrep (the CI engine)")

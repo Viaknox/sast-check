@@ -409,10 +409,11 @@ class OpengrepOnly(unittest.TestCase):
     ENGINE = "sem" + "grep"   # split so this file does not match its own check
 
     def test_no_code_or_workflow_runs_or_installs_semgrep(self):
+        """No script, tool, test or workflow calls, installs or configures the dropped engine."""
         import re  # noqa: PLC0415
         e = self.ENGINE
         # a call, an install or an env variable for it; nosemgrep comments and .semgrepignore names are fine
-        bad = re.compile(rf"""["']{e}["']|{e}==|command -v {e}|\b{e.upper()}\b|^\s*{e}\s""", re.M)
+        bad = re.compile(rf"""["']{e}["']|{e}==|command -v {e}|\b{e.upper()}\b|^\s*{e}\s|pip3?\s+install[^\n]*\b{e}\b""", re.M)
         files = [*ROOT.glob("scripts/*.py"), *ROOT.glob("tools/*.py"), *ROOT.glob("tests/*.py"),
                  *ROOT.glob("tests/*.sh"), *ROOT.glob(".github/workflows/*.yml"), ROOT / "action.yml"]
         hits = [f"{f.relative_to(ROOT)}: {m.group(0).strip()}" for f in files if f.resolve() != Path(__file__).resolve()
@@ -420,6 +421,7 @@ class OpengrepOnly(unittest.TestCase):
         self.assertEqual(hits, [])
 
     def test_a_gate_without_opengrep_is_an_error_and_never_calls_another_engine(self):
+        """Without opengrep the gate exits 2, even with fail_on_tool_error = false, and never runs a look-alike engine."""
         import subprocess  # noqa: PLC0415
         with tempfile.TemporaryDirectory() as td:
             td = Path(td)

@@ -483,6 +483,7 @@ def special_name_files(ctx: Ctx) -> list[str]:
 
 
 def run_opengrep(ctx: Ctx) -> list[Finding]:
+    """Run the custom rules with Opengrep (the only engine); a missing opengrep raises FileNotFoundError."""
     engine = shutil.which("opengrep")   # the only supported engine; no fallback to another one
     if not engine:
         raise FileNotFoundError("opengrep not installed: sast-check runs Opengrep only (https://github.com/opengrep/opengrep)")
@@ -1433,6 +1434,7 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[str]:
 
 # ---------------------------------------------------------------- main
 def main(argv=None) -> int:
+    """Run the enabled scanners, apply the block policy and write the reports; exit 0 pass, 1 fail, 2 error."""
     ap = argparse.ArgumentParser(description="Run the SAST check and apply the block policy.")
     ap.add_argument("--repo", default=".", help="repository root (default: .)")
     ap.add_argument("--mode", choices=["diff", "full"], help="override policy.scope")

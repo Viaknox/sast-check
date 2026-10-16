@@ -193,6 +193,7 @@ def summary(results: list[dict], engine: str) -> dict:
 
 
 def main() -> int:
+    """Mutate the selected rules, score how well their fixtures catch each mutant, and check the baseline."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--engine", default=shutil.which("opengrep"))
     ap.add_argument("--rules", nargs="*", help="rule files under rules/custom (default: all)")

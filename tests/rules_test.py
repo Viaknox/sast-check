@@ -105,6 +105,7 @@ def scan_fixture(engine: str, rule: Path, text: str) -> tuple[dict, str | None]:
 
 
 def main() -> int:
+    """Test every custom rule against its fixture with opengrep; exit 1 on any failure, 2 without opengrep."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--engine", default=shutil.which("opengrep"))
     a = ap.parse_args()

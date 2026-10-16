@@ -170,6 +170,7 @@ def report(work: Path, labels: list[dict], corpus: list[dict]) -> dict:
 
 
 def main() -> int:
+    """Clone the pinned corpus, scan it with the current rules, and write the noise report from the labels."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--work", required=True, help="scratch dir for clones and raw findings (never committed)")
     ap.add_argument("--repos", nargs="*", help="subset of corpus repos (owner/name)")
