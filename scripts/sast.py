@@ -603,16 +603,27 @@ def not_parsed_findings(ctx: Ctx, errors: list, cwd: Path, renamed: dict) -> lis
             out.append(gap_finding(path, {}, 1, max(n, 1), True))
         else:
             raise ParseGapError(f"unknown opengrep error type {str(t)[:80]!r}: {str(e)[:200]}")
-    return out
+    return envelope(out)
+
+
+def envelope(gaps: list[Finding]) -> list[Finding]:
+    """One finding per file: Opengrep marks only the unreadable tokens (e.g. a block's opening and closing brace),
+    not the code between them, so the unscanned region is taken as everything from the first span's start line to
+    the last span's end line. A whole-file gap stays whole."""
+    by_path: dict[str, list[Finding]] = {}
+    for g in gaps:
+        by_path.setdefault(g.path, []).append(g)
+    return [gap_finding(path, {}, min(g.line for g in gs), max(g.end_line for g in gs), any(g.whole_file for g in gs))
+            for path, gs in by_path.items()]
 
 
 def gap_finding(path: str, renamed: dict, start: int, end: int, whole: bool) -> Finding:
     """The opengrep.not-parsed finding for lines start-end of path (renamed maps a scanned copy back)."""
     path = renamed.get(path, path)
-    where = f"line {start}" if start == end else f"lines {start}-{end}"
+    where = f"Line {start}" if start == end else f"Lines {start}-{end}"
     return Finding(
         tool="opengrep", rule=NOT_PARSED, severity="critical", confidence="high", path=path, line=start, end_line=end,
-        message=f"Opengrep could not read {where} of {path}, so this code was NOT scanned for security problems. "
+        message=f"{where} of {path} could not be read by Opengrep, so this code was NOT scanned for security problems. "
                 "Rewrite it in a form the scanner can read (see docs/not-parsed.md); suppress only if a rewrite "
                 "is impossible.", cwe="CWE-693", whole_file=whole)
 

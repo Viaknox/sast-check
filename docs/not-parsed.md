@@ -12,7 +12,7 @@ sast-check turns each skipped span into a finding:
 |---|---|
 | Rule id | `opengrep.not-parsed` |
 | Severity | critical (blocks like any critical finding, under your `policy.block_on`) |
-| One finding per | skipped span (a whole-file parse error counts as one span covering the whole file) |
+| One finding per | file: the range from the first unreadable line to the last (a whole-file parse error covers the whole file) |
 
 ## Why it blocks
 
@@ -21,13 +21,18 @@ found nothing", not "could not look". Fix the code so the scanner can read it.
 
 ## Diff mode and full mode
 
-- **Diff mode (PRs):** a gap blocks only if its lines overlap the lines you changed (a whole-file parse error:
+- **Diff mode (PRs):** a gap blocks only if a line you changed falls inside its range (a whole-file parse error:
   if the file changed). Gaps on lines you did not touch do not block; the report lists them under **Not scanned**.
 - **Full mode:** every gap blocks.
 
-Opengrep reports the unreadable tokens, not always the whole block around them. If you edit inside a block that
-already has a gap (for example the body of a `static { }` block), rewrite the block even if the report only names
-its first line.
+## Why the whole range, not just the marked tokens
+
+Opengrep marks only the tokens it could not read (for example the `{` that opens a `static` block and the `}`
+that closes the class), not the code between them, and that code is skipped too. So sast-check takes the range
+from the **first** unreadable line to the **last** one in the file as one unscanned region and reports it as one
+finding. Editing only the body of an existing unreadable block therefore blocks, and a suppression goes on the
+range's first line. The range can include some code Opengrep did read; that is the safe side. Rewriting the
+construct into a form Opengrep can read removes the finding.
 
 ## How to fix: rewrite into a form Opengrep can read
 

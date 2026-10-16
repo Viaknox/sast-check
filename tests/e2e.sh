@@ -1084,7 +1084,7 @@ check "not-parsed: a sink outside the gap is still found"   "$(q "sorted((f['rul
 printf 'var s = "unterminated\neval(req.query.c);\n' > src/sb.js && git commit -qam multi
 gate --mode diff --base main --only opengrep
 check "not-parsed: multi-line gap is one finding, lines 1-2" "$(q "[(f['line'], f['end_line']) for f in d['findings'] if f['rule']=='opengrep.not-parsed']")" "[(1, 2)]"
-check "not-parsed: message names both lines"                "$(grep -c 'could not read lines 1\-2 of src/sb.js' sast-results/report.md)" "1"
+check "not-parsed: message names both lines"                "$(grep -c 'Lines 1\-2 of src/sb.js could not be read' sast-results/report.md)" "1"
 # a gap on lines the PR did not touch does not block in diff mode but is named; full mode still blocks
 printf '%s\nlet a = 1;\n' "$GAP" > src/sb.js && git commit -qam old
 printf 'let b = 2;\n' >> src/sb.js && git commit -qam touchother
@@ -1093,6 +1093,17 @@ check "not-parsed: gap on unchanged lines does not block"   "$code" "0"
 check "not-parsed: ... but is listed under Not scanned"     "$(grep -c '^> Not scanned (Opengrep could not read.*src/sb.js:1' sast-results/report.md)" "1"
 gate --mode full --only opengrep
 check "not-parsed: ... and full mode blocks it"             "$(q "$NP")" "1"
+git checkout -q -f main
+
+# not-parsed envelope: the body of an existing unreadable block is covered too (Opengrep marks only the braces)
+git checkout -q -b np2 main
+printf 'class A {\n  static {\n    let a = 1;\n  }\n}\n' > src/blk.js && git add src/blk.js && git commit -qm blkbase
+sed -i 's/let a = 1;/eval(req.query.code);/' src/blk.js && git commit -qam blkbody
+gate --mode diff --base HEAD~1 --only opengrep
+check "not-parsed: editing only the body of an unreadable block blocks"  "$code $(q "[(f['line'], f['end_line']) for f in d['findings'] if f['rule']=='opengrep.not-parsed' and f['blocking']]")" "1 [(2, 5)]"
+printf 'var a = 1;\nclass B { static { x(); } }\nvar b = 2;\nclass C { accessor y = 1; }\n' > src/far.js && git add src/far.js && git commit -qm far
+gate --mode full --only opengrep
+check "not-parsed: two spans far apart in a file are one finding"  "$(q "[(f['line'], f['end_line']) for f in d['findings'] if f['rule']=='opengrep.not-parsed' and f['path']=='src/far.js']")" "[(2, 4)]"
 git checkout -q -f main
 
 # clean PR passes

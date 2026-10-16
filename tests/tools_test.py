@@ -465,11 +465,12 @@ class NotParsed(unittest.TestCase):
     def ctx(self, repo=Path("."), mode="full"):
         return sast.Ctx(repo=repo, cfg=sast.load_config(None), mode=mode, base=None)
 
-    def test_each_span_is_one_critical_finding_with_the_plain_message(self):
+    def test_spans_of_a_file_are_one_critical_finding_over_their_envelope(self):
         got = sast.not_parsed_findings(self.ctx(), [self.partial(self.span(a=3, b=5), self.span(a=9, b=9))], Path("."), {})
+        # two spans far apart in one file: one finding over the envelope, first start to last end
         self.assertEqual([(f.rule, f.severity, f.line, f.end_line, f.whole_file) for f in got],
-                         [("opengrep.not-parsed", "critical", 3, 5, False), ("opengrep.not-parsed", "critical", 9, 9, False)])
-        self.assertIn("Opengrep could not read lines 3-5 of a.js, so this code was NOT scanned for security problems. "
+                         [("opengrep.not-parsed", "critical", 3, 9, False)])
+        self.assertIn("Lines 3-9 of a.js could not be read by Opengrep, so this code was NOT scanned for security problems. "
                       "Rewrite it in a form the scanner can read (see docs/not-parsed.md); suppress only if a rewrite "
                       "is impossible.", got[0].message)
 
@@ -530,12 +531,16 @@ class NotParsed(unittest.TestCase):
         self.assertEqual([(f["rule"], f["line"], f["end_line"], f["blocking"]) for f in data["findings"]],
                          [("opengrep.not-parsed", 1, 3, True)])
 
-    def test_diff_mode_blocks_only_spans_on_changed_lines(self):
-        # a.js: line 1 unchanged, lines 2-3 added
+    def test_diff_mode_blocks_only_envelopes_touching_changed_lines(self):
+        # a.js: line 1 unchanged, lines 2-3 added. Spans on lines 1 and 3 give one envelope 1-3: a changed line
+        # between or inside the spans blocks
         with tempfile.TemporaryDirectory() as td:
             code, data = self.run_gate(td, [self.partial(self.span(a=1, b=1), self.span(a=3, b=3))])
         self.assertEqual(code, 1)
-        self.assertEqual([(f["line"], f["in_diff"], f["blocking"]) for f in data["findings"]], [(1, False, False), (3, True, True)])
+        self.assertEqual([(f["line"], f["end_line"], f["in_diff"], f["blocking"]) for f in data["findings"]], [(1, 3, True, True)])
+        with tempfile.TemporaryDirectory() as td:   # spans on lines 1 and 1: unchanged, does not block
+            code, data = self.run_gate(td, [self.partial(self.span(a=1, b=1), self.span(a=1, b=1))])
+        self.assertEqual((code, [f["blocking"] for f in data["findings"]]), (0, [False]))
         with tempfile.TemporaryDirectory() as td:
             code, data = self.run_gate(td, [self.partial(self.span(a=1, b=1))])
             report = (Path(td) / "out" / "report.md").read_text()
