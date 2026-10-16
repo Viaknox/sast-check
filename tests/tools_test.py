@@ -687,13 +687,15 @@ class NotParsed(unittest.TestCase):
                                            Path(td), {}, ["a.js"])
         self.assertEqual([(f.path, f.line, f.end_line, f.whole_file) for f in got], [("a.js", 1, 3, True)])
 
-    def run_gate(self, td, errors, mode="diff", toml=""):
-        """Run sast.py in a throwaway git repo whose fake Opengrep prints ERRORS; returns (exit code, findings.json)."""
+    def run_gate(self, td, errors, mode="diff", toml="", payload=None):
+        """Run sast.py in a throwaway git repo whose fake Opengrep prints ERRORS (or PAYLOAD as the whole JSON);
+        returns (exit code, findings.json)."""
         import subprocess  # noqa: PLC0415
         td = Path(td)
         (td / "bin").mkdir()
         eng = td / "bin" / "opengrep"
-        eng.write_text("#!/bin/sh\ncat <<'EOF'\n" + json.dumps({"results": [], "errors": errors}) + "\nEOF\n")
+        out = {"results": [], "errors": errors} if payload is None else payload
+        eng.write_text("#!/bin/sh\ncat <<'EOF'\n" + json.dumps(out) + "\nEOF\n")
         eng.chmod(eng.stat().st_mode | stat.S_IEXEC)
         repo = td / "repo"
         repo.mkdir()
@@ -791,6 +793,37 @@ class NotParsed(unittest.TestCase):
                 code, data = self.run_gate(td, [{"level": "warn", "type": name}], toml=allow)
             self.assertEqual(code, 2, name)
             self.assertEqual([r["name"] for r in data["runs"] if r["status"] == "error"], ["opengrep-parse"], name)
+
+    def test_unread_code_is_never_dropped_by_the_tool_error_policy(self):
+        """A parse gap reported together with a known tool error, or an error list that is not a list, always exits 2
+        as opengrep-parse, even with fail_on_tool_error = false (Cursor security review on 348783e: the gap was lost
+        on the ordinary tool-error path)."""
+        allow = "[policy]\nfail_on_tool_error = false\n"
+        for kw in ({"errors": [self.partial(self.span(a=2, b=2)), {"level": "warn", "type": "Timeout", "message": "t"}]},
+                   {"errors": None, "payload": {"results": [], "errors": None}},
+                   {"errors": None, "payload": ["not", "an", "object"]}):
+            with tempfile.TemporaryDirectory() as td:
+                code, data = self.run_gate(td, kw.pop("errors"), toml=allow, **kw)
+            self.assertEqual(code, 2, kw)
+            self.assertEqual([r["name"] for r in data["runs"] if r["status"] == "error"], ["opengrep-parse"], kw)
+
+    def test_a_gap_path_cannot_leave_the_scan_root_or_read_git(self):
+        """gap_path_ok rejects a path that climbs out after a directory (a/../../x), a symlink leaving the tree and
+        anything under .git, so no runner file reaches the report (Cursor security review on 348783e)."""
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as other:
+            root = Path(td)
+            (root / "sub").mkdir()
+            (root / ".git").mkdir()
+            (root / ".git" / "config").write_text("[core]\n")
+            (root / "a.js").write_text("a\n")
+            (Path(other) / "secret.js").write_text("s\n")
+            (root / "out.js").symlink_to(Path(other) / "secret.js")
+            (root / "in.js").symlink_to(root / "a.js")
+            climb = "sub/" + "../" * (len(root.parts) + 2) + str(Path(other) / "secret.js").lstrip("/")
+            for p in (climb, "sub/../a.js", ".git/config", "out.js"):
+                self.assertFalse(sast.gap_path_ok(root, p, ["."]), p)
+            for p in ("a.js", "in.js"):
+                self.assertTrue(sast.gap_path_ok(root, p, ["."]), p)
 
     def test_a_parse_gap_path_must_be_a_scanned_target(self):
         whole = lambda p: {"level": "warn", "type": "Other syntax error", "path": p}

@@ -607,6 +607,8 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
             # holds only warnings); any exit 2 still fails.
             p = sh(cmd + ["--"] + files, cwd, ok_codes=(0, 1, 2))
             data = json.loads(p.stdout or "{}")
+            if not isinstance(data, dict) or not isinstance(data.get("errors", []), list):
+                raise ParseGapError(f"opengrep output has no readable error list: {str(data)[:200]}")
             # every error record is classified first: a parse gap becomes a finding, an unknown or malformed
             # record raises ParseGapError (always exit 2); only then the ordinary tool-error path below
             if not ctx.baseline:     # an unparsable old file just has no old findings (base comparison)
@@ -618,7 +620,9 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
                     or (ctx.baseline and e.get("level") == "error"
                         and not any(g in str(e.get("type")) for g in (*WHOLE_FILE_ERRORS, "PartialParsing")))]
             if errs or p.returncode == 2:
-                raise RuntimeError(f"{len(errs)} engine errors (exit {p.returncode}): {str(errs[:1])[:300]}")
+                msg = f"{len(errs)} engine errors (exit {p.returncode}): {str(errs[:1])[:300]}"
+                # unread code was found too: the tool-error policy must not drop it, so this always fails
+                raise ParseGapError(f"{len(gaps)} unread range(s) found, and {msg}") if gaps else RuntimeError(msg)
             results += [(cwd, r, cwd == tr) for r in data.get("results", [])]
     out = list(gaps)
     for cwd, r, via_rename in results:
@@ -646,8 +650,9 @@ def gap_path_ok(cwd: Path, path: str, targets: list) -> bool:
     """True if path (already normalised by rel) is an existing regular file inside cwd that was one of the targets
     passed to Opengrep there ("." or a directory target covers the files under it). Rejects sentinels such as
     Semgrep's "NO FILE INFO YET" and paths outside the scan."""
-    if os.path.isabs(path) or path == ".." or path.startswith("../") or not (cwd / path).is_file():
-        return False
+    if (os.path.isabs(path) or path != os.path.normpath(path) or path == ".." or path.startswith("../")
+            or not in_repo(cwd.resolve(), cwd / path) or not (cwd / path).is_file()):
+        return False                  # also no "a/../../x", no symlink out of the tree, nothing in .git
     return any(t == "." or path == t or path.startswith(t.rstrip("/") + "/") for t in targets)
 
 
