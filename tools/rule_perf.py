@@ -155,6 +155,7 @@ def main() -> int:
     ap.add_argument("--changed-files", help="changed repo paths, one per line")
     ap.add_argument("--rules", nargs="*", help="rule files under rules/custom")
     ap.add_argument("--list", action="store_true", help="only print the repo paths of the rules it would check")
+    ap.add_argument("--started-at", type=float, help="Unix time the CI step started: the budget counts the fetches too")
     a = ap.parse_args()
     if a.list and a.changed_files:   # CI fetches these rules' base versions into --base-dir first
         for r in changed_rules(Path(a.changed_files).read_text().splitlines()):
@@ -175,7 +176,8 @@ def main() -> int:
         print("pass --changed-files or --rules", file=sys.stderr)
         return 2
     bad = err = 0
-    deadline = time.monotonic() + BUDGET   # every scan stops by then, so the step reports before its own limit
+    spent = max(0.0, time.time() - a.started_at) if a.started_at else 0.0   # time the step already used fetching
+    deadline = time.monotonic() + BUDGET - spent   # every scan stops by then, so the step reports before its own limit
     for rule in rules:
         if not SAFE_PATH.match(str(rule.relative_to(ROOT))):
             status, detail = "ERROR", "rule path has characters CI will not fetch (letters, digits, . _ - only)"

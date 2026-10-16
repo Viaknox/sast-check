@@ -89,6 +89,7 @@ jobs:
           CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          started=$(date +%s)   # the speed check's 15-minute budget counts the fetches below too
           # GitHub API calls: a transient error is retried twice; a 404 is reported to the caller; anything else
           # after three tries fails closed
           gh_get() {   # gh_get OUT ARGS...
@@ -128,7 +129,7 @@ jobs:
             if [ "$rc" = 4 ]; then rm -f "$base/$f"; fi
           done < "$RUNNER_TEMP/perf-rules.txt"
           python tools/rule_perf.py --engine "$RUNNER_TEMP/opengrep/opengrep" --base-dir "$base" \
-            --changed-files "$RUNNER_TEMP/perf-changed.txt"
+            --changed-files "$RUNNER_TEMP/perf-changed.txt" --started-at "$started"
       - name: Rule mutation check (changed rules)
         # PR #11 (many rules): 34 min on one run, over 40 on two re-runs of the same commit; 60 leaves room
         # for runner speed (the job limit above counts this, the speed check and the other steps)

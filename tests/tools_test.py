@@ -265,6 +265,19 @@ class RulePerf(unittest.TestCase):
             cwd, rel = rule_perf.big_target(fx, "rules: []\n", out)
             self.assertLessEqual((cwd / rel).stat().st_size, rule_perf.MAX_BYTES + 1_000_001)
 
+    def test_time_spent_before_the_check_counts_against_the_budget(self):
+        import subprocess  # noqa: PLC0415
+        import time  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as td:
+            changed = Path(td) / "changed.txt"
+            changed.write_text("rules/custom/js/code-eval.yaml\n")
+            # the step started 16 minutes ago (slow fetches): no time is left, so the rule is not scanned
+            r = subprocess.run([sys.executable, str(ROOT / "tools" / "rule_perf.py"), "--engine", "/bin/opengrep-absent/opengrep",
+                                "--base-dir", td, "--changed-files", str(changed), "--started-at", str(time.time() - 16 * 60)],
+                               capture_output=True, text=True, check=False)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("budget", r.stdout)
+
     def test_a_fixture_over_the_size_cap_is_an_error(self):
         old = rule_perf.MAX_BYTES
         rule_perf.MAX_BYTES = 10   # every real fixture is over this
