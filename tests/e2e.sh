@@ -697,6 +697,23 @@ if command -v strace >/dev/null && strace -o /dev/null true 2>/dev/null; then
   git checkout -q main
 fi
 
+# full scope: an exclude glob that matches the scan root (".*") must not make Gitleaks skip the whole tree
+git checkout -q -b gl-root main
+mkdir -p src vendor9 && printf '[paths]\nexclude = [".*", "vendor9*", "sast-results/**"]\n' > .sast-check.toml
+echo 'K17 = "AKIAIOSFODNN7ABCDEFG"' > src/keys.py; echo 'K17 = "AKIAIOSFODNN7ABCDEFG"' > vendor9/k.py
+git add .sast-check.toml src/keys.py vendor9 && git commit -qm r17
+gate --mode full --only gitleaks
+check "full: exclude \".*\" still reports a secret in src/keys.py" "$(q "sum(1 for f in d['findings'] if f['kind']=='secret' and f['path']=='src/keys.py')")" "1"
+check "full: ...and still drops the excluded vendor9 one"        "$(q "sum(1 for f in d['findings'] if f['path'].startswith('vendor9'))")" "0"
+# full scope: a settings file that itself has [extend] path must not break the scan (gitleaks caps extend depth)
+printf '[extend]\npath = "extra-gitleaks.toml"\n' > .gitleaks.toml && printf '[extend]\nuseDefault = true\n' > extra-gitleaks.toml
+sed -i 's/\[".\*", /[/' .sast-check.toml
+git add .gitleaks.toml extra-gitleaks.toml .sast-check.toml && git commit -qm r17b
+gate --mode full --only gitleaks
+check "full: settings with [extend] path still scan (no push-down)" "$(q "sum(1 for f in d['findings'] if f['kind']=='secret' and f['path']=='src/keys.py')")" "1"
+check "full: ...and the excluded vendor9 is still dropped"          "$(q "sum(1 for f in d['findings'] if f['path'].startswith('vendor9'))")" "0"
+git checkout -q main
+
 # r15: proposed settings are checked by the parser that will read them (once merged, a broken one fails every PR)
 git checkout -q -b r15s main
 printf '[tools]\nopengrepp = true\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm badkey

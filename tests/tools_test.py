@@ -505,6 +505,30 @@ class GlobRegex(unittest.TestCase):
                 if self.sast.glob_any(p, [g]):
                     self.assertTrue(self.sast.glob_any(p + "/x/y", [g]), (g, p))
 
+    def test_root_matching_globs_are_not_pushed_down(self):
+        """A glob that matches the scan root "." makes Gitleaks skip the whole tree, so it stays a post-filter."""
+        for g in [".*", "*.*", "**/.*", "*", "**/*", "**", "[.]*", ".?*"]:
+            self.assertEqual(self.sast.gitleaks_exclude_regexes([g]), [], g)
+        self.assertEqual(self.sast.gitleaks_exclude_regexes([".*", "vendor/**"]), [self.sast.glob_regex("vendor/**")])
+
+    def test_pushed_down_regexes_never_match_the_root(self):
+        """Whatever is pushed down must not match ".", "" or "./" (the roots Gitleaks tests first)."""
+        for g in self.GLOBS + [".*", "*.*", "**/.*"]:
+            for rx in self.sast.gitleaks_exclude_regexes([g]):
+                for root in [".", "", "./"]:
+                    self.assertIsNone(re.search(rx, root), (g, root))
+
+    def test_can_extend_only_without_extend_path(self):
+        """A settings file with [extend] path (or an unreadable one) is not extended again: depth is capped."""
+        cases = [("", True), ("[extend]\nuseDefault = true\n", True), ("[extend]\npath = \"x.toml\"\n", False),
+                 ("[extend\n", False)]
+        with tempfile.TemporaryDirectory() as td:
+            for text, want in cases:
+                f = Path(td) / "g.toml"
+                f.write_text(text)
+                self.assertEqual(self.sast.gitleaks_can_extend(f), want, text)
+            self.assertFalse(self.sast.gitleaks_can_extend(Path(td) / "missing.toml"))
+
 
 if __name__ == "__main__":
     os.chdir(ROOT)

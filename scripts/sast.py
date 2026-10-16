@@ -280,18 +280,30 @@ def glob_regex(g: str) -> str:
 
 def gitleaks_exclude_regexes(globs: list[str]) -> list[str]:
     """Regexes for the excludes Gitleaks may skip itself: only globs ending in "*", because Gitleaks also tests
-    directories and a match on a directory must imply a match on everything under it. The rest stay a
-    post-filter (gitleaks_findings)."""
+    directories and a match on a directory must imply a match on everything under it. A glob that matches the
+    scan root (".", e.g. ".*", "*.*", "**/*") is never pushed down: Gitleaks would skip the root and scan
+    nothing. The rest stay a post-filter (gitleaks_findings)."""
     out = []
     for g in globs:
         if g.endswith("*"):
             rx = glob_regex(g)
             try:
-                re.compile(rx)
+                if re.search(rx, ".") or re.search(rx, "") or re.search(rx, "./"):
+                    continue   # would exclude the root itself, hiding every non-excluded file
             except re.error:   # a pattern fnmatch accepts but regex does not: leave it to the post-filter
                 continue
             out.append(rx)
     return out
+
+
+def gitleaks_can_extend(settings: Path) -> bool:
+    """True if a generated config may [extend] this settings file. Gitleaks caps extend chains, so a file that
+    itself has [extend] path (or that we cannot parse) is not safe to build on: skip the push-down then.
+    useDefault alone is fine (the bundled config uses it)."""
+    try:
+        return not tomllib.loads(settings.read_text()).get("extend", {}).get("path")
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return False
 
 
 def rel(repo: Path, p: str) -> str:
@@ -844,8 +856,8 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
                 shutil.move(ctx.repo / ".gitleaksignore", aside)
         try:
             tree = None   # for the whole-tree run only: a link into an excluded dir is allow-listed by its target's path
-            if rx:
-                own = Path(td) / "gitleaks.toml" if ctx.base else ctx.repo / ".gitleaks.toml"   # the settings in force
+            own = Path(td) / "gitleaks.toml" if ctx.base else ctx.repo / ".gitleaks.toml"   # the settings in force
+            if rx and (not own.is_file() or gitleaks_can_extend(own)):
                 (Path(td) / "tree.toml").write_text(gitleaks_exclude_config(str(own) if own.is_file() else None, rx))
                 tree = ["--config", str(Path(td) / "tree.toml")] + settings[2:]
             reports += gitleaks_runs(ctx, runs, settings, td, alias, tree)
