@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fp_sweep  # noqa: E402
 import rule_mutation as rm  # noqa: E402
+import rule_perf  # noqa: E402
 import rules_test  # noqa: E402
 
 RULE = {"rules": [{"id": "sast.x.r", "languages": ["python"], "message": "m", "severity": "ERROR",
@@ -146,6 +147,33 @@ class BatchedMutants(unittest.TestCase):
         got = rm.batch_failures(eng, self.RULE, muts)
         self.assertEqual([bool(f) for f in got], [bool(f) for f in alone])
         self.assertTrue(any(alone) and not all(alone), "pick mutants with both outcomes")
+
+
+class RulePerf(unittest.TestCase):
+    def test_slow_only_when_both_ratio_and_seconds_are_exceeded(self):
+        self.assertTrue(rule_perf.too_slow(20.0, 6.0))      # 3.3x and 14 s slower
+        self.assertFalse(rule_perf.too_slow(2.0, 1.0))      # 2x but only 1 s: runner noise on a short scan
+        self.assertFalse(rule_perf.too_slow(14.0, 10.0))    # 4 s slower but only 1.4x
+        self.assertTrue(rule_perf.too_slow(61.0, None))     # a new rule over the cap
+        self.assertFalse(rule_perf.too_slow(59.0, None))
+
+    def test_a_failed_scan_is_an_error_not_a_pass(self):
+        with tempfile.TemporaryDirectory() as td:
+            eng = Path(td) / "opengrep"
+            eng.write_text("#!/bin/sh\nexit 7\n")
+            eng.chmod(eng.stat().st_mode | stat.S_IEXEC)
+            status, detail = rule_perf.check_rule(str(eng), rm.RULES / "js" / "code-eval.yaml", Path(td) / "base")
+        self.assertEqual(status, "ERROR", detail)
+
+    def test_yaml_fixture_becomes_separate_documents_at_a_workflow_path(self):
+        rule = rm.RULES / "gha" / "remote-fetch-no-checksum.yaml"
+        with tempfile.TemporaryDirectory() as td:
+            cwd, rel = rule_perf.big_target(rules_test.fixture_for(rule), rule.read_text(), Path(td))
+            text = (cwd / rel).read_text()
+        self.assertEqual(rel.parent, Path(".github/workflows"))
+        self.assertGreaterEqual(text.count("\n"), rule_perf.LINES // 2)
+        self.assertGreater(text.count("---\n"), 1)
+        self.assertTrue(all(d is None or isinstance(d, dict) for d in yaml.safe_load_all(text)))
 
 
 class FpReport(unittest.TestCase):

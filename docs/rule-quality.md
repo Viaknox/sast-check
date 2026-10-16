@@ -36,6 +36,19 @@ python tools/rule_mutation.py --json out.json               # all rules
 python tools/rule_mutation.py --report docs/mutation-report.json   # the committed summary (full run)
 ```
 
+## Speed: `tools/rule_perf.py`
+
+The gate scans with no per-file timeout, so a slow rule makes every PR scan slow. CI times each rule a PR
+changes against the base branch's version of the same rule, on a file built by repeating the rule's fixture to
+about 2,000 lines, with the gate's own engine flags. It fails when the changed rule is both 1.5x and 3 seconds
+slower (a second run of each confirms it first), or when a new rule takes over 60 seconds. It catches large
+slowdowns, like the 30-45x ones PR #11 found by hand; a slowdown that shows only on a different shape of code
+(PR #11's Django rule was 1.5x slower on a big handler file but 1.2x on its repeated fixture) can still pass.
+
+```
+python tools/rule_perf.py --base-dir BASE --rules js/ssrf.yaml   # BASE holds the old rule at rules/custom/js/ssrf.yaml
+```
+
 ## Noise: `tools/fp_sweep.py`
 
 Runs all rules in full mode over a pinned corpus of well-maintained open-source repositories
