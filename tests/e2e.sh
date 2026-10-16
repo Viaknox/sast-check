@@ -872,6 +872,14 @@ gate --mode diff --base HEAD~1 --only opengrep
 check "text starting with the LFS URL is not an LFS pointer" "$code" "0"
 git checkout -q main
 
+# a pointer padded past 1 KiB is still a pointer to git-lfs, so it still fails closed
+git checkout -q -b r21pad main
+{ printf 'version https://git-lfs.github.com/spec/v1\noid sha256:%064d\nsize 17\n' 0; head -c 1200 /dev/zero | tr '\0' ' '; } > src/pad.py
+git add src/pad.py && git commit -qm lfspad
+gate2 --mode diff --base HEAD~1 --only opengrep
+check "padded LFS pointer (>1 KiB) fails the check"       "$code" "2"
+git checkout -q main
+
 # r18: a '#' or '//' inside a JS regex or template literal is not a comment, so it cannot suppress
 git checkout -q -b r18 main
 cat > src/rx.js <<'JS'

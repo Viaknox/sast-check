@@ -1411,20 +1411,44 @@ def proposed_settings_error(repo: Path, name: str) -> str:
 LFS_VERSIONS = (b"https://git-lfs.github.com/spec/v1", b"https://hawser.github.com/spec/v1", b"http://git-media.io/v/2")
 
 
-def is_lfs_pointer(body: bytes) -> bool:
-    """True if `body` would be read as a Git LFS pointer: a known version line, then key/value lines with
-    `oid sha256:<64 hex>` and `size <n>`. Parsed as loosely as git-lfs does (surrounding whitespace, CRLF,
-    any final newline, legacy version URLs), because a miss here lets LFS content through unscanned; a file
-    that only mentions the URL, without oid and size, is not a pointer."""
-    if len(body) >= 1024:
-        return False
-    lines = [ln.strip() for ln in body.replace(b"\r\n", b"\n").split(b"\n") if ln.strip()]   # blank lines are skipped
-    if not lines or not lines[0].startswith(b"version ") or lines[0][8:].strip() not in LFS_VERSIONS:
+LFS_READ_MAX = 1 << 20   # blobs up to 1 MiB are checked in full; a larger one that starts like a pointer is LFS
+
+
+def lfs_pointer_loose(body: bytes) -> bool:
+    """Fallback when git-lfs is not installed: a superset of what git-lfs accepts (a version line, then
+    `oid sha256:<64 hex>` and a signed `size`, any whitespace, CRLF or padding), so a real pointer is never
+    missed; the price is that an odd file that looks like one is also flagged."""
+    text = body.decode("utf-8", "replace").replace("\r\n", "\n")
+    lines = [ln.strip().encode() for ln in text.split("\n") if ln.strip()]   # Unicode-aware strip, like git-lfs
+    if not lines or not lines[0].startswith(b"version") or lines[0][7:].strip() not in LFS_VERSIONS:
         return False
     keys = dict(ln.split(b" ", 1) for ln in lines[1:] if b" " in ln)
-    # size is read as a signed integer, as git-lfs does ("+12" is valid)
     return bool(re.fullmatch(rb"sha256:[0-9a-f]{64}", keys.get(b"oid", b"").strip())) \
         and bool(re.fullmatch(rb"[+-]?[0-9]+", keys.get(b"size", b"").strip()))
+
+
+def is_lfs_pointer(body: bytes, truncated: bool = False) -> bool:
+    """True if `body` is a Git LFS pointer. git-lfs itself decides (`git lfs pointer --check`), so every form
+    it accepts (padding, legacy URLs, CRLF, ...) is caught and nothing it rejects is; without git-lfs, a loose
+    superset is used. `truncated` means only the start of a large blob was read: then starting like a pointer
+    is enough (fail closed)."""
+    # git-lfs trims Unicode whitespace (NBSP, NEL, em space...) before parsing, so the cheap pre-check does too
+    text = body.decode("utf-8", "replace").lstrip()
+    if not text.startswith("version"):
+        return False
+    if truncated:   # only the head of a big blob was read: a pointer's first line is enough
+        first = text.split("\n", 1)[0].strip()
+        return first[7:].strip().encode() in LFS_VERSIONS
+    if not shutil.which("git-lfs"):
+        return lfs_pointer_loose(body)
+    with tempfile.NamedTemporaryFile(prefix="sast-lfs-") as tf:
+        tf.write(body)
+        tf.flush()
+        rc = subprocess.run(["git", "lfs", "pointer", "--check", f"--file={tf.name}"], capture_output=True,
+                            timeout=60).returncode
+    if rc not in (0, 1):   # 0 = valid pointer, 1 = not one (git lfs pointer --help); anything else: can't tell
+        raise RuntimeError(f"git lfs pointer --check exited {rc}")
+    return rc == 0
 
 
 def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[str, str, str]]:
@@ -1463,7 +1487,8 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[s
         if not hit:
             try:
                 with open(repo / f, "rb") as fh:
-                    hit = is_lfs_pointer(fh.read(1024))
+                    head = fh.read(LFS_READ_MAX + 1)
+                hit = is_lfs_pointer(head[:LFS_READ_MAX], truncated=len(head) > LFS_READ_MAX)
             except OSError:
                 pass
         if hit:
@@ -1472,8 +1497,8 @@ def unscanned_changes(repo: Path, base: str, changed: list[str]) -> list[tuple[s
 
 
 def lfs_pointer_blobs(repo: Path, shas: list[str]) -> set[str]:
-    """The blobs among `shas` that are Git LFS pointer files. Pointers are tiny (spec: under 1024 bytes), so
-    only small blobs are read, two git calls in all."""
+    """The blobs among `shas` that are Git LFS pointer files. Blobs up to LFS_READ_MAX are read in full in one
+    batch call; a larger blob is read only up to its first KiB (a padded pointer can be any size)."""
     if not shas:
         return set()
     def batch(flag: str, items: list[str]) -> bytes:
@@ -1482,16 +1507,22 @@ def lfs_pointer_blobs(repo: Path, shas: list[str]) -> set[str]:
         if p.returncode:
             raise RuntimeError(f"git cat-file exited {p.returncode}: {p.stderr.decode(errors='replace')[-800:]}")
         return p.stdout
-    small = []
+    small, big = [], []
     for line in batch("--batch-check", sorted(set(shas))).decode().splitlines():
         sha, kind, size = (line.split() + ["", ""])[:3]
         if kind != "blob" or not size.isdigit():   # "<sha> missing" (partial or damaged clone) is a failure, not "no"
             raise RuntimeError(f"git cat-file cannot read changed blob {sha}: {line.strip()[:120]}")
-        if int(size) < 1024:
-            small.append(sha)
+        (small if int(size) <= LFS_READ_MAX else big).append(sha)
+    found = set()
+    for sha in big:
+        with subprocess.Popen(["git", "cat-file", "blob", sha], cwd=repo, stdout=subprocess.PIPE) as pr:
+            head = pr.stdout.read(1024)
+            pr.kill()
+        if is_lfs_pointer(head, truncated=True):
+            found.add(sha)
     if not small:
-        return set()
-    found, out, i = set(), batch("--batch", small), 0
+        return found
+    out, i = batch("--batch", small), 0
     while i < len(out):   # each entry: "<sha> blob <size>\n<content>\n"
         nl = out.index(b"\n", i)
         sha, _, size = out[i:nl].decode().split()
