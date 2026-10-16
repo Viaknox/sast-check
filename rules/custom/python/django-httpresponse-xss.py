@@ -148,6 +148,16 @@ class BadRenamedMethod(View):
         return HttpResponse(req.COOKIES.get("c"))
 
 
+def bad_renamed_meta(req):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(req.META.get("HTTP_REFERER"))
+
+
+def bad_renamed_files(req):
+    # ruleid: sast.python.django-httpresponse-xss
+    return HttpResponse(req.FILES["f"].name)
+
+
 @require_POST
 def bad_decorated_body(r):
     # ruleid: sast.python.django-httpresponse-xss

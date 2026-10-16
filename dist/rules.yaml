@@ -4134,10 +4134,12 @@ rules:
       - pattern: request.body
       - pattern: request.FILES
   - patterns:
-    - pattern: $R.$A
-    - metavariable-regex:
-        metavariable: $A
-        regex: ^(GET|POST|COOKIES|META|FILES)$
+    - pattern-either:
+      - pattern: $R.GET
+      - pattern: $R.POST
+      - pattern: $R.COOKIES
+      - pattern: $R.META
+      - pattern: $R.FILES
     - pattern-either:
       - pattern-inside: 'def $F($R, ...): ...
 
@@ -4146,10 +4148,9 @@ rules:
 
           '
   - patterns:
-    - pattern: $R.$A
-    - metavariable-regex:
-        metavariable: $A
-        regex: ^(body|headers)$
+    - pattern-either:
+      - pattern: $R.body
+      - pattern: $R.headers
     - pattern-inside: '@$D
 
         def $F($R, ...): ...
