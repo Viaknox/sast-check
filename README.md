@@ -23,6 +23,7 @@ Full list: [docs/coverage.md](docs/coverage.md).
 > - **Label approval assumes only trusted people have write access.** Anyone with write access plus Actions management can delete the guard's run history, swap in old code, and make an earlier label look like approval of it.
 > - **If other people can write to the repo,** set `ALLOW_SELF_APPROVAL: "false"` in the guard workflow and use GitHub's native Code Owner review as well. GitHub binds that approval to the exact commit.
 > - **A PR's own workflow can still post a status check named `workflow-guard`.** Only a check from a trusted GitHub App closes that.
+> - **Merge queues:** workflow-guard does not run on `merge_group`, so do not make it a required check in a repository that uses a merge queue (or add a separate `merge_group` job that passes only for already-approved PRs — not provided).
 > - The planned GitHub App (step 2, [issue #5](https://github.com/SathiaAI/sast-check/issues/5)) removes both limits.
 
 **Step 0: read Known limitations above.** Then:

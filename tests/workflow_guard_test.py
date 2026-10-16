@@ -340,6 +340,7 @@ class Docs(unittest.TestCase):
         install = text[text.index("## Add it to a repo"):]
         self.assertLess(install.index("Known limitations — read before installing"), install.index("1. Copy"))
         self.assertIn("**Step 0: read Known limitations above.**", install)
+        self.assertIn("workflow-guard does not run on `merge_group`, so do not make it a required check in a repository that uses a merge queue", install)
         for needle in ("write access", "run history", "ALLOW_SELF_APPROVAL", "Code Owner review", "check named `workflow-guard`", "issue #5"):
             self.assertIn(needle, install[:install.index("1. Copy")], needle)
 
@@ -363,6 +364,32 @@ class Docs(unittest.TestCase):
             self.assertEqual(wg.LABEL_NOTE in text, want, msg)
             self.assertIn(HEAD, text)
         self.assertEqual(wg.LABEL_NOTE, "Note: label approval assumes only trusted people have write access — see README › Known limitations.")
+
+
+class Summary(unittest.TestCase):
+    def test_untrusted_paths_are_rendered_literally(self):
+        """A file name like `[x](/evil)` must not become a link: it is only ever written inside a fenced block."""
+        import os
+        import tempfile
+        evil = ".github/workflows/[x](/evil)`<b>\n- injected"
+        f = Fake(files=[{"filename": evil}], labels=[])
+        ok, msg = f.check()
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "s.md")
+            os.environ["GITHUB_STEP_SUMMARY"] = path
+            try:
+                wg.write_summary(ok, HEAD, msg)
+            finally:
+                del os.environ["GITHUB_STEP_SUMMARY"]
+            lines = Path(path).read_text().splitlines()
+        self.assertIn("```text", lines)
+        start = lines.index("```text")
+        end = lines.index("```", start + 1)
+        outside = lines[:start] + lines[end + 1:]
+        self.assertFalse(any("evil" in x or "injected" in x or "<b>" in x for x in outside), outside)
+        fenced = "\n".join(lines[start + 1:end])
+        self.assertIn(".github/workflows/[x](/evil)", fenced)
+        self.assertEqual(sum(1 for x in lines if x.startswith("```")), 2)   # nothing in the message can close the fence
 
 
 class WorkflowFile(unittest.TestCase):

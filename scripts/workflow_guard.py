@@ -267,9 +267,14 @@ def write_summary(ok: bool, head: str, msg: str) -> None:
     todo = "none" if ok else ("a repo admin must review the PR and add the approval label (see the message); "
                               "new commits remove it" if "label" in msg else "see the message; push a fix or re-run")
     with open(path, "a", encoding="utf-8") as f:
-        f.write(f"### workflow-guard: {'PASS' if ok else 'FAIL'}\n\n- Head: `{clean(head)}`\n- {msg}\n- Action needed: {todo}\n")
+        # msg holds attacker-controlled text (file names, logins). It goes into a fenced block, where Markdown is not
+        # interpreted (no links or HTML); backticks are swapped out so it cannot close the fence, and control characters
+        # (newlines included) are removed so it cannot start a new line.
+        safe = "".join(c if c.isprintable() else " " for c in msg).replace("`", "'")
+        f.write(f"### workflow-guard: {'PASS' if ok else 'FAIL'}\n\n- Head: `{clean(head)}`\n- Action needed: {todo}\n\n"
+                f"```text\n{safe}\n```\n")
         if ok and msg.startswith("approved:"):
-            f.write(f"- {LABEL_NOTE}\n")
+            f.write(f"\n{LABEL_NOTE}\n")
 
 
 def main() -> int:
