@@ -14,6 +14,7 @@ Usage:
 """
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -34,6 +35,10 @@ RATIO = 1.5          # fail when the changed rule is this many times slower...
 SLACK = 3.0          # ...and also this many seconds slower (runner noise on short scans)
 NEW_RULE_CAP = 60.0  # no base version to compare (a new rule, or one whose old paths skip the file): fail only over this
 RUNS = 2             # at most this many runs per version (the second only to confirm a failure); fastest counts
+MAX_BYTES = 4_000_000   # cap on the generated file, whatever the fixture's line length
+SCAN_TIMEOUT = 300   # one scan over this: the changed version counts as SLOW, the base version as an ERROR
+BUDGET = 15 * 60     # stop with an ERROR before the CI step's 20-minute limit, instead of being killed without a report
+SAFE_PATH = re.compile(r"^rules/custom/[A-Za-z0-9_-]+/[A-Za-z0-9._-]+\.yaml$")   # what CI may fetch and scan
 
 
 def big_target(fx: Path, rule_text: str, out: Path) -> tuple[Path, Path]:
@@ -41,7 +46,7 @@ def big_target(fx: Path, rule_text: str, out: Path) -> tuple[Path, Path]:
     YAML fixtures are joined as separate documents so the result still parses; a rule limited to workflow files
     gets the file at a workflow path, as tests/rules_test.py does."""
     text = fx.read_text(errors="ignore").rstrip("\n") + "\n"
-    n = max(1, LINES // max(1, text.count("\n")))
+    n = max(1, min(LINES // max(1, text.count("\n")), MAX_BYTES // max(1, len(text.encode()))))
     sep = "---\n" if fx.suffix in (".yml", ".yaml") else ""
     include = [p for r in yaml.safe_load(rule_text)["rules"] for p in r.get("paths", {}).get("include", [])]
     rel = Path(".github/workflows" if any(p.startswith(".github/workflows/") for p in include) else ".") / f"big{fx.suffix}"
@@ -59,14 +64,14 @@ def scan_seconds(engine: str, rule_text: str, cwd: Path, target: Path) -> tuple[
            "--x-ignore-semgrepignore-files", "--max-target-bytes=0", "--timeout", "0", "--timeout-threshold", "0",
            "--taint-intrafile", str(target)]
     t = time.monotonic()
-    r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=900, check=False)
+    r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=SCAN_TIMEOUT, check=False)
     took = time.monotonic() - t
     try:
         out = json.loads(r.stdout)
     except json.JSONDecodeError:
         out = None
     if r.returncode not in (0, 1) or not isinstance(out, dict):
-        raise RuntimeError(f"scan failed (exit {r.returncode}): {r.stderr.strip()[:200]}")
+        raise RuntimeError(f"scan failed (exit {r.returncode}): {r.stderr.strip()[-200:]}")   # the end holds the reason
     # the same filter as tests/rules_test.py: only a syntax error in the scanned code is tolerated
     errs = [e for e in out.get("errors", []) if "Syntax error" not in str(e.get("type"))
             and "PartialParsing" not in str(e.get("type"))]
@@ -80,7 +85,8 @@ def check_rule(engine: str, rule: Path, base_dir: Path) -> tuple[str, str]:
     rel = rule.relative_to(ROOT)
     head = rule.read_text()
     base_file = base_dir / rel
-    base = base_file.read_text() if base_file.is_file() and base_file.stat().st_size else None
+    # only a missing file means "new rule"; an empty or broken base version fails its scan below (an ERROR)
+    base = base_file.read_text() if base_file.is_file() else None
     fx = fixture_for(rule)
     if not fx:
         return "ERROR", "no fixture to build a test file from"
@@ -90,18 +96,24 @@ def check_rule(engine: str, rule: Path, base_dir: Path) -> tuple[str, str]:
             times = {"head": [], "base": []}
             for _ in range(RUNS):   # alternate, so a slow patch of the runner hits both versions
                 if base is not None:
-                    took, scanned = scan_seconds(engine, base, cwd, target)
+                    try:
+                        took, scanned = scan_seconds(engine, base, cwd, target)
+                    except subprocess.TimeoutExpired:
+                        return "ERROR", f"the base version did not finish in {SCAN_TIMEOUT}s: nothing to compare with"
                     if not scanned:   # the base version's paths or languages skip this file: nothing to compare
                         base = None
                     else:
                         times["base"].append(took)
-                took, scanned = scan_seconds(engine, head, cwd, target)
+                try:
+                    took, scanned = scan_seconds(engine, head, cwd, target)
+                except subprocess.TimeoutExpired:
+                    return "SLOW", f"the changed version did not finish in {SCAN_TIMEOUT}s"
                 if not scanned:
                     return "ERROR", f"the rule does not scan a file built from its own fixture ({target})"
                 times["head"].append(took)
                 if not too_slow(min(times["head"]), min(times["base"]) if base is not None else None):
                     break   # a second run only confirms a failure; a pass needs one run of each
-        except (RuntimeError, subprocess.TimeoutExpired) as e:
+        except RuntimeError as e:
             return "ERROR", str(e)
     h = min(times["head"])
     if base is None:
@@ -124,8 +136,9 @@ def main() -> int:
     ap.add_argument("--list", action="store_true", help="only print the repo paths of the rules it would check")
     a = ap.parse_args()
     if a.list and a.changed_files:   # CI fetches these rules' base versions into --base-dir first
-        for r in changed_rules(Path(a.changed_files).read_text().split()):
-            print(r.relative_to(ROOT))   # one path per line, and no line at all when no rule changed
+        for r in changed_rules(Path(a.changed_files).read_text().splitlines()):
+            if SAFE_PATH.match(str(r.relative_to(ROOT))):   # an unsafe name is never fetched; the check reports it
+                print(r.relative_to(ROOT))   # one path per line, and no line at all when no rule changed
         return 0
     if not a.engine or Path(a.engine).name != "opengrep":
         print("opengrep is required (the CI engine); install it or pass --engine", file=sys.stderr)
@@ -134,15 +147,21 @@ def main() -> int:
         print("--base-dir is required", file=sys.stderr)
         return 2
     if a.changed_files:
-        rules = changed_rules(Path(a.changed_files).read_text().split())
+        rules = changed_rules(Path(a.changed_files).read_text().splitlines())   # one path per line, spaces kept
     elif a.rules:
         rules = [RULES / r for r in a.rules]
     else:
         print("pass --changed-files or --rules", file=sys.stderr)
         return 2
     bad = err = 0
+    start = time.monotonic()
     for rule in rules:
-        status, detail = check_rule(a.engine, rule, Path(a.base_dir))
+        if not SAFE_PATH.match(str(rule.relative_to(ROOT))):
+            status, detail = "ERROR", "rule path has characters CI will not fetch (letters, digits, . _ - only)"
+        elif time.monotonic() - start > BUDGET:
+            status, detail = "ERROR", f"not checked: the {BUDGET // 60}-minute budget for this step is used up"
+        else:
+            status, detail = check_rule(a.engine, rule, Path(a.base_dir))
         print(f"{status:5} {rule.relative_to(RULES)}: {detail}", flush=True)
         bad += status == "SLOW"
         err += status == "ERROR"

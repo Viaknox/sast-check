@@ -43,7 +43,11 @@ changes against the base branch's version of the same rule, on a file built by r
 about 2,000 lines, with the gate's own engine flags. It fails when the changed rule is both 1.5x and 3 seconds
 slower (a second run of each confirms it first). A new rule, or one whose base version's paths or languages skip
 the generated file, has nothing to compare with and fails only over 60 seconds. A renamed rule is compared with its
-base version under the old name. A scan that fails or reports an engine error fails the check. It catches large
+base version under the old name. A scan that fails or reports an engine error fails the check, as does a base
+version that is empty. A changed version that takes over 5 minutes on the generated file counts as slow; a base
+version that does is an error. The step stops with an error after 15 minutes rather than be cut off at its
+20-minute limit, retries a GitHub API error twice, and only fetches rule paths made of letters, digits and `. _ -`
+(any other name fails the check). The generated file is capped at 4 MB. It catches large
 slowdowns, like the 30-45x ones PR #11 found by hand; a slowdown that shows only on a different shape of code
 (PR #11's Django rule was 1.5x slower on a big handler file but 1.2x on its repeated fixture) can still pass.
 

@@ -86,21 +86,32 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           BASE_REF: ${{ github.base_ref }}
         run: |
-          gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' > "$RUNNER_TEMP/perf-changed.txt"
-          # a renamed rule is compared with its base version under the old name
-          gh api --paginate "repos/$REPO/pulls/$PR/files" \
-            --jq '.[] | select(.previous_filename) | "\(.filename) \(.previous_filename)"' > "$RUNNER_TEMP/perf-renames.txt"
+          # GitHub API calls: a transient error is retried twice; a 404 is reported to the caller; anything else
+          # after three tries fails closed
+          gh_get() {   # gh_get OUT ARGS...
+            out="$1"; shift
+            for i in 1 2 3; do
+              if gh api "$@" > "$out" 2> "$RUNNER_TEMP/gh.err"; then return 0; fi
+              if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then return 4; fi
+              sleep $((i * 10))
+            done
+            cat "$RUNNER_TEMP/gh.err" >&2; exit 1
+          }
+          gh_get "$RUNNER_TEMP/perf-changed.txt" --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename'
+          # a renamed rule is compared with its base version under the old name (tab-separated: names may hold spaces)
+          gh_get "$RUNNER_TEMP/perf-renames.txt" --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | select(.previous_filename) | "\(.filename)\t\(.previous_filename)"'
           base="$RUNNER_TEMP/perf-base"
+          # only rule paths of letters, digits and . _ - are listed; the check itself reports any other name
           python tools/rule_perf.py --list --changed-files "$RUNNER_TEMP/perf-changed.txt" > "$RUNNER_TEMP/perf-rules.txt"
-          # the base version of each rule; only "not there yet" (404, a new rule) may be missing, any other
-          # error fails closed
+          # the base version of each rule; only "not there yet" (404, a new rule) may be missing
           while read -r f; do
             [ -n "$f" ] || continue
             mkdir -p "$base/$(dirname "$f")"
-            src=$(awk -v f="$f" '$1 == f { print $2 }' "$RUNNER_TEMP/perf-renames.txt")
-            if ! gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/${src:-$f}?ref=$BASE_REF" > "$base/$f" 2> "$RUNNER_TEMP/gh.err"; then
-              if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then rm -f "$base/$f"; else cat "$RUNNER_TEMP/gh.err" >&2; exit 1; fi
-            fi
+            src=$(awk -F '\t' -v f="$f" '$1 == f { print $2 }' "$RUNNER_TEMP/perf-renames.txt")
+            case "${src:-$f}" in *[!A-Za-z0-9._/-]*) echo "unexpected old name for $f: $src" >&2; exit 1;; esac
+            rc=0; gh_get "$base/$f" -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/${src:-$f}?ref=$BASE_REF" || rc=$?
+            if [ "$rc" = 4 ]; then rm -f "$base/$f"; fi
           done < "$RUNNER_TEMP/perf-rules.txt"
           python tools/rule_perf.py --engine "$RUNNER_TEMP/opengrep/opengrep" --base-dir "$base" \
             --changed-files "$RUNNER_TEMP/perf-changed.txt"
