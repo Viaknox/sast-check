@@ -80,6 +80,19 @@ class Protected(unittest.TestCase):
             self.assertFalse(wg.is_protected(p), p)
 
 
+class CodeOwners(unittest.TestCase):
+    def test_codeowners_lists_every_protected_path_and_never_requires_code_owner_review(self):
+        """.github/CODEOWNERS has an entry for each PROTECTED pattern and does not tell a one-person repo to
+        turn on "Require review from Code Owners" (that would block every protected-file PR for good)."""
+        text = (Path(__file__).resolve().parents[1] / ".github" / "CODEOWNERS").read_text()
+        entries = {ln.split()[0].lstrip("/") for ln in text.splitlines() if ln.strip() and not ln.startswith("#")}
+        for p in wg.PROTECTED:
+            want = p[:-1] if p.endswith("/*") else p
+            self.assertIn(want, entries, p)
+        self.assertIn('Do NOT turn on\n# "Require review from Code Owners"', text)
+        self.assertNotIn("need a code-owner review", text)
+
+
 class Verdict(unittest.TestCase):
     def test_no_protected_paths_passes_without_label(self):
         f = Fake(files=[{"filename": "README.md"}], labels=[], events=[], runs=[])
