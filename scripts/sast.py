@@ -108,6 +108,15 @@ class ParseGapError(RuntimeError):
     or an unknown error type). Always fails the check: an unread gap must never be ignored silently."""
 
 
+class PartialRunError(RuntimeError):
+    """A scanner hit a tool error but still returned results: the findings it did produce are kept (and can block)
+    and the run is recorded as an error, so fail_on_tool_error = false never discards a real finding."""
+
+    def __init__(self, msg: str, findings: list):
+        super().__init__(msg)
+        self.findings = findings
+
+
 @dataclass
 class Finding:
     tool: str
@@ -593,6 +602,8 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     direct = [f for f in tg if f not in linked and f not in renamed.values()]
     results = []
     gaps: list[Finding] = []
+    tool_errs: list[str] = []
+    tool_err = ""
     with tempfile.TemporaryDirectory() as td:
         # separate trees: a renamed copy (src/tool -> src/tool.js) must never overwrite a linked src/tool.js
         tl, tr = Path(td) / "linked", Path(td) / "renamed"
@@ -619,11 +630,14 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
             errs = [e for e in data.get("errors", []) if error_name(e) in KNOWN_TOOL_ERRORS
                     or (ctx.baseline and e.get("level") == "error"
                         and not any(g in str(e.get("type")) for g in (*WHOLE_FILE_ERRORS, "PartialParsing")))]
-            if errs or p.returncode == 2:
-                msg = f"{len(errs)} engine errors (exit {p.returncode}): {str(errs[:1])[:300]}"
-                # unread code was found too: the tool-error policy must not drop it, so this always fails
-                raise ParseGapError(f"{len(gaps)} unread range(s) found, and {msg}") if gaps else RuntimeError(msg)
             results += [(cwd, r, cwd == tr) for r in data.get("results", [])]
+            if errs or p.returncode == 2:
+                tool_errs.append(f"{len(errs)} engine errors (exit {p.returncode}): {str(errs[:1])[:300]}")
+    if tool_errs:
+        # unread code was found too: the tool-error policy must not drop it, so this always fails
+        if gaps:
+            raise ParseGapError(f"{len(gaps)} unread range(s) found, and {'; '.join(tool_errs)}")
+        tool_err = "; ".join(tool_errs)
     out = list(gaps)
     for cwd, r, via_rename in results:
         md = r["extra"].get("metadata", {})
@@ -637,6 +651,8 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
             fix=md.get("fix", ""), cwe=str(md.get("cwe", "")),
             url=(md.get("references") or [""])[0],
         ))
+    if tool_err:
+        raise PartialRunError(tool_err, out)   # keep what was found; the run still counts as a tool error
     return out
 
 
@@ -1905,6 +1921,10 @@ def main(argv=None) -> int:
             # installed are reported as skipped)
             engine_missing = engine_missing or name == "opengrep"
             ctx.runs.append(ToolRun(name, "error" if name == "opengrep" else "skipped", str(e)))
+        except PartialRunError as e:
+            # the findings the scanner did return still count (and can block); the run is a tool error
+            findings += e.findings
+            ctx.runs.append(ToolRun(name, "error", str(e)[:400]))
         except ParseGapError as e:
             # a parse gap Opengrep reported in a form we cannot place: the scan is incomplete (always fails)
             ctx.runs.append(ToolRun("opengrep-parse", "error", str(e)[:400]))

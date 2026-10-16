@@ -807,6 +807,23 @@ class NotParsed(unittest.TestCase):
             self.assertEqual(code, 2, kw)
             self.assertEqual([r["name"] for r in data["runs"] if r["status"] == "error"], ["opengrep-parse"], kw)
 
+    def test_a_tolerated_tool_error_keeps_the_findings_the_scanner_returned(self):
+        """With fail_on_tool_error = false, a known tool error (e.g. a "Too many matches" warning from one noisy
+        file) is recorded but the results Opengrep did return still block (Codex security review on 348783e:
+        they were dropped and the gate passed)."""
+        hit = {"check_id": "rules.sast.js.code-eval", "path": "a.js", "start": {"line": 2}, "end": {"line": 2},
+               "extra": {"message": "eval of user input", "metadata": {"sast_severity": "critical", "confidence": "high"}}}
+        noisy = {"level": "warn", "type": "Too many matches", "message": "m"}
+        with tempfile.TemporaryDirectory() as td:
+            code, data = self.run_gate(td, None, toml="[policy]\nfail_on_tool_error = false\n",
+                                       payload={"results": [hit], "errors": [noisy]})
+        self.assertEqual(code, 1)
+        self.assertEqual([(f["rule"], f["blocking"]) for f in data["findings"]], [("sast.js.code-eval", True)])
+        self.assertEqual([r["name"] for r in data["runs"] if r["status"] == "error"], ["opengrep"])
+        with tempfile.TemporaryDirectory() as td:                       # default policy: the tool error still fails
+            code, _ = self.run_gate(td, None, payload={"results": [hit], "errors": [noisy]})
+        self.assertEqual(code, 2)
+
     def test_a_gap_path_cannot_leave_the_scan_root_or_read_git(self):
         """gap_path_ok rejects a path that climbs out after a directory (a/../../x), a symlink leaving the tree and
         anything under .git, so no runner file reaches the report (Cursor security review on 348783e)."""
