@@ -6,6 +6,8 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 for t in ${E2E_REQUIRE:-}; do   # optional scanners whose checks must run (CI sets this)
   command -v "$t" >/dev/null || { echo "FAIL - $t required by E2E_REQUIRE but not installed"; exit 1; }
 done
+case " ${E2E_REQUIRE:-} " in *" strace "*)   # required: strace that cannot trace its own child (ptrace blocked) fails
+  strace -o /dev/null true 2>/dev/null || { echo "FAIL - strace required by E2E_REQUIRE but cannot trace"; exit 1; };; esac
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 cd "$T"
 git init -q -b main && git config user.email t@example.com && git config user.name t
@@ -673,6 +675,43 @@ mkdir -p vendor && echo 'K14 = "AKIAIOSFODNN7ABCDEFG"' > vendor/key14.py && ln -
 git add vendor/key14.py src/key14.py && git commit -qm r14
 gate --mode full --base HEAD~1 --only gitleaks
 check "full: a link to an excluded secret file blocks"    "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/key14.py')")" "1"
+git checkout -q main
+
+# full scope: an excluded tree is never opened by Gitleaks (strace records every openat of the real run;
+# git's own .gitattributes probes during the history scan are not Gitleaks reading the tree)
+if command -v strace >/dev/null && strace -o /dev/null true 2>/dev/null; then
+  git checkout -q -b gl-excl main
+  mkdir -p "big dir/sub" src/vendor2 && printf '[paths]\nexclude = ["big dir/**", "src/vendor2*", "sast-results/**"]\n' > .sast-check.toml
+  echo 'K16 = "AKIAIOSFODNN7ABCDEFG"' > "big dir/sub/k.py"; echo 'K16 = "AKIAIOSFODNN7ABCDEFG"' > src/vendor2/k.py
+  echo 'K16 = "AKIAIOSFODNN7ABCDEFG"' > src/live16.py
+  git add .sast-check.toml "big dir" src/vendor2 src/live16.py && git commit -qm r16
+  mkdir -p "$T/shim" && printf '#!/bin/sh\nexec strace -A -f -e trace=openat -o "$T_STRACE" "%s" "$@"\n' "$(command -v gitleaks)" > "$T/shim/gitleaks" && chmod +x "$T/shim/gitleaks"
+  rm -f "$T/strace.log"; T_STRACE="$T/strace.log" PATH="$T/shim:$PATH" gate --mode full --only gitleaks
+  check "full: gitleaks opens a non-excluded file (strace works)" "$(grep -c 'live16.py' "$T/strace.log")" "1"
+  check "full: gitleaks never opens a file in an excluded dir"    "$(grep -E 'big dir/|vendor2/' "$T/strace.log" | grep -vc '\.gitattributes')" "0"
+  check "full: secret in a non-excluded path still blocks"        "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/live16.py')")" "1"
+  check "full: nothing is reported from excluded dirs"            "$(q "sum(1 for f in d['findings'] if f['path'].startswith(('big dir','src/vendor2')))")" "0"
+  rm -f "$T/strace.log"; T_STRACE="$T/strace.log" PATH="$T/shim:$PATH" gate --mode full --base HEAD --only gitleaks   # PR scan: settings come from the base
+  check "full + base: an excluded dir is never opened"           "$(grep -E 'big dir/|vendor2/' "$T/strace.log" | grep -vc '\.gitattributes')" "0"
+  check "full + base: secret in a non-excluded path still blocks" "$(q "sum(f['blocking'] for f in d['findings'] if f['kind']=='secret' and f['path']=='src/live16.py')")" "1"
+  git checkout -q main
+fi
+
+# full scope: an exclude glob that matches the scan root (".*") must not make Gitleaks skip the whole tree
+git checkout -q -b gl-root main
+mkdir -p src vendor9 && printf '[paths]\nexclude = [".*", "vendor9*", "sast-results/**"]\n' > .sast-check.toml
+echo 'K17 = "AKIAIOSFODNN7ABCDEFG"' > src/keys.py; echo 'K17 = "AKIAIOSFODNN7ABCDEFG"' > vendor9/k.py
+git add .sast-check.toml src/keys.py vendor9 && git commit -qm r17
+gate --mode full --only gitleaks
+check "full: exclude \".*\" still reports a secret in src/keys.py" "$(q "sum(1 for f in d['findings'] if f['kind']=='secret' and f['path']=='src/keys.py')")" "1"
+check "full: ...and still drops the excluded vendor9 one"        "$(q "sum(1 for f in d['findings'] if f['path'].startswith('vendor9'))")" "0"
+# full scope: a settings file that itself has [extend] path must not break the scan (gitleaks caps extend depth)
+printf '[extend]\npath = "extra-gitleaks.toml"\n' > .gitleaks.toml && printf '[extend]\nuseDefault = true\n' > extra-gitleaks.toml
+sed -i 's/\[".\*", /[/' .sast-check.toml
+git add .gitleaks.toml extra-gitleaks.toml .sast-check.toml && git commit -qm r17b
+gate --mode full --only gitleaks
+check "full: settings with [extend] path still scan (no push-down)" "$(q "sum(1 for f in d['findings'] if f['kind']=='secret' and f['path']=='src/keys.py')")" "1"
+check "full: ...and the excluded vendor9 is still dropped"          "$(q "sum(1 for f in d['findings'] if f['path'].startswith('vendor9'))")" "0"
 git checkout -q main
 
 # r15: proposed settings are checked by the parser that will read them (once merged, a broken one fails every PR)

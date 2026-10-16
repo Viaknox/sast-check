@@ -273,6 +273,60 @@ def glob_any(path: str, globs: list[str]) -> bool:
                for g in globs)
 
 
+def glob_regex(g: str) -> str:
+    """Regex (Python and RE2/Go safe) matching exactly the paths glob_any matches for this one glob."""
+    def tr(p: str) -> str:
+        """Translate fnmatch syntax to regex; a bracket inside a class is escaped so RE2 reads no POSIX class."""
+        out, i, n = [], 0, len(p)
+        while i < n:
+            c, i = p[i], i + 1
+            if c in "*?":
+                out.append(".*" if c == "*" else ".")
+            elif c == "[":
+                j = i + (i < n and p[i] == "!")
+                j += j < n and p[j] == "]"
+                while j < n and p[j] != "]":
+                    j += 1
+                if j >= n:
+                    out.append("\\[")
+                    continue
+                stuff = p[i:j].replace("\\", "\\\\").replace("[", "\\[")
+                i = j + 1
+                out.append("[" + ("^" + stuff[1:] if stuff[0] == "!" else "\\" + stuff if stuff[0] == "^" else stuff) + "]")
+            else:
+                out.append(re.escape(c))
+        return "".join(out)
+    return f"(?s)^(?:{tr(g)}|(?:.*/)?{tr(g[3:] if g.startswith('**/') else g)})$"
+
+
+def gitleaks_exclude_regexes(globs: list[str]) -> list[str]:
+    """Regexes for the excludes Gitleaks may skip itself: only globs ending in "*", because Gitleaks also tests
+    directories and a match on a directory must imply a match on everything under it. A glob that matches the
+    scan root (".", e.g. ".*", "*.*", "**/*") is never pushed down: Gitleaks would skip the root and scan
+    nothing. The rest stay a post-filter (gitleaks_findings)."""
+    out = []
+    for g in globs:
+        if g.endswith("*"):
+            rx = glob_regex(g)
+            try:
+                if re.search(rx, ".") or re.search(rx, "") or re.search(rx, "./"):
+                    continue   # would exclude the root itself, hiding every non-excluded file
+            except re.error:   # a pattern fnmatch accepts but regex does not: leave it to the post-filter
+                continue
+            out.append(rx)
+    return out
+
+
+def gitleaks_can_extend(settings: Path) -> bool:
+    """True if a generated config may [extend] this settings file. Gitleaks caps extend chains, so a file that
+    itself has [extend] path (or that we cannot parse) is not safe to build on: skip the push-down then.
+    useDefault alone is fine (the bundled config uses it)."""
+    try:
+        return not tomllib.loads(settings.read_text()).get("extend", {}).get("path")
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return False
+
+
 def rel(repo: Path, p: str) -> str:
     """Repo-relative form of a scanner-reported path. Symlinks are not followed: a finding in a PR's new
     symlink keeps the symlink's path, which is what the changed-line map is keyed by."""
@@ -897,6 +951,9 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
         # allow-list its own secret). gitleaks always also reads <repo>/.gitleaksignore, so the PR's copy
         # is moved aside for the scan and put back afterwards.
         settings, aside = [], None
+        # full scope: Gitleaks skips the excluded trees itself instead of reading them (findings are filtered anyway)
+        rx = [] if ctx.mode == "diff" or os.environ.get("GITLEAKS_CONFIG") or os.environ.get("GITLEAKS_CONFIG_TOML") \
+            else gitleaks_exclude_regexes(ctx.cfg["paths"]["exclude"])
         if ctx.base:
             conf = settings_file(ctx.repo, ctx.base, ".gitleaks.toml")
             if conf is not None and tomllib.loads(conf).get("extend", {}).get("path"):
@@ -911,22 +968,34 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
                 aside = Path(td) / "pr.gitleaksignore"
                 shutil.move(ctx.repo / ".gitleaksignore", aside)
         try:
-            reports += gitleaks_runs(ctx, runs, settings, td, alias)
+            tree = None   # for the whole-tree run only: a link into an excluded dir is allow-listed by its target's path
+            own = Path(td) / "gitleaks.toml" if ctx.base else ctx.repo / ".gitleaks.toml"   # the settings in force
+            if rx and (not own.is_file() or gitleaks_can_extend(own)):
+                (Path(td) / "tree.toml").write_text(gitleaks_exclude_config(str(own) if own.is_file() else None, rx))
+                tree = ["--config", str(Path(td) / "tree.toml")] + settings[2:]
+            reports += gitleaks_runs(ctx, runs, settings, td, alias, tree)
         finally:
             if aside:
                 shutil.move(aside, ctx.repo / ".gitleaksignore")
     return gitleaks_findings(ctx, reports)
 
 
+def gitleaks_exclude_config(extend: str | None, regexes: list[str]) -> str:
+    """Gitleaks config that extends the given file (default: built-in rules) and allow-lists these path regexes."""
+    ext = f"path = {json.dumps(extend)}" if extend else "useDefault = true"
+    return f"[extend]\n{ext}\n\n[[allowlists]]\npaths = [{', '.join(json.dumps(r) for r in regexes)}]\n"
+
+
 def gitleaks_runs(ctx: Ctx, runs: list[list[str]], settings: list[str], td: str,
-                  alias: dict[int, str] | None = None) -> list[dict]:
+                  alias: dict[int, str] | None = None, tree: list[str] | None = None) -> list[dict]:
     """Run each gitleaks command with the given settings flags; return the raw JSON findings.
-    alias: run index -> path to report its findings under (a symlink scanned through its target)."""
+    alias: run index -> path to report its findings under (a symlink scanned through its target).
+    tree: settings for the whole-tree run (`dir .`) instead, when it should skip excluded dirs."""
     reports = []
     for i, cmd in enumerate(runs):
         rp = Path(td) / f"g{i}.json"
         # --ignore-gitleaks-allow: a PR's `gitleaks:allow` must not hide a secret
-        opts = settings + ["--ignore-gitleaks-allow", "--redact", "--no-banner", "--exit-code", "0", "--report-format", "json",
+        opts = (tree if tree and cmd == ["gitleaks", "dir", "."] else settings) + ["--ignore-gitleaks-allow", "--redact", "--no-banner", "--exit-code", "0", "--report-format", "json",
                            "--report-path", str(rp)]
         p = sh(cmd[:2] + opts + cmd[2:], ctx.repo)               # options before any "--" / target
         # gitleaks logs a failed `git log` (e.g. a textconv filter) as ERR, then reports "no leaks" and
