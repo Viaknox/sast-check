@@ -6,10 +6,13 @@ Runs from the base branch only (see .github/workflows/workflow-guard.yml); never
 Approval model (label based, fail closed):
   * a repo admin/maintainer reviews the PR and adds the label APPROVAL_LABEL;
   * the label counts only if the LATEST `labeled` event for it was made by a human admin/maintainer AND the server
-    timestamp of that event is strictly later than the first workflow run GitHub created for the current head commit
-    (that run's created_at is when the head was pushed). Labels are not bound to a commit, and commit dates are
-    forgeable by the PR author, so both timestamps used here are assigned by GitHub's servers;
-  * a new commit therefore invalidates the approval by itself; removing the label on `synchronize` is only cleanup.
+    timestamp of that event is strictly later than the LATEST push-like run of this workflow for the current head
+    (opened, reopened, synchronize or edited; the run-name carries action and head sha, and created_at is when GitHub
+    saw the event). Labels are not bound to a commit, and commit dates are forgeable by the PR author, so both
+    timestamps used here are assigned by GitHub's servers. Re-pushing an old commit makes a new synchronize run, so it
+    voids the label; an `edited` run (e.g. a base retarget or a title edit) voids it too, which fails closed;
+  * a new commit therefore invalidates the approval by itself; on `synchronize` a label older than the push is removed
+    as UI tidying (one added after the push is kept); nothing depends on it.
 Env: GH_TOKEN, REPO, PR_NUMBER, HEAD_SHA (head the event was raised for), EVENT_ACTION (optional), and the optional
 settings APPROVAL_LABEL, ALLOW_SELF_APPROVAL ("true" default / "false"). Settings come from the base workflow file only.
 Any error fails the check (exit 1).
@@ -25,6 +28,7 @@ from urllib.parse import quote
 
 APPROVAL_LABEL = "workflow-change-approved"
 WORKFLOW_FILE = ".github/workflows/workflow-guard.yml"
+PUSH_ACTIONS = ("opened", "reopened", "synchronize", "edited")   # events that can change what the PR contains
 PROTECTED = (".github/workflows/*", "action.yml", "action.yaml", "CODEOWNERS", ".github/CODEOWNERS",
              "docs/CODEOWNERS", ".sast-check.toml", ".gitleaks.toml", ".gitleaksignore", ".github/zizmor.yml",
              ".github/zizmor.yaml", "zizmor.yml", "zizmor.yaml", "osv-scanner.toml", "trivy.yaml", ".trivyignore",
@@ -130,32 +134,56 @@ def latest_label_event(events: list, label: str):
     return best
 
 
-def first_push_time(resp, head: str, pr: int, ref: str, head_repo: str):
-    """Earliest created_at of this guard's runs for head (when GitHub first saw the head), or None if there is none.
+def base_changed_since(events: list, label_time: datetime) -> bool:
+    """True if a `base_ref_changed` event is not strictly earlier than the label (the approved diff may differ).
 
-    resp is the actions/runs response: one object, or a list of page objects. Runs of other workflows, events or PRs, and
-    runs for the same commit on another branch or repository (head_branch / head_repository must match the PR's head ref
-    and repo; a run without head_repository is skipped), are ignored; a matching run with a bad timestamp raises (fail closed).
+    A retarget changes which files the PR changes, so an approval given before it was for another diff. Events other
+    than base_ref_changed are ignored; a bad timestamp on a base_ref_changed event raises (fail closed).
+    """
+    return any(isinstance(ev, dict) and ev.get("event") == "base_ref_changed"
+               and not label_time > parse_ts(ev.get("created_at")) for ev in events)
+
+
+def push_time(resp, head: str, pr: int, ref: str, head_repo: str):
+    """Latest created_at of this guard's push-like runs for head (when GitHub last saw the head change), or None.
+
+    resp is the actions/runs response: one object, or a list of page objects. A run counts only if it is for head, from
+    this workflow's pull_request_target, from this PR's head branch and repository (a run without head_repository is
+    skipped), not for a different PR, and its display_title (the run-name set in the base workflow file) is exactly
+    "workflow-guard <opened|reopened|synchronize|edited> <head>". Label runs never count. Status and conclusion are
+    ignored, so a run cancelled by concurrency still counts. A matching run with a bad timestamp raises (fail closed).
     """
     pages = [resp] if isinstance(resp, dict) else resp
     if not isinstance(pages, list) or not all(isinstance(pg, dict) and isinstance(pg.get("workflow_runs"), list) for pg in pages):
         raise TypeError("workflow runs response is malformed")
+    titles = {f"workflow-guard {a} {head}" for a in PUSH_ACTIONS}
     times = []
     for pg in pages:
         for run in pg["workflow_runs"]:
             if not isinstance(run, dict) or run.get("head_sha") != head or run.get("event") != "pull_request_target":
                 continue
-            if str(run.get("path") or "").split("@")[0] != WORKFLOW_FILE:
+            if str(run.get("path") or "").split("@")[0] != WORKFLOW_FILE or run.get("display_title") not in titles:
                 continue
             repo_of_run = run.get("head_repository")
             if (run.get("head_branch") != ref or not isinstance(repo_of_run, dict)
                     or not same_label(repo_of_run.get("full_name"), head_repo)):
-                continue   # the same commit pushed earlier elsewhere does not date this PR's push
+                continue   # the same commit pushed elsewhere does not date this PR's push
             prs = run.get("pull_requests")
             if isinstance(prs, list) and prs and not any(isinstance(p, dict) and p.get("number") == pr for p in prs):
-                continue   # the same commit pushed for a different PR does not date this PR's push
+                continue
             times.append(parse_ts(run["created_at"]))
-    return min(times) if times else None
+    return max(times) if times else None
+
+
+def label_is_stale(get, repo: str, pr: int, head: str, ref: str, head_repo: str, label: str) -> bool:
+    """True if the approval label does not date from after the head was pushed (no event, no run, or not strictly later).
+
+    Uses the same evidence as the verdict. Runs are counted whatever their status (see push_time). API or timestamp errors propagate (the caller fails closed).
+    """
+    ev = latest_label_event(get(f"repos/{repo}/issues/{pr}/events"), label)
+    pushed = push_time(get(f"repos/{repo}/actions/runs?head_sha={head}&event=pull_request_target&per_page=100"),
+                             head, pr, ref, head_repo)
+    return ev is None or pushed is None or not parse_ts(ev.get("created_at")) > pushed
 
 
 def check(repo: str, pr: int, event_head: str, get=gh_get, delete=gh_delete, action: str = "",
@@ -173,7 +201,12 @@ def check(repo: str, pr: int, event_head: str, get=gh_get, delete=gh_delete, act
             return False, (f"stale run: event is for {clean(event_head)[:7] or 'no commit'} but the PR head is {head[:7]}; "
                            "a newer run covers it")
         quoted = quote(label, safe="")
-        if action == "synchronize" and has_label(info, label):   # cleanup only; the timestamp check does not rely on it
+        ref, head_repo = info["head"]["ref"], info["head"]["repo"]["full_name"]   # a deleted fork has repo null: fails closed
+        if not isinstance(ref, str) or not isinstance(head_repo, str):
+            raise TypeError("PR head ref or repository is malformed")
+        # cleanup only (the timestamp check does not rely on it): drop a label that predates the new head's push, but
+        # keep one an admin added after the push, which a delayed synchronize run must not remove
+        if action == "synchronize" and has_label(info, label) and label_is_stale(get, repo, pr, head, ref, head_repo, label):
             try:
                 delete(f"repos/{repo}/issues/{pr}/labels/{quoted}")
             except RuntimeError as e:
@@ -196,7 +229,8 @@ def check(repo: str, pr: int, event_head: str, get=gh_get, delete=gh_delete, act
                 f"`{clean(label)}`. Any new commit removes the approval.")
         if not has_label(info, label):
             return False, need
-        ev = latest_label_event(get(f"repos/{repo}/issues/{pr}/events"), label)
+        events = get(f"repos/{repo}/issues/{pr}/events")
+        ev = latest_label_event(events, label)
         if ev is None:
             return False, need + " (the label is present but no `labeled` event was found)"
         actor = ev.get("actor")
@@ -210,15 +244,15 @@ def check(repo: str, pr: int, event_head: str, get=gh_get, delete=gh_delete, act
             author = info["user"]["login"]
             if not isinstance(author, str) or author.casefold() == login.casefold():
                 return False, f"`{clean(login)}` is the PR author and self-approval is disabled; another admin must add the label"
-        ref, head_repo = info["head"]["ref"], info["head"]["repo"]["full_name"]   # a deleted fork has repo null: fails closed
-        if not isinstance(ref, str) or not isinstance(head_repo, str):
-            raise TypeError("PR head ref or repository is malformed")
-        pushed = first_push_time(get(f"repos/{repo}/actions/runs?head_sha={head}&event=pull_request_target&per_page=100"),
+        pushed = push_time(get(f"repos/{repo}/actions/runs?head_sha={head}&event=pull_request_target&per_page=100"),
                                  head, pr, ref, head_repo)
         if pushed is None:
-            return False, f"no workflow-guard run found for {head[:7]}, so its push time is unknown (failing closed); " + need
-        if not parse_ts(ev.get("created_at")) > pushed:
+            return False, f"no matching workflow-guard run found for {head[:7]}, so its push time is unknown (failing closed); " + need
+        label_time = parse_ts(ev.get("created_at"))
+        if not label_time > pushed:
             return False, f"the label was added before the current head {head[:7]} was pushed; " + need
+        if base_changed_since(events, label_time):
+            return False, "the PR's base branch changed after the label was added, so the approved diff may differ; " + need
         return True, f"approved: `{clean(label)}` added by `{clean(login)}` after {head[:7]} was pushed ({listing(hit)})"
     except (RuntimeError, KeyError, TypeError, ValueError, AttributeError) as e:
         return False, f"guard could not verify (failing closed): {clean(e)}"

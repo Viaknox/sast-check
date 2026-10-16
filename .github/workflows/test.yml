@@ -73,6 +73,8 @@ jobs:
         run: OPENGREP="$RUNNER_TEMP/opengrep/opengrep" python tests/tools_test.py
       - name: Learner rule tests (tools/learner_rules.py, offline with canned drafts)
         run: OPENGREP="$RUNNER_TEMP/opengrep/opengrep" python tests/learner_rules_test.py
+      - name: Workflow guard tests (scripts/workflow_guard.py, fake API; needs PyYAML from the install step)
+        run: python tests/workflow_guard_test.py
       - name: Rule speed check (changed rules)
         # a changed rule must not be much slower than the base branch's version on a large file built from its
         # fixture (tools/rule_perf.py; PR #11 found two 30-45x slowdowns by hand)
