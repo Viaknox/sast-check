@@ -26,6 +26,7 @@ Full list: [docs/coverage.md](docs/coverage.md).
 > - **Public repositories, from November 2, 2026:** GitHub blocks `pull_request_target` by default in public repos without an Actions event policy that allows it ([GitHub docs](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target)). Before making `workflow-guard` required, add one: repo **Settings → Actions → Policies**, new policy allowing `pull_request_target`. Otherwise the check never runs and every PR waits for it forever.
 > - **A PR's own workflow can still post a status check named `workflow-guard`.** Only a check from a trusted GitHub App closes that.
 > - **Merge queues:** workflow-guard does not run on `merge_group`, so do not make it a required check in a repository that uses a merge queue (or add a separate `merge_group` job that passes only for already-approved PRs — not provided).
+> - **Very busy repositories:** GitHub lists at most 1,000 workflow runs per search. If the guard runs 1,000+ times repo-wide while one protected-file PR stays open, that PR's check fails closed and cannot pass; open a fresh PR for the same branch. Tracked in [issue #27](https://github.com/SathiaAI/sast-check/issues/27).
 > - The planned GitHub App (step 2, [issue #5](https://github.com/SathiaAI/sast-check/issues/5)) removes the write-access and check-name limits.
 
 **Step 0: read Known limitations above.** Then:
