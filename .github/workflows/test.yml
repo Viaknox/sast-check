@@ -31,7 +31,7 @@ jobs:
           OPENGREP_VERSION: v1.30.2
         run: |
           set -euo pipefail
-          python -m pip install --quiet "pyyaml==6.0.3" "ruff==0.16.8" "zizmor==1.30.1" "semgrep==1.180.0"
+          python -m pip install --quiet "pyyaml==6.0.3" "ruff==0.16.8" "zizmor==1.30.1"
           go install github.com/zricethezav/gitleaks/v8@v8.30.1
           go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0   # same pin as action.yml
           d="$RUNNER_TEMP/opengrep"; mkdir -p "$d"
@@ -67,9 +67,7 @@ jobs:
           base_file rules/RETIRED.txt "$RUNNER_TEMP/base-retired.txt"
           python scripts/build_rules.py --base-lock "$RUNNER_TEMP/base-rule-ids.lock" \
             --base-retired "$RUNNER_TEMP/base-retired.txt" && git diff --exit-code dist/
-      - name: Rule tests (semgrep CE)
-        run: python tests/rules_test.py --engine "$(command -v semgrep)"
-      - name: Rule tests (opengrep - the CI engine)
+      - name: Rule tests (opengrep, the only engine)
         run: python tests/rules_test.py --engine "$RUNNER_TEMP/opengrep/opengrep"
       - name: Rule-quality tool tests
         run: OPENGREP="$RUNNER_TEMP/opengrep/opengrep" python tests/tools_test.py

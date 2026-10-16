@@ -12,7 +12,7 @@ python tools/learner_rules.py --patterns patterns.json --report run.json --open-
 
 ## When a draft is accepted
 
-Every check runs with Opengrep and Semgrep CE (CI tests rules with both). The first failure rejects the draft.
+Every check runs with Opengrep, the only engine sast-check supports. The first failure rejects the draft.
 
 | Check | Why |
 |---|---|
@@ -52,4 +52,4 @@ to `rules/custom/`; the reason is printed and written to `--report`.
 - The clean-code check uses this repo only; the fuller noise check is `tools/fp_sweep.py`.
 
 Tests: `python tests/learner_rules_test.py` (offline: canned drafts in `tests/fixtures/learner/drafts.json` stand in
-for the model; needs opengrep and semgrep).
+for the model; needs opengrep).

@@ -191,7 +191,7 @@ def main() -> int:
     if unknown := sorted(set(a.repos or []) - {c["repo"] for c in corpus}):   # a typo must not "succeed" with 0 scans
         print(f"not in tools/fp-corpus.json: {', '.join(unknown)}", file=sys.stderr)
         return 2
-    if not shutil.which("opengrep"):   # sast.py would fall back to semgrep: scores must come from the CI engine
+    if not shutil.which("opengrep"):   # the only engine sast.py runs; say so before cloning anything
         print("opengrep is required for a sweep (the CI engine); install it first", file=sys.stderr)
         return 2
     # sast.py reuses dist/rules.yaml: rebuild it so the sweep scans the rules as they are now

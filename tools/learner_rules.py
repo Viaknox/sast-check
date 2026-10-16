@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Learner P3: turn recurring review findings (patterns.json from the quality-gate learner) into custom rules.
 
-For each pattern with >= 3 hits, a cheap model on OpenRouter drafts an Opengrep/Semgrep rule and a synthetic
+For each pattern with >= 3 hits, a cheap model on OpenRouter drafts an Opengrep rule and a synthetic
 fixture. The draft is accepted only if, with every engine CI uses:
   - it matches every "before" example, including the held-out ones the model never saw (every third example),
   - it matches none of the "after" examples,
@@ -138,7 +138,7 @@ def prompt(p: dict, train: list[dict], rule_id: str, ext: str, feedback: str) ->
     cwe_field = "" if p["cwe"] else '\n- "cwe": the CWE id that fits this weakness best, as CWE-<n>.'
     ex = "\n\n".join(f"### Example {i + 1}\nVulnerable (before):\n```\n{e['before']}\n```\nFixed (after):\n```\n{e['after']}\n```"
                      for i, e in enumerate(train))
-    return f"""Write one Opengrep/Semgrep rule (language: {p['stack']}) for this recurring weakness.
+    return f"""Write one Opengrep rule (language: {p['stack']}) for this recurring weakness.
 
 Weakness: {p['summary']}
 Kind of mistake: {p.get('pattern', 'unknown')}
@@ -165,7 +165,7 @@ def draft_with_llm(p: dict, train: list[dict], rule_id: str, ext: str, feedback:
     """Ask the model for a draft. Returns the parsed JSON object; raises Reject on any failure."""
     key = os.environ.get("OPENROUTER_API_KEY", "")
     body = json.dumps({"model": model, "temperature": 0.2, "messages": [
-        {"role": "system", "content": "You write precise Opengrep/Semgrep security rules. Reply with JSON only."},
+        {"role": "system", "content": "You write precise Opengrep security rules. Reply with JSON only."},
         {"role": "user", "content": prompt(p, train, rule_id, ext, feedback)}]}).encode()
     req = urllib.request.Request(OPENROUTER_URL, data=body, method="POST", headers={
         "Authorization": f"Bearer {key}", "Content-Type": "application/json", "X-Title": "sast-check learner"})
@@ -256,8 +256,7 @@ def copied_line(fixture: str, examples: list[dict]) -> str:
 
 def engine_cmd(engine: str) -> list[str]:
     """The scan command, with the same flags as tests/rules_test.py."""
-    cmd = [engine, "scan", "--json", "--quiet", "--scan-unknown-extensions"]
-    return cmd + (["--taint-intrafile"] if Path(engine).name == "opengrep" else ["--metrics=off", "--disable-version-check"])
+    return [engine, "scan", "--json", "--quiet", "--scan-unknown-extensions", "--taint-intrafile"]
 
 
 def scan(engine: str, rule_file: Path, files: list[Path]) -> dict[Path, list[int]]:
@@ -427,7 +426,7 @@ def pr_body(report: dict, model: str) -> str:
     out = ["Rules drafted by `tools/learner_rules.py` from recurring review findings (learner P3).", "",
            f"Model: `{model}` (OpenRouter). Each rule matched every vulnerable example including held-out ones, "
            "none of the fixed examples, nothing in this repo's own code, passed its synthetic fixture with "
-           "Opengrep and Semgrep, and had no surviving mutant. **A human reviews and merges; nothing here auto-merges.**",
+           "Opengrep, and had no surviving mutant. **A human reviews and merges; nothing here auto-merges.**",
            "", "## Accepted", "", "| rule | CWE | hits | severity | blocking | source orgs |", "|---|---|---|---|---|---|"]
     out += [f"| `{a['rule_id']}` | {a['cwe']}{' (drafted: check it)' if a.get('cwe_source') == 'drafted' else ''} "
             f"| {a['hits']} | {a['severity']} | {'yes' if a['blocking'] else 'warning'} "
@@ -473,15 +472,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--patterns", required=True, help="patterns.json from the quality-gate learner (learner-patterns/v1)")
     ap.add_argument("--engine", default=shutil.which("opengrep"), help="opengrep (the CI engine)")
-    ap.add_argument("--semgrep", default=shutil.which("semgrep"), help="semgrep CE (CI tests every rule with it too)")
     ap.add_argument("--model", default=os.environ.get("LEARNER_MODEL", DEFAULT_MODEL))
     ap.add_argument("--attempts", type=int, default=2, help="drafts per pattern (default 2)")
     ap.add_argument("--report", help="write the accept/reject report (JSON) here")
     ap.add_argument("--open-pr", action="store_true", help="commit on a new branch and open one PR (needs git + gh)")
     ap.add_argument("--base", default="main", help="base branch of the PR (default main)")
     a = ap.parse_args()
-    if not a.engine or Path(a.engine).name != "opengrep" or not a.semgrep:
-        print("opengrep and semgrep are both required (CI tests every rule with both)", file=sys.stderr)
+    if not a.engine or Path(a.engine).name != "opengrep":
+        print("opengrep is required (the only supported engine)", file=sys.stderr)
         return 2
     if not os.environ.get("OPENROUTER_API_KEY"):
         print("OPENROUTER_API_KEY is not set", file=sys.stderr)
@@ -511,7 +509,7 @@ def main() -> int:
     def drafter(p, train, rule_id, ext, feedback):
         return draft_with_llm(p, train, rule_id, ext, feedback, a.model)
 
-    report = run(patterns, ROOT, [a.engine, a.semgrep], drafter, a.attempts)
+    report = run(patterns, ROOT, [a.engine], drafter, a.attempts)
     err = build_dist(ROOT, report) if report["accepted"] else ""
     for x in report["accepted"]:
         print(f"ACCEPTED {x['rule_id']} ({x['cwe']}, {x['severity']}{', blocking' if x['blocking'] else ''})")

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end test: builds a throwaway repo with a "PR" and checks the gate's decisions.
-# Needs on PATH: opengrep or semgrep, ruff, gitleaks. zizmor/osv-scanner optional.
+# Needs on PATH: opengrep, ruff, gitleaks. zizmor/osv-scanner optional.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 for t in ${E2E_REQUIRE:-}; do   # optional scanners whose checks must run (CI sets this)

@@ -483,9 +483,9 @@ def special_name_files(ctx: Ctx) -> list[str]:
 
 
 def run_opengrep(ctx: Ctx) -> list[Finding]:
-    engine = shutil.which("opengrep") or shutil.which("semgrep")
+    engine = shutil.which("opengrep")   # the only supported engine; no fallback to another one
     if not engine:
-        raise FileNotFoundError("opengrep (or semgrep) not installed")
+        raise FileNotFoundError("opengrep not installed: sast-check runs Opengrep only (https://github.com/opengrep/opengrep)")
     rules = ROOT / "dist" / "rules.yaml"
     if not rules.exists():
         sh([sys.executable, str(HERE / "build_rules.py")], ROOT)
@@ -500,10 +500,7 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     # --timeout 0 --timeout-threshold 0: a rule never gives up on a file (a slow file must not be skipped)
     cmd = [engine, "scan", "--config", str(rules), "--json", "--quiet", "--disable-version-check", "--disable-nosem",
            "--x-ignore-semgrepignore-files", "--max-target-bytes=0", "--timeout", "0", "--timeout-threshold", "0"]
-    if Path(engine).name == "opengrep":
-        cmd.append("--taint-intrafile")
-    else:
-        cmd += ["--metrics=off"]
+    cmd.append("--taint-intrafile")
     for g in ctx.cfg["paths"]["exclude"]:
         cmd += ["--exclude", g]
     # Opengrep refuses a symlink as a target ("File not found"), so a file reached through a link is scanned
@@ -1510,7 +1507,9 @@ def main(argv=None) -> int:
             findings += res
             ctx.runs.append(ToolRun(name, "ran", count=len(res)))
         except FileNotFoundError as e:
-            ctx.runs.append(ToolRun(name, "skipped", str(e)))
+            # opengrep runs the custom rules, the core of the check: without it the scan is incomplete, so a
+            # missing opengrep is an error (other scanners that are not installed are reported as skipped)
+            ctx.runs.append(ToolRun(name, "error" if name == "opengrep" else "skipped", str(e)))
         except Exception as e:  # noqa: BLE001 - surface any scanner failure
             ctx.runs.append(ToolRun(name, "error", str(e)[:400]))
 

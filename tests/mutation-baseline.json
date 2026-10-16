@@ -57,7 +57,7 @@
  },
  "sast.js.code-eval:.pattern-sources.patterns.pattern-either:1ed53c88": {
   "element": "pattern-inside: 'const $F = function ($REQ, ...) { ... }\n\n  ...\n\n  $APP.$M(..., $F)\n\n  '",
-  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+  "why": "Kept from when CI also ran Semgrep CE (dropped 2026-10-16): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep; removing it is a separate rule change"
  },
  "sast.js.code-eval:.pattern-sources.patterns.pattern-either:2632839e": {
   "element": "pattern-inside: $APP.$M($P, ..., async ($REQ, $RES, ...) => { ... })",
@@ -85,7 +85,7 @@
  },
  "sast.js.code-eval:.pattern-sources.patterns.pattern-either:4a2c6b50": {
   "element": "pattern-inside: 'const $F = ($REQ, ...) => { ... }\n\n  ...\n\n  $APP.$M(..., $F)\n\n  '",
-  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+  "why": "Kept from when CI also ran Semgrep CE (dropped 2026-10-16): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep; removing it is a separate rule change"
  },
  "sast.js.code-eval:.pattern-sources.patterns.pattern-either:4a379293@90e8c000": {
   "element": "pattern: $REQ.cookies",
@@ -109,7 +109,7 @@
  },
  "sast.js.code-eval:.pattern-sources.patterns.pattern-either:e01a1da3": {
   "element": "pattern-inside: 'const $F = async ($REQ, ...) => { ... }\n\n  ...\n\n  $APP.$M(..., $F)\n\n  '",
-  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+  "why": "Kept from when CI also ran Semgrep CE (dropped 2026-10-16): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep; removing it is a separate rule change"
  },
  "sast.js.code-eval:.pattern-sources.patterns.pattern-either:e7cab215@90e8c000": {
   "element": "pattern: $REQ.get(...)",
@@ -1689,7 +1689,7 @@
  },
  "sast.js.location-xss:.pattern-sinks.patterns:0424060e": {
   "element": "pattern-not-inside: 'function (..., location, ...) { ... }\n\n  '",
-  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+  "why": "Kept from when CI also ran Semgrep CE (dropped 2026-10-16): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep; removing it is a separate rule change"
  },
  "sast.js.location-xss:.pattern-sinks.patterns:120822ff": {
   "element": "pattern-not-inside: 'function $F(...) { var location = $E; ... }\n\n  '",
@@ -1717,7 +1717,7 @@
  },
  "sast.js.location-xss:.pattern-sinks.patterns:7802098e": {
   "element": "pattern-not-inside: '(..., location, ...) => $B\n\n  '",
-  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+  "why": "Kept from when CI also ran Semgrep CE (dropped 2026-10-16): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep; removing it is a separate rule change"
  },
  "sast.js.location-xss:.pattern-sinks.patterns:821ad262": {
   "element": "pattern-not-inside: '(...) => { var location = $E; ... }\n\n  '",
@@ -1729,7 +1729,7 @@
  },
  "sast.js.location-xss:.pattern-sinks.patterns:b621e5cf": {
   "element": "pattern-not-inside: '({ ..., location, ... }) => { ... }\n\n  '",
-  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+  "why": "Kept from when CI also ran Semgrep CE (dropped 2026-10-16): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep; removing it is a separate rule change"
  },
  "sast.js.location-xss:.pattern-sinks.patterns:c0bf623c": {
   "element": "pattern-not: $F(`/...`, ...)",
@@ -1777,7 +1777,7 @@
  },
  "sast.js.location-xss:.pattern-sources.patterns:0424060e": {
   "element": "pattern-not-inside: 'function (..., location, ...) { ... }\n\n  '",
-  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+  "why": "Kept from when CI also ran Semgrep CE (dropped 2026-10-16): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep; removing it is a separate rule change"
  },
  "sast.js.location-xss:.pattern-sources.patterns:30d4c558": {
   "element": "pattern-not-inside: 'function (...) { var location = $E; ... }\n\n  '",
@@ -1793,7 +1793,7 @@
  },
  "sast.js.location-xss:.pattern-sources.patterns:7802098e": {
   "element": "pattern-not-inside: '(..., location, ...) => $B\n\n  '",
-  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+  "why": "Kept from when CI also ran Semgrep CE (dropped 2026-10-16): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep; removing it is a separate rule change"
  },
  "sast.js.location-xss:.pattern-sources.patterns:7d24bdd1": {
   "element": "pattern-either:\n- pattern-inside: '$W.addEventListener(\"message\", function($E) { ... })\n\n    '\n- pattern-inside: '$W.addEventListener(\"message\", ($E) => { ... }",
@@ -1805,7 +1805,7 @@
  },
  "sast.js.location-xss:.pattern-sources.patterns:b621e5cf": {
   "element": "pattern-not-inside: '({ ..., location, ... }) => { ... }\n\n  '",
-  "why": "Needed by Semgrep CE (CI runs both engines): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep, while CE's fixture run fails without it"
+  "why": "Kept from when CI also ran Semgrep CE (dropped 2026-10-16): Opengrep reads this spelling as the same shape as a sibling alternative, so deleting it changes nothing on Opengrep; removing it is a separate rule change"
  },
  "sast.js.location-xss:.pattern-sources.patterns:e9a65eb9": {
   "element": "pattern-not-inside: '(...) => { var { ..., location, ... } = $E; ... }\n\n  '",

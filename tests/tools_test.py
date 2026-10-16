@@ -402,6 +402,50 @@ class FpReport(unittest.TestCase):
                 fp_sweep.report(self.work, labels, self.corpus)
 
 
+class OpengrepOnly(unittest.TestCase):
+    """Opengrep is the only engine (Semgrep CE was dropped on 2026-10-16). These fail if a Semgrep dependency
+    comes back, or if a missing Opengrep lets the gate pass without running the custom rules."""
+
+    ENGINE = "sem" + "grep"   # split so this file does not match its own check
+
+    def test_no_code_or_workflow_runs_or_installs_semgrep(self):
+        import re  # noqa: PLC0415
+        e = self.ENGINE
+        # a call, an install or an env variable for it; nosemgrep comments and .semgrepignore names are fine
+        bad = re.compile(rf"""["']{e}["']|{e}==|command -v {e}|\b{e.upper()}\b|^\s*{e}\s""", re.M)
+        files = [*ROOT.glob("scripts/*.py"), *ROOT.glob("tools/*.py"), *ROOT.glob("tests/*.py"),
+                 *ROOT.glob("tests/*.sh"), *ROOT.glob(".github/workflows/*.yml"), ROOT / "action.yml"]
+        hits = [f"{f.relative_to(ROOT)}: {m.group(0).strip()}" for f in files if f.resolve() != Path(__file__).resolve()
+                for m in bad.finditer(f.read_text())]
+        self.assertEqual(hits, [])
+
+    def test_a_gate_without_opengrep_is_an_error_and_never_calls_another_engine(self):
+        import subprocess  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            bin_ = td / "bin"
+            bin_.mkdir()
+            marker = td / "called"
+            fake = bin_ / self.ENGINE   # a look-alike engine that records any call
+            fake.write_text(f"#!/bin/sh\ntouch '{marker}'\nexit 0\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+            repo = td / "repo"
+            repo.mkdir()
+            (repo / "app.py").write_text("x = 1\n")
+            git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+            for cmd in (["git", "init", "-q"], ["git", "add", "-A"], [*git, "commit", "-qm", "init"]):
+                subprocess.run(cmd, cwd=repo, check=True, capture_output=True)
+            env = {**os.environ, "PATH": f"{bin_}:/usr/bin:/bin"}   # git, but no opengrep
+            r = subprocess.run([sys.executable, "-I", str(ROOT / "scripts" / "sast.py"), "--repo", str(repo),
+                                "--mode", "full", "--only", "opengrep", "--out", str(td / "out")],
+                               capture_output=True, text=True, env=env, check=False)
+            runs = json.loads((td / "out" / "findings.json").read_text())["runs"]
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertEqual([(x["name"], x["status"]) for x in runs], [("opengrep", "error")])
+            self.assertIn("runs Opengrep only", runs[0]["detail"])
+            self.assertFalse(marker.exists(), "the gate ran another engine")
+
+
 if __name__ == "__main__":
     os.chdir(ROOT)
     unittest.main(verbosity=1)

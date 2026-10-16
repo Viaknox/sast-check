@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Engine-agnostic rule tests: for each rules/custom/<area>/<slug>.yaml, scan its fixture
+"""Rule tests: for each rules/custom/<area>/<slug>.yaml, scan its fixture
 and compare flagged lines with the `ruleid:` / `ok:` annotations.
 
-Uses opengrep if installed (the CI engine), else semgrep. Usage: tests/rules_test.py [--engine X]
+Runs Opengrep, the only supported engine. Usage: tests/rules_test.py [--engine PATH-TO-OPENGREP]
 """
 import argparse
 import json
@@ -76,9 +76,7 @@ def scan_fixture(engine: str, rule: Path, text: str) -> tuple[dict, str | None]:
     scan did not complete cleanly: an engine failure, or an engine error such as a rule it rejects."""
     import yaml  # noqa: PLC0415 - dev dependency
     fx = fixture_for(rule)
-    is_og = Path(engine).name == "opengrep"
-    cmd = [engine, "scan", "--json", "--quiet", "--scan-unknown-extensions"]
-    cmd += ["--taint-intrafile"] if is_og else ["--metrics=off", "--disable-version-check"]
+    cmd = [engine, "scan", "--json", "--quiet", "--scan-unknown-extensions", "--taint-intrafile"]
     # a rule limited to workflow files is tested on a copy of its fixture at such a path
     include = [p for r in yaml.safe_load(text)["rules"] for p in r.get("paths", {}).get("include", [])]
     with tempfile.TemporaryDirectory() as td:
@@ -108,10 +106,10 @@ def scan_fixture(engine: str, rule: Path, text: str) -> tuple[dict, str | None]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--engine", default=shutil.which("opengrep") or shutil.which("semgrep"))
+    ap.add_argument("--engine", default=shutil.which("opengrep"))
     a = ap.parse_args()
-    if not a.engine:
-        print("no engine installed", file=sys.stderr)
+    if not a.engine or Path(a.engine).name != "opengrep":
+        print("opengrep is required (the only supported engine); install it or pass --engine", file=sys.stderr)
         return 2
     failures = total = 0
     for rule in sorted((ROOT / "rules" / "custom").glob("*/*.yaml")):

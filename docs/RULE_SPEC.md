@@ -1,4 +1,4 @@
-# Custom rule spec (Opengrep / Semgrep-syntax)
+# Custom rule spec (Opengrep)
 
 All custom rules are original work, licensed MIT. Never copy text, messages or rule
 bodies from any other ruleset (semgrep-rules, Trail of Bits, commercial scanners, etc.). Write
@@ -37,7 +37,8 @@ rules:
         - https://cwe.mitre.org/data/definitions/95.html   # only well-known stable URLs (cwe.mitre.org, owasp.org, MDN, official docs)
     # patterns / mode: taint ...
 ```
-Use only standard features supported by both Semgrep CE and Opengrep: `pattern`, `patterns`,
+Opengrep is the only engine sast-check runs (Semgrep CE was dropped on 2026-10-16), so rules are written and
+tested for Opengrep. Use only these standard features: `pattern`, `patterns`,
 `pattern-either`, `pattern-not`, `pattern-inside`, `pattern-not-inside`, `pattern-regex`,
 `metavariable-regex`, `metavariable-pattern`, `focus-metavariable`, `mode: taint` with
 `pattern-sources` / `pattern-sinks` / `pattern-sanitizers`. Do NOT use Pro-only features
@@ -61,8 +62,9 @@ Minimum per rule: 3 true positives and 3 realistic safe look-alikes (false-posit
 
 Verify with:
 ```
-semgrep --test --metrics=off rules/custom/<area>/
-semgrep --validate --metrics=off --config rules/custom/<area>/<slug>.yaml
+python3 tests/rules_test.py                     # every rule against its fixture, with the gate's flags
+opengrep scan --test rules/custom/<area>/
+opengrep scan --validate --config rules/custom/<area>/<slug>.yaml
 ```
 Loop until every test passes and validate is clean. Do not weaken a test to make it pass —
 fix the rule.
