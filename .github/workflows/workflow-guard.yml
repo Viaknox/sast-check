@@ -1,8 +1,8 @@
 name: workflow-guard
 
-# run-name is set here, in the base branch's file, from an enum action and a hex sha (no shell). The guard reads it back as
+# run-name is set here, in the base branch's file, from the PR number, an enum action and a hex sha (no shell). The guard reads it back as
 # the run's display_title to tell push-like runs from label runs and to bind a run to one head commit.
-run-name: "workflow-guard ${{ github.event.action }} ${{ github.event.pull_request.head.sha }}"
+run-name: "workflow-guard pr${{ github.event.pull_request.number }} ${{ github.event.action }} ${{ github.event.pull_request.head.sha }}"
 
 # SECURITY: this workflow runs from the base branch with pull_request_target and must NEVER check out or run PR code.
 # It reads the PR only through the GitHub API (the script is the base branch's own copy). A PR that touches workflows,

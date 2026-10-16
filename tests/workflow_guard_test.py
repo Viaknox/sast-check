@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import workflow_guard as wg  # noqa: E402
 
-HEAD, OLD = "b" * 40, "a" * 40
+HEAD, OLD, BASE_SHA = "b" * 40, "a" * 40, "c" * 40
 LABEL = wg.APPROVAL_LABEL
 T_PUSH, T_BEFORE, T_AFTER = "2026-01-01T10:00:00Z", "2026-01-01T09:00:00Z", "2026-01-01T11:00:00Z"
 T_MID, T_LATE, T_END = "2026-01-01T09:30:00Z", "2026-01-01T10:30:00Z", "2026-01-01T12:00:00Z"
@@ -24,19 +24,19 @@ def labeled(actor="own", at=T_AFTER, eid=10, kind="User", name=LABEL, event="lab
             "actor": None if actor is None else {"login": actor, "type": kind}}
 
 
-def run(at=T_PUSH, sha=HEAD, path=".github/workflows/workflow-guard.yml@refs/heads/main", prs=(), event="pull_request_target",
-        branch="feat", repo="o/r", conclusion="success", action="synchronize", title=None):
-    """Build a workflow run shaped like the GitHub API's."""
-    return {"head_sha": sha, "created_at": at, "path": path, "event": event, "conclusion": conclusion,
-            "display_title": title if title is not None else f"workflow-guard {action} {sha}", "head_branch": branch,
-            "head_repository": None if repo is None else {"full_name": repo}, "pull_requests": [{"number": n} for n in prs]}
+def run(at=T_PUSH, pr=5, head=HEAD, path=".github/workflows/workflow-guard.yml@refs/heads/main", event="pull_request_target",
+        conclusion="success", action="synchronize", title=None):
+    """Build a workflow run shaped like the GitHub API's for pull_request_target: head_sha/head_branch are the BASE branch's."""
+    return {"head_sha": BASE_SHA, "head_branch": "main", "head_repository": {"full_name": "o/r"}, "pull_requests": [],
+            "created_at": at, "path": path, "event": event, "conclusion": conclusion,
+            "display_title": title if title is not None else f"workflow-guard pr{pr} {action} {head}"}
 
 
 class Fake:
     """Fake GitHub API over mutable canned state; records label deletions."""
 
     def __init__(self, files=WF, labels=(LABEL,), events=None, runs=None, perms=None, author="own", **pr):
-        self.pr = {"head": {"sha": HEAD, "ref": "feat", "repo": {"full_name": "o/r"}}, "changed_files": len(files), "user": {"login": author}, **pr}
+        self.pr = {"created_at": "2026-01-01T08:00:00Z", "head": {"sha": HEAD, "ref": "feat", "repo": {"full_name": "o/r"}}, "changed_files": len(files), "user": {"login": author}, **pr}
         self.labels = list(labels)
         self.files = files
         self.events = [labeled()] if events is None else events
@@ -53,8 +53,9 @@ class Fake:
             return self.events
         if "/collaborators/" in path:
             return self.perms[path.split("/")[-2]]
-        if "/actions/runs" in path:
-            return {"workflow_runs": self.runs}
+        if "/actions/workflows/workflow-guard.yml/runs" in path:
+            self.runs_path = path
+            return {"total_count": len(self.runs), "workflow_runs": self.runs}
         return {**self.pr, "labels": [{"name": n} for n in self.labels]}
 
     def delete(self, path):
@@ -128,8 +129,8 @@ class Verdict(unittest.TestCase):
         self.assertFalse(Fake().check(event_head="")[0])
 
     def test_no_workflow_run_for_head_fails(self):
-        for runs in ([], [run(sha=OLD)], [run(path=".github/workflows/other.yml@refs/heads/main")], [run(event="pull_request")],
-                     [run(prs=[99]), run(branch="other"), run(repo="evil/fork"), run(repo=None)]):
+        for runs in ([], [run(head=OLD)], [run(pr=99)], [run(path=".github/workflows/other.yml@refs/heads/main")],
+                     [run(event="pull_request")]):
             ok, msg = Fake(runs=runs).check()
             self.assertFalse(ok, runs)
             self.assertIn("no matching workflow-guard run found", msg)
@@ -139,7 +140,7 @@ class Verdict(unittest.TestCase):
         self.assertFalse(Fake(events=[labeled(at=T_MID)], runs=runs).check()[0])
         self.assertTrue(Fake(events=[labeled(at=T_LATE)], runs=runs).check()[0])
         pages = [{"workflow_runs": [run(at=T_BEFORE)]}, {"workflow_runs": [run(at=T_PUSH)]}]
-        self.assertEqual(wg.push_time(pages, HEAD, 5, "feat", "o/r"), wg.parse_ts(T_PUSH))
+        self.assertEqual(wg.push_time(pages, HEAD, 5), wg.parse_ts(T_PUSH))
 
     def test_repush_of_older_sha_after_label_fails(self):
         """The old sha already had a synchronize run; re-pushing it makes a new one, which voids the earlier label."""
@@ -156,7 +157,7 @@ class Verdict(unittest.TestCase):
         for action in ("labeled", "unlabeled", "ready_for_review"):
             runs = [run(at=T_PUSH), run(at=T_AFTER, action=action)]
             self.assertTrue(Fake(events=[labeled(at=T_LATE)], runs=runs).check()[0], action)
-        self.assertIsNone(wg.push_time([{"workflow_runs": [run(action="labeled")]}], HEAD, 5, "feat", "o/r"))
+        self.assertIsNone(wg.push_time([{"workflow_runs": [run(action="labeled")]}], HEAD, 5))
 
     def test_edited_run_invalidates_an_older_label(self):
         """An edited run (base retarget or title edit) counts as a push: fail closed."""
@@ -165,7 +166,7 @@ class Verdict(unittest.TestCase):
         self.assertTrue(Fake(events=[labeled(at=T_END)], runs=runs).check(action="edited")[0])
 
     def test_display_title_mismatch_is_ignored(self):
-        for title in ("evil", "workflow-guard synchronize " + OLD, "workflow-guard synchronize " + HEAD + " x", "", None):
+        for title in ("evil", "workflow-guard pr5 synchronize " + OLD, "workflow-guard pr5 synchronize " + HEAD + " x", "workflow-guard synchronize " + HEAD, "", None):
             runs = [run(at=T_PUSH), {**run(at=T_AFTER), "display_title": title}]
             self.assertTrue(Fake(events=[labeled(at=T_LATE)], runs=runs).check()[0], title)   # the odd run is not a push
             ok, msg = Fake(runs=[{**run(at=T_PUSH), "display_title": title}]).check()
@@ -181,17 +182,32 @@ class Verdict(unittest.TestCase):
         f.check(action="synchronize")
         self.assertEqual(len(f.deleted), 1)
 
-    def test_runs_of_other_branch_repo_or_pr_are_ignored(self):
-        """Runs for the same sha elsewhere (also with empty pull_requests) must not date this PR's push."""
-        good = run(at=T_PUSH, prs=())
-        for bad in (run(at=T_AFTER, prs=(), branch="other"), run(at=T_AFTER, prs=(), repo="evil/fork"),
-                    run(at=T_AFTER, prs=(), repo=None), run(at=T_AFTER, prs=[99])):
-            self.assertEqual(wg.push_time([{"workflow_runs": [bad, good]}], HEAD, 5, "feat", "o/r"), wg.parse_ts(T_PUSH))
+    def test_runs_of_another_pr_or_sha_are_ignored(self):
+        """The run-name binds a run to one PR number and one head sha; the run's own head_sha/branch (base context) are unused."""
+        good = run(at=T_PUSH)
+        for bad in (run(at=T_AFTER, pr=99), run(at=T_AFTER, head=OLD), run(at=T_AFTER, pr=55), run(at=T_AFTER, pr=50)):
+            self.assertEqual(wg.push_time([{"workflow_runs": [bad, good]}], HEAD, 5), wg.parse_ts(T_PUSH))
             self.assertTrue(Fake(events=[labeled(at=T_LATE)], runs=[bad, good]).check()[0])
             self.assertFalse(Fake(events=[labeled(at=T_MID)], runs=[bad, good]).check()[0])
+
+    def test_works_with_base_branch_context_on_runs(self):
+        """Real pull_request_target runs carry the base branch's sha/branch/repo; the guard must still pass."""
+        runs = [run(at=T_PUSH)]
+        self.assertEqual({runs[0]["head_sha"], runs[0]["head_branch"]}, {BASE_SHA, "main"})
+        self.assertTrue(Fake(events=[labeled(at=T_LATE)], runs=runs).check()[0])
+
+    def test_runs_listing_uses_the_workflow_endpoint_with_created_filter(self):
         f = Fake()
-        f.pr["head"]["repo"] = None   # deleted fork
-        self.assertFalse(f.check()[0])
+        f.check()
+        self.assertEqual(f.runs_path, "repos/o/r/actions/workflows/workflow-guard.yml/runs?event=pull_request_target"
+                                      "&created=%3E%3D2026-01-01&per_page=100")
+
+    def test_possibly_truncated_run_listing_fails_closed(self):
+        f = Fake()
+        def get(path):
+            r = f.get(path)
+            return {**r, "total_count": 1000} if "/actions/workflows/" in path else r
+        self.assertFalse(wg.check("o/r", 5, HEAD, get, f.delete)[0])
 
     def test_api_error_fails(self):
         f = Fake()
@@ -201,7 +217,7 @@ class Verdict(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("502", msg)
         def runs_boom(path):
-            if "/actions/runs" in path:
+            if "/actions/workflows/" in path:
                 raise RuntimeError("HTTP 500")
             return f.get(path)
         self.assertFalse(wg.check("o/r", 5, HEAD, runs_boom, f.delete)[0])
@@ -316,6 +332,39 @@ class Verdict(unittest.TestCase):
             self.assertFalse(Fake(perms={"own": resp}).check()[0], resp)
 
 
+class Docs(unittest.TestCase):
+    def test_readme_warns_and_install_steps_reference_it(self):
+        text = (ROOT / "README.md").read_text()
+        self.assertIn("> [!WARNING]", text)
+        self.assertIn("Known limitations — read before installing", text)
+        install = text[text.index("## Add it to a repo"):]
+        self.assertLess(install.index("Known limitations — read before installing"), install.index("1. Copy"))
+        self.assertIn("**Step 0: read Known limitations above.**", install)
+        for needle in ("write access", "run history", "ALLOW_SELF_APPROVAL", "Code Owner review", "check named `workflow-guard`", "issue #5"):
+            self.assertIn(needle, install[:install.index("1. Copy")], needle)
+
+    def test_summary_notes_the_trust_assumption_on_a_label_pass_only(self):
+        import os
+        import tempfile
+        for ok, msg, want in ((True, "approved: `x` added by `y`", True), (True, "no protected files changed", False),
+                              (False, "add the label", False)):
+            with tempfile.TemporaryDirectory() as td:
+                path = os.path.join(td, "summary.md")
+                old = os.environ.get("GITHUB_STEP_SUMMARY")
+                os.environ["GITHUB_STEP_SUMMARY"] = path
+                try:
+                    wg.write_summary(ok, HEAD, msg)
+                finally:
+                    if old is None:
+                        del os.environ["GITHUB_STEP_SUMMARY"]
+                    else:
+                        os.environ["GITHUB_STEP_SUMMARY"] = old
+                text = Path(path).read_text()
+            self.assertEqual(wg.LABEL_NOTE in text, want, msg)
+            self.assertIn(HEAD, text)
+        self.assertEqual(wg.LABEL_NOTE, "Note: label approval assumes only trusted people have write access — see README › Known limitations.")
+
+
 class WorkflowFile(unittest.TestCase):
     def load(self):
         """Parse the guard workflow with yaml (YAML 1.1 reads `on` as True)."""
@@ -330,7 +379,7 @@ class WorkflowFile(unittest.TestCase):
         self.assertNotIn("workflow_run", on)
         self.assertEqual(doc["permissions"], {"contents": "read", "pull-requests": "write", "actions": "read"})
         self.assertEqual(doc["concurrency"], {"group": "workflow-guard-${{ github.event.pull_request.number }}", "cancel-in-progress": False})
-        self.assertEqual(doc["run-name"], "workflow-guard ${{ github.event.action }} ${{ github.event.pull_request.head.sha }}")
+        self.assertEqual(doc["run-name"], "workflow-guard pr${{ github.event.pull_request.number }} ${{ github.event.action }} ${{ github.event.pull_request.head.sha }}")
         self.assertEqual(list(doc["jobs"]), ["guard"])
 
     def test_no_pr_code_and_no_expressions_in_run(self):

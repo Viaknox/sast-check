@@ -7,7 +7,7 @@ Approval model (label based, fail closed):
   * a repo admin/maintainer reviews the PR and adds the label APPROVAL_LABEL;
   * the label counts only if the LATEST `labeled` event for it was made by a human admin/maintainer AND the server
     timestamp of that event is strictly later than the LATEST push-like run of this workflow for the current head
-    (opened, reopened, synchronize or edited; the run-name carries action and head sha, and created_at is when GitHub
+    (opened, reopened, synchronize or edited; the run-name carries PR number, action and head sha, and created_at is when GitHub
     saw the event). Labels are not bound to a commit, and commit dates are forgeable by the PR author, so both
     timestamps used here are assigned by GitHub's servers. Re-pushing an old commit makes a new synchronize run, so it
     voids the label; an `edited` run (e.g. a base retarget or a title edit) voids it too, which fails closed;
@@ -28,6 +28,7 @@ from urllib.parse import quote
 
 APPROVAL_LABEL = "workflow-change-approved"
 WORKFLOW_FILE = ".github/workflows/workflow-guard.yml"
+RUNS_API_CAP = 1000   # GitHub returns at most 1000 results for filtered run searches
 PUSH_ACTIONS = ("opened", "reopened", "synchronize", "edited")   # events that can change what the PR contains
 PROTECTED = (".github/workflows/*", "action.yml", "action.yaml", "CODEOWNERS", ".github/CODEOWNERS",
              "docs/CODEOWNERS", ".sast-check.toml", ".gitleaks.toml", ".gitleaksignore", ".github/zizmor.yml",
@@ -35,6 +36,7 @@ PROTECTED = (".github/workflows/*", "action.yml", "action.yaml", "CODEOWNERS", "
              "scripts/workflow_guard.py")
 TRUSTED_ROLES = ("admin", "maintain")
 FILES_API_CAP = 3000
+LABEL_NOTE = "Note: label approval assumes only trusted people have write access — see README › Known limitations."
 
 
 def is_protected(path: str) -> bool:
@@ -144,45 +146,48 @@ def base_changed_since(events: list, label_time: datetime) -> bool:
                and not label_time > parse_ts(ev.get("created_at")) for ev in events)
 
 
-def push_time(resp, head: str, pr: int, ref: str, head_repo: str):
-    """Latest created_at of this guard's push-like runs for head (when GitHub last saw the head change), or None.
+def push_time(resp, head: str, pr: int):
+    """Latest created_at of this guard's push-like runs for this PR and head (when GitHub last saw the head change), or None.
 
-    resp is the actions/runs response: one object, or a list of page objects. A run counts only if it is for head, from
-    this workflow's pull_request_target, from this PR's head branch and repository (a run without head_repository is
-    skipped), not for a different PR, and its display_title (the run-name set in the base workflow file) is exactly
-    "workflow-guard <opened|reopened|synchronize|edited> <head>". Label runs never count. Status and conclusion are
-    ignored, so a run cancelled by concurrency still counts. A matching run with a bad timestamp raises (fail closed).
+    resp is the workflow-runs response: one object, or a list of page objects. For pull_request_target the run's own
+    head_sha/head_branch describe the BASE branch, so they are not used. A run counts only if it is a
+    pull_request_target run of this workflow whose display_title (the run-name set in the base workflow file) is exactly
+    "workflow-guard pr<PR> <opened|reopened|synchronize|edited> <head>". Label runs never count. Status and conclusion
+    are ignored, so a run cancelled by concurrency still counts. A listing that may be cut off at GitHub's 1000-result
+    search limit, or a matching run with a bad timestamp, raises (fail closed).
     """
     pages = [resp] if isinstance(resp, dict) else resp
     if not isinstance(pages, list) or not all(isinstance(pg, dict) and isinstance(pg.get("workflow_runs"), list) for pg in pages):
         raise TypeError("workflow runs response is malformed")
-    titles = {f"workflow-guard {a} {head}" for a in PUSH_ACTIONS}
+    titles = {f"workflow-guard pr{pr} {a} {head}" for a in PUSH_ACTIONS}
     times = []
     for pg in pages:
+        total = pg.get("total_count", 0)
+        if not isinstance(total, int) or isinstance(total, bool) or total >= RUNS_API_CAP:
+            raise ValueError(f"workflow run listing may be incomplete (total_count {total!r}; API cap {RUNS_API_CAP})")
         for run in pg["workflow_runs"]:
-            if not isinstance(run, dict) or run.get("head_sha") != head or run.get("event") != "pull_request_target":
+            if not isinstance(run, dict) or run.get("event") != "pull_request_target":
                 continue
             if str(run.get("path") or "").split("@")[0] != WORKFLOW_FILE or run.get("display_title") not in titles:
-                continue
-            repo_of_run = run.get("head_repository")
-            if (run.get("head_branch") != ref or not isinstance(repo_of_run, dict)
-                    or not same_label(repo_of_run.get("full_name"), head_repo)):
-                continue   # the same commit pushed elsewhere does not date this PR's push
-            prs = run.get("pull_requests")
-            if isinstance(prs, list) and prs and not any(isinstance(p, dict) and p.get("number") == pr for p in prs):
                 continue
             times.append(parse_ts(run["created_at"]))
     return max(times) if times else None
 
 
-def label_is_stale(get, repo: str, pr: int, head: str, ref: str, head_repo: str, label: str) -> bool:
+def runs_path(repo: str, info: dict) -> str:
+    """API path listing this guard's pull_request_target runs created since the PR was opened (date granularity)."""
+    day = parse_ts(info["created_at"]).strftime("%Y-%m-%d")
+    return (f"repos/{repo}/actions/workflows/{WORKFLOW_FILE.rsplit('/', 1)[-1]}/runs"
+            f"?event=pull_request_target&created=%3E%3D{day}&per_page=100")
+
+
+def label_is_stale(get, repo: str, info: dict, pr: int, head: str, label: str) -> bool:
     """True if the approval label does not date from after the head was pushed (no event, no run, or not strictly later).
 
     Uses the same evidence as the verdict. Runs are counted whatever their status (see push_time). API or timestamp errors propagate (the caller fails closed).
     """
     ev = latest_label_event(get(f"repos/{repo}/issues/{pr}/events"), label)
-    pushed = push_time(get(f"repos/{repo}/actions/runs?head_sha={head}&event=pull_request_target&per_page=100"),
-                             head, pr, ref, head_repo)
+    pushed = push_time(get(runs_path(repo, info)), head, pr)
     return ev is None or pushed is None or not parse_ts(ev.get("created_at")) > pushed
 
 
@@ -201,12 +206,9 @@ def check(repo: str, pr: int, event_head: str, get=gh_get, delete=gh_delete, act
             return False, (f"stale run: event is for {clean(event_head)[:7] or 'no commit'} but the PR head is {head[:7]}; "
                            "a newer run covers it")
         quoted = quote(label, safe="")
-        ref, head_repo = info["head"]["ref"], info["head"]["repo"]["full_name"]   # a deleted fork has repo null: fails closed
-        if not isinstance(ref, str) or not isinstance(head_repo, str):
-            raise TypeError("PR head ref or repository is malformed")
         # cleanup only (the timestamp check does not rely on it): drop a label that predates the new head's push, but
         # keep one an admin added after the push, which a delayed synchronize run must not remove
-        if action == "synchronize" and has_label(info, label) and label_is_stale(get, repo, pr, head, ref, head_repo, label):
+        if action == "synchronize" and has_label(info, label) and label_is_stale(get, repo, info, pr, head, label):
             try:
                 delete(f"repos/{repo}/issues/{pr}/labels/{quoted}")
             except RuntimeError as e:
@@ -244,8 +246,7 @@ def check(repo: str, pr: int, event_head: str, get=gh_get, delete=gh_delete, act
             author = info["user"]["login"]
             if not isinstance(author, str) or author.casefold() == login.casefold():
                 return False, f"`{clean(login)}` is the PR author and self-approval is disabled; another admin must add the label"
-        pushed = push_time(get(f"repos/{repo}/actions/runs?head_sha={head}&event=pull_request_target&per_page=100"),
-                                 head, pr, ref, head_repo)
+        pushed = push_time(get(runs_path(repo, info)), head, pr)
         if pushed is None:
             return False, f"no matching workflow-guard run found for {head[:7]}, so its push time is unknown (failing closed); " + need
         label_time = parse_ts(ev.get("created_at"))
@@ -267,6 +268,8 @@ def write_summary(ok: bool, head: str, msg: str) -> None:
                               "new commits remove it" if "label" in msg else "see the message; push a fix or re-run")
     with open(path, "a", encoding="utf-8") as f:
         f.write(f"### workflow-guard: {'PASS' if ok else 'FAIL'}\n\n- Head: `{clean(head)}`\n- {msg}\n- Action needed: {todo}\n")
+        if ok and msg.startswith("approved:"):
+            f.write(f"- {LABEL_NOTE}\n")
 
 
 def main() -> int:
