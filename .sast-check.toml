@@ -7,3 +7,4 @@ rule = "zizmor.dangerous-triggers"
 path = ".github/workflows/workflow-guard.yml"
 reason = "The guard runs from the base branch on pull_request_target, never checks out or runs PR code, and has only contents/actions read and pull-requests write."
 # smoke test, do not merge
+# smoke test 2, do not merge
