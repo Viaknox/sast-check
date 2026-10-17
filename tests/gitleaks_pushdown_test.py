@@ -268,6 +268,45 @@ class Fallback(Base):
         self.assertIn("8.29.0", notes[0])
         self.assertEqual(len(log.read_text().splitlines()), 1)
 
+    def test_real_gitleaks_version_is_recognised(self):
+        """The gitleaks on PATH (CI: a `go install` build that prints a placeholder) is read as 8.30.1."""
+        sast = load_sast()
+        self.assertEqual(sast.gitleaks_version(sast.Ctx(repo=self.repo, cfg={}, mode="full", base=None)), "8.30.1")
+
+    def version_with(self, go_info, placeholder="version is set by build process"):
+        """gitleaks_version with a fake gitleaks printing a placeholder and a fake go printing go_info."""
+        d = self.shim(f'echo "{placeholder}"\n')
+        g = Path(d) / "go"
+        g.write_text("#!/bin/sh\nprintf '%b' '" + go_info.replace("\t", "\\t").replace("\n", "\\n") + "'\n")
+        g.chmod(g.stat().st_mode | stat.S_IEXEC)
+        sast = load_sast()
+        old = os.environ["PATH"]
+        os.environ["PATH"] = d + os.pathsep + old
+        try:
+            return sast.gitleaks_version(sast.Ctx(repo=self.repo, cfg={}, mode="full", base=None))
+        finally:
+            os.environ["PATH"] = old
+
+    def test_build_info_must_be_the_unreplaced_gitleaks_module(self):
+        """Build info counts only for the gitleaks module itself, unreplaced; anything else is an unknown version."""
+        mod = "github.com/zricethezav/gitleaks/v8"
+        good = f"x: go1.26\n\tpath\t{mod}\n\tmod\t{mod}\tv8.30.1\th1:x=\n"
+        self.assertEqual(self.version_with(good), "8.30.1")
+        self.assertEqual(self.version_with(good + "\t=>\t../fork\t(devel)\n"), "")
+        self.assertEqual(self.version_with(good.replace(f"path\t{mod}", "path\texample.com/other")), "")
+        self.assertEqual(self.version_with(f"x: go1.26\n\tpath\t{mod}\n"), "")
+        self.assertEqual(self.version_with(""), "")
+
+    def test_placeholder_without_build_info_scans_everything(self):
+        """A placeholder version and no readable build info: no push-down, one note, same findings."""
+        real = shutil.which("gitleaks")
+        d = self.shim(f'if [ "$1" = version ]; then echo "version is set by build process"; exit 0; fi\nexec "{real}" "$@"\n')
+        on, notes, used = self.scan(True, env={"PATH": d + os.pathsep + os.environ["PATH"]})
+        self.assertFalse(used)
+        self.assertEqual(on, self.scan(False)[0])
+        self.assertEqual(len(notes), 1)
+        self.assertIn("unknown version", notes[0])
+
     def test_pinned_version_constant_matches_ci(self):
         """The constant equals the version action.yml and test.yml install."""
         sast = load_sast()

@@ -1024,13 +1024,35 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
     return gitleaks_findings(ctx, reports)
 
 
+GITLEAKS_MODULE = "github.com/zricethezav/gitleaks/v8"
+
+
+def gitleaks_version(ctx: Ctx) -> str:
+    """The gitleaks version on PATH without a leading "v", or "" if unknown. A `go install` build (what action.yml and
+    test.yml use) prints a placeholder, so then the module version comes from the build info Go embeds in the binary,
+    read with `go version -m`. Only an unreplaced build of the gitleaks module itself counts."""
+    try:
+        v = sh(["gitleaks", "version"], ctx.repo).stdout.strip()
+    except (RuntimeError, OSError):
+        return ""
+    if re.fullmatch(r"v?\d+\.\d+\.\d+", v):
+        return v.lstrip("v")
+    exe = shutil.which("gitleaks")
+    try:
+        info = sh(["go", "version", "-m", exe], ctx.repo, env={**os.environ, "GOTOOLCHAIN": "local"}).stdout if exe else ""
+    except (RuntimeError, OSError):
+        return ""
+    rows = [ln.split("\t")[1:] for ln in info.splitlines() if ln.startswith("\t")]
+    if ["path", GITLEAKS_MODULE] not in rows or any(r[:1] == ["=>"] for r in rows):
+        return ""
+    mod = [r for r in rows if r[:2] == ["mod", GITLEAKS_MODULE]]
+    return mod[0][2].lstrip("v") if len(mod) == 1 and len(mod[0]) >= 3 else ""
+
+
 def gitleaks_pushdown_regexes(ctx: Ctx) -> list[str]:
     """Exclude regexes to hand to Gitleaks, or [] (full scan, one note) when push-down is not safe: gitleaks is not
     the pinned version, or generating the regexes failed. The post-filter in gitleaks_findings applies either way."""
-    try:
-        v = sh(["gitleaks", "version"], ctx.repo).stdout.strip().lstrip("v")
-    except (RuntimeError, OSError):
-        v = ""
+    v = gitleaks_version(ctx)
     if v != GITLEAKS_PUSHDOWN_VERSION:
         ctx.notes.append(f"Gitleaks scanned everything and the exclusions were applied afterwards: push-down is only "
                          f"used with gitleaks {GITLEAKS_PUSHDOWN_VERSION} (found {v or 'an unknown version'}).")
