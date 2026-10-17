@@ -276,6 +276,9 @@ def check_settings(uc: dict, defaults: dict) -> None:
         raise RuntimeError(f"policy.scope must be \"diff\" or \"full\"; got {uc['policy']['scope']!r}")
 
 
+GITLEAKS_PUSHDOWN_VERSION = "8.30.1"   # the gitleaks release action.yml and test.yml install; push-down runs only on it
+
+
 def glob_any(path: str, globs: list[str]) -> bool:
     """True if the repo-relative path matches a glob; "**/x" also matches x at the root. Only the exact
     "**/" prefix is dropped: "**/*_test.py" must still need the "*" (root-level foo_test.py)."""
@@ -989,7 +992,7 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
         settings, aside = [], None
         # full scope: Gitleaks skips the excluded trees itself instead of reading them (findings are filtered anyway)
         rx = [] if ctx.mode == "diff" or os.environ.get("GITLEAKS_CONFIG") or os.environ.get("GITLEAKS_CONFIG_TOML") \
-            else gitleaks_exclude_regexes(ctx.cfg["paths"]["exclude"])
+            or os.environ.get("SAST_GITLEAKS_PUSHDOWN") == "0" else gitleaks_pushdown_regexes(ctx)   # =0: kill switch
         if ctx.base:
             conf = settings_file(ctx.repo, ctx.base, ".gitleaks.toml")
             if conf is not None and tomllib.loads(conf).get("extend", {}).get("path"):
@@ -1007,8 +1010,13 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
             tree = None   # for the whole-tree run only: a link into an excluded dir is allow-listed by its target's path
             own = Path(td) / "gitleaks.toml" if ctx.base else ctx.repo / ".gitleaks.toml"   # the settings in force
             if rx and (not own.is_file() or gitleaks_can_extend(own)):
-                (Path(td) / "tree.toml").write_text(gitleaks_exclude_config(str(own) if own.is_file() else None, rx))
-                tree = ["--config", str(Path(td) / "tree.toml")] + settings[2:]
+                cfg_text = gitleaks_exclude_config(str(own) if own.is_file() else None, rx)
+                if gitleaks_config_roundtrips(cfg_text, str(own) if own.is_file() else None, rx):
+                    (Path(td) / "tree.toml").write_text(cfg_text)
+                    tree = ["--config", str(Path(td) / "tree.toml")] + settings[2:]
+                else:
+                    ctx.notes.append("Gitleaks was not told to skip the excluded paths (the generated config did not "
+                                     "read back the same), so it scanned everything and the exclusions were applied afterwards.")
             reports += gitleaks_runs(ctx, runs, settings, td, alias, tree)
         finally:
             if aside:
@@ -1016,10 +1024,68 @@ def run_gitleaks(ctx: Ctx) -> list[Finding]:
     return gitleaks_findings(ctx, reports)
 
 
+GITLEAKS_MODULE = "github.com/zricethezav/gitleaks/v8"
+
+
+def gitleaks_version(ctx: Ctx) -> str:
+    """The gitleaks version on PATH without a leading "v", or "" if unknown. A `go install` build (what action.yml and
+    test.yml use) prints a placeholder, so then the module version comes from the build info Go embeds in the binary,
+    read with `go version -m`. Only an unreplaced build of the gitleaks module itself counts."""
+    try:
+        v = sh(["gitleaks", "version"], ctx.repo).stdout.strip()
+    except (RuntimeError, OSError):
+        return ""
+    if re.fullmatch(r"v?\d+\.\d+\.\d+", v):
+        return v.lstrip("v")
+    exe = shutil.which("gitleaks")
+    try:
+        info = sh(["go", "version", "-m", exe], ctx.repo, env={**os.environ, "GOTOOLCHAIN": "local"}).stdout if exe else ""
+    except (RuntimeError, OSError):
+        return ""
+    rows = [ln.split("\t")[1:] for ln in info.splitlines() if ln.startswith("\t")]
+    if ["path", GITLEAKS_MODULE] not in rows or any(r[:1] == ["=>"] for r in rows):
+        return ""
+    mod = [r for r in rows if r[:2] == ["mod", GITLEAKS_MODULE]]
+    return mod[0][2].lstrip("v") if len(mod) == 1 and len(mod[0]) >= 3 else ""
+
+
+def gitleaks_pushdown_regexes(ctx: Ctx) -> list[str]:
+    """Exclude regexes to hand to Gitleaks, or [] (full scan, one note) when push-down is not safe: gitleaks is not
+    the pinned version, or generating the regexes failed. The post-filter in gitleaks_findings applies either way."""
+    v = gitleaks_version(ctx)
+    if v != GITLEAKS_PUSHDOWN_VERSION:
+        ctx.notes.append(f"Gitleaks scanned everything and the exclusions were applied afterwards: push-down is only "
+                         f"used with gitleaks {GITLEAKS_PUSHDOWN_VERSION} (found {v or 'an unknown version'}).")
+        return []
+    try:
+        return gitleaks_exclude_regexes(ctx.cfg["paths"]["exclude"])
+    except Exception as e:   # fail closed: any generation bug means a full scan  # noqa: BLE001
+        ctx.notes.append(f"Gitleaks scanned everything and the exclusions were applied afterwards: building the "
+                         f"skip list failed ({type(e).__name__}).")
+        return []
+
+
+def gitleaks_config_roundtrips(text: str, extend: str | None, regexes: list[str]) -> bool:
+    """True if the generated config parses as TOML and reads back exactly the extend target and the regex list
+    (the stdlib cannot write TOML, so the hand-built string is verified instead)."""
+    try:
+        got = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return False
+    want_ext = {"path": extend} if extend else {"useDefault": True}
+    return got.get("extend") == want_ext and [a.get("paths") for a in got.get("allowlists", [])] == [regexes]
+
+
 def gitleaks_exclude_config(extend: str | None, regexes: list[str]) -> str:
     """Gitleaks config that extends the given file (default: built-in rules) and allow-lists these path regexes."""
     ext = f"path = {json.dumps(extend)}" if extend else "useDefault = true"
     return f"[extend]\n{ext}\n\n[[allowlists]]\npaths = [{', '.join(json.dumps(r) for r in regexes)}]\n"
+
+
+def gitleaks_errors(stderr: str | None) -> list[str]:
+    """The ERR / FTL lines of gitleaks' log (colour codes removed)."""
+    return [ln for ln in re.sub(r"\x1b\[[0-9;]*m", "", stderr or "").splitlines()
+            if re.search(r"(?:^|\s)(?:ERR|FTL)(?:\s|$)", ln)]
 
 
 def gitleaks_runs(ctx: Ctx, runs: list[list[str]], settings: list[str], td: str,
@@ -1033,10 +1099,20 @@ def gitleaks_runs(ctx: Ctx, runs: list[list[str]], settings: list[str], td: str,
         # --ignore-gitleaks-allow: a PR's `gitleaks:allow` must not hide a secret
         opts = (tree if tree and cmd == ["gitleaks", "dir", "."] else settings) + ["--ignore-gitleaks-allow", "--redact", "--no-banner", "--exit-code", "0", "--report-format", "json",
                            "--report-path", str(rp)]
-        p = sh(cmd[:2] + opts + cmd[2:], ctx.repo)               # options before any "--" / target
+        use_tree = bool(tree) and cmd == ["gitleaks", "dir", "."]
+        p = sh(cmd[:2] + opts + cmd[2:], ctx.repo, ok_codes=range(256) if use_tree else (0,))   # options before any "--" / target
+        if use_tree and (p.returncode or gitleaks_errors(p.stderr)):
+            if re.search(r"unable to load gitleaks config|panic: regexp|Error parsing|allowlist", p.stderr or "", re.I):
+                # gitleaks rejected the generated config: redo the whole-tree scan without push-down
+                ctx.notes.append("Gitleaks rejected the skip list for excluded paths, so it scanned everything and "
+                                 "the exclusions were applied afterwards.")
+                opts = settings + opts[len(tree):]
+                p = sh(cmd[:2] + opts + cmd[2:], ctx.repo)
+            elif p.returncode:
+                raise RuntimeError(f"gitleaks exited {p.returncode}: {(p.stderr or p.stdout)[-800:]}")
         # gitleaks logs a failed `git log` (e.g. a textconv filter) as ERR, then reports "no leaks" and
         # exits 0 having scanned nothing (gitleaks issue #2129): any ERR/FTL line is a scanner error
-        errs = [ln for ln in re.sub(r"\x1b\[[0-9;]*m", "", p.stderr or "").splitlines() if re.search(r"(?:^|\s)(?:ERR|FTL)(?:\s|$)", ln)]
+        errs = gitleaks_errors(p.stderr)
         if errs:
             raise RuntimeError("gitleaks reported errors: " + " | ".join(errs)[:300])
         if rp.exists() and rp.stat().st_size:
