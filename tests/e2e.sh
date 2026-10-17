@@ -679,13 +679,15 @@ git checkout -q main
 
 # full scope: an excluded tree is never opened by Gitleaks (strace records every openat of the real run;
 # git's own .gitattributes probes during the history scan are not Gitleaks reading the tree)
+# The wrapper answers `version` itself: a script has no Go build info, so version detection (covered against the
+# real binary in gitleaks_pushdown_test.py) would otherwise see an unknown version and turn push-down off.
 if command -v strace >/dev/null && strace -o /dev/null true 2>/dev/null; then
   git checkout -q -b gl-excl main
   mkdir -p "big dir/sub" src/vendor2 && printf '[paths]\nexclude = ["big dir/**", "src/vendor2*", "sast-results/**"]\n' > .sast-check.toml
   echo 'K16 = "AKIAIOSFODNN7ABCDEFG"' > "big dir/sub/k.py"; echo 'K16 = "AKIAIOSFODNN7ABCDEFG"' > src/vendor2/k.py
   echo 'K16 = "AKIAIOSFODNN7ABCDEFG"' > src/live16.py
   git add .sast-check.toml "big dir" src/vendor2 src/live16.py && git commit -qm r16
-  mkdir -p "$T/shim" && printf '#!/bin/sh\nexec strace -A -f -e trace=openat -o "$T_STRACE" "%s" "$@"\n' "$(command -v gitleaks)" > "$T/shim/gitleaks" && chmod +x "$T/shim/gitleaks"
+  mkdir -p "$T/shim" && printf '#!/bin/sh\n[ "$1" = version ] && { echo 8.30.1; exit 0; }\nexec strace -A -f -e trace=openat -o "$T_STRACE" "%s" "$@"\n' "$(command -v gitleaks)" > "$T/shim/gitleaks" && chmod +x "$T/shim/gitleaks"
   rm -f "$T/strace.log"; T_STRACE="$T/strace.log" PATH="$T/shim:$PATH" gate --mode full --only gitleaks
   check "full: gitleaks opens a non-excluded file (strace works)" "$(grep -c 'live16.py' "$T/strace.log")" "1"
   check "full: gitleaks never opens a file in an excluded dir"    "$(grep -E 'big dir/|vendor2/' "$T/strace.log" | grep -vc '\.gitattributes')" "0"
