@@ -1515,12 +1515,16 @@ def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] | froz
         # change, so the reviewer sees it: an old comment must not silently cover new unscanned code
         fresh = ctx.edited_lines.get(f.path, set()) if ctx.mode == "diff" and f.rule == NOT_PARSED and f.in_diff \
             else None
-        if fresh is not None and (ctx.repo / f.path).resolve() != ctx.repo.resolve() / f.path:
+        via_link = fresh is not None and (ctx.repo / f.path).resolve() != ctx.repo.resolve() / f.path
+        if via_link:
             fresh = set()   # reached through a symlink: the link's one-line hunk is not an edit of the comment
         f.suppressed = "" if f.kind == "secret" else (
             inline_suppression(ctx.repo, f, fresh) or config_suppression(ctx.cfg, f, today))
         if fresh is not None and not f.suppressed and inline_suppression(ctx.repo, f):
-            f.message += (" The existing sast-ignore comment above it was not applied: this change touches the "
+            f.message += (" The sast-ignore comment above it does not apply here: this path is reached through a "
+                          "symlink, so only an [[ignore]] entry in .sast-check.toml (merged first) can waive it."
+                          if via_link else
+                          " The existing sast-ignore comment above it was not applied: this change touches the "
                           "unread lines, so the suppression must be re-stated (edited) in this change to count.")
         f.blocking = (
             f.severity in block_on and f.in_diff and not f.suppressed

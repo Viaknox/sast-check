@@ -862,6 +862,8 @@ class NotParsed(unittest.TestCase):
             sast.apply_policy(ctx, [g])
             self.assertTrue(g.blocking)
             self.assertEqual(g.suppressed, "")
+            self.assertIn("only an [[ignore]] entry in .sast-check.toml", g.message)
+            self.assertNotIn("re-stated", g.message)
 
     def test_a_tolerated_tool_error_keeps_the_findings_the_scanner_returned(self):
         """With fail_on_tool_error = false, a known tool error (e.g. a "Too many matches" warning from one noisy
