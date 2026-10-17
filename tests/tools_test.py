@@ -865,6 +865,28 @@ class NotParsed(unittest.TestCase):
             code, _ = self.run_gate(td, None, payload={"results": [hit], "errors": [noisy]})
         self.assertEqual(code, 2)
 
+    def test_bad_results_never_drop_unread_code(self):
+        """A null, non-list or malformed results field next to a parse gap exits 2 as opengrep-parse even with
+        fail_on_tool_error = false (Cursor Bugbot on 7f6c3ea)."""
+        allow = "[policy]\nfail_on_tool_error = false\n"
+        gap = self.partial(self.span(a=2, b=2))
+        for results in (None, "x", [{"bad": 1}]):
+            with tempfile.TemporaryDirectory() as td:
+                code, data = self.run_gate(td, None, toml=allow, payload={"results": results, "errors": [gap]})
+            self.assertEqual(code, 2, results)
+            self.assertEqual([r["name"] for r in data["runs"] if r["status"] == "error"], ["opengrep-parse"], results)
+
+    def test_a_partial_run_counts_its_findings_in_changed_files_as_new(self):
+        """A scanner run with a tolerated tool error is not re-run on the base, so a finding on an unchanged line of a
+        changed file cannot be proven old: it counts as new and blocks (Cursor Bugbot on 7f6c3ea)."""
+        hit = {"check_id": "rules.sast.js.code-eval", "path": "a.js", "start": {"line": 1}, "end": {"line": 1},
+               "extra": {"message": "eval", "metadata": {"sast_severity": "critical", "confidence": "high"}}}
+        with tempfile.TemporaryDirectory() as td:           # line 1 of a.js is unchanged; lines 2-3 are added
+            code, data = self.run_gate(td, None, toml="[policy]\nfail_on_tool_error = false\n",
+                                       payload={"results": [hit], "errors": [{"level": "warn", "type": "Too many matches"}]})
+        self.assertEqual(code, 1)
+        self.assertEqual([(f["line"], f["in_diff"], f["blocking"]) for f in data["findings"]], [(1, True, True)])
+
     def test_a_gap_path_cannot_leave_the_scan_root_or_read_git(self):
         """gap_path_ok rejects a path that climbs out after a directory (a/../../x), a symlink leaving the tree and
         anything under .git, so no runner file reaches the report (Cursor security review on 348783e)."""

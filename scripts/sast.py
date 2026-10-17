@@ -628,8 +628,9 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
             # holds only warnings); any exit 2 still fails.
             p = sh(cmd + ["--"] + files, cwd, ok_codes=(0, 1, 2))
             data = json.loads(p.stdout or "{}")
-            if not isinstance(data, dict) or not isinstance(data.get("errors", []), list):
-                raise ParseGapError(f"opengrep output has no readable error list: {str(data)[:200]}")
+            if not isinstance(data, dict) or not isinstance(data.get("errors", []), list) \
+                    or not isinstance(data.get("results", []), list):
+                raise ParseGapError(f"opengrep output has no readable error or result list: {str(data)[:200]}")
             # every error record is classified first: a parse gap becomes a finding, an unknown or malformed
             # record raises ParseGapError (always exit 2); only then the ordinary tool-error path below
             if not ctx.baseline:     # an unparsable old file just has no old findings (base comparison)
@@ -649,18 +650,22 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
             raise ParseGapError(f"{len(gaps)} unread range(s) found, and {'; '.join(tool_errs)}")
         tool_err = "; ".join(tool_errs)
     out = list(gaps)
-    for cwd, r, via_rename in results:
-        md = r["extra"].get("metadata", {})
-        rid = r["check_id"]
-        rid = rid[rid.find("sast."):] if "sast." in rid else rid
-        out.append(Finding(
-            tool="opengrep", rule=rid, severity=md.get("sast_severity", "medium"),
-            confidence=md.get("confidence", "medium"),
-            path=renamed[rel(cwd, r["path"])] if via_rename else rel(cwd, r["path"]),
-            line=r["start"]["line"], end_line=r["end"]["line"], message=" ".join(r["extra"]["message"].split()),
-            fix=md.get("fix", ""), cwe=str(md.get("cwe", "")),
-            url=(md.get("references") or [""])[0],
-        ))
+    try:
+        for cwd, r, via_rename in results:
+            md = r["extra"].get("metadata", {})
+            rid = r["check_id"]
+            rid = rid[rid.find("sast."):] if "sast." in rid else rid
+            out.append(Finding(
+                tool="opengrep", rule=rid, severity=md.get("sast_severity", "medium"),
+                confidence=md.get("confidence", "medium"),
+                path=renamed[rel(cwd, r["path"])] if via_rename else rel(cwd, r["path"]),
+                line=r["start"]["line"], end_line=r["end"]["line"], message=" ".join(r["extra"]["message"].split()),
+                fix=md.get("fix", ""), cwe=str(md.get("cwe", "")),
+                url=(md.get("references") or [""])[0],
+            ))
+    except (KeyError, TypeError, AttributeError, IndexError) as e:
+        # a malformed result record: never let it discard unread ranges found in the same run
+        raise (ParseGapError if gaps else RuntimeError)(f"malformed opengrep result ({type(e).__name__}: {e})") from None
     if tool_err:
         raise PartialRunError(tool_err, out)   # keep what was found; the run still counts as a tool error
     return out
@@ -1907,6 +1912,7 @@ def main(argv=None) -> int:
             ctx.notes.append(f"{len(skipped)} changed file(s) under excluded paths (`paths.exclude`) were not scanned: "
                              + ", ".join(md_code(f) for f in skipped[:10]) + (" …" if len(skipped) > 10 else "") + ".")
     findings: list[Finding] = []
+    partial: list[Finding] = []      # findings of a scanner that hit a tolerated tool error (no base comparison)
     engine_missing = False
     for name in enabled:
         try:
@@ -1922,6 +1928,7 @@ def main(argv=None) -> int:
         except PartialRunError as e:
             # the findings the scanner did return still count (and can block); the run is a tool error
             findings += e.findings
+            partial += e.findings
             ctx.runs.append(ToolRun(name, "error", str(e)[:400]))
         except ParseGapError as e:
             # a parse gap Opengrep reported in a form we cannot place: the scan is incomplete (always fails)
@@ -1939,6 +1946,9 @@ def main(argv=None) -> int:
             new_by_base = baseline_new(ctx, findings, [r.name for r in ctx.runs if r.status == "ran"])
         except Exception as e:  # noqa: BLE001 - without the base comparison a new finding could pass: fail closed
             ctx.runs.append(ToolRun("baseline", "error", f"base comparison failed: {str(e)[:300]}"))
+    # a partial run is not re-run on the base, so nothing proves its findings in changed files are old: count them
+    # as new (fail closed)
+    new_by_base |= {id(f) for f in partial if f.path in ctx.changed_files}
     apply_policy(ctx, findings, new_by_base)
     # unread code outside the change does not block, but must not go unmentioned
     if unseen := [f for f in findings if f.rule == NOT_PARSED and not f.in_diff and not f.suppressed]:
