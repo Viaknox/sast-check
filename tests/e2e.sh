@@ -697,6 +697,10 @@ if command -v strace >/dev/null && strace -o /dev/null true 2>/dev/null; then
   git checkout -q main
 fi
 
+# full scope: differential/mutation/fallback/kill-switch/version tests of the push-down against the real gitleaks
+if python3 -I "$HERE/tests/gitleaks_pushdown_test.py" >"$T/pd.log" 2>&1; then echo "ok   - gitleaks push-down tests (tests/gitleaks_pushdown_test.py)"
+else echo "FAIL - gitleaks push-down tests"; tail -30 "$T/pd.log"; fail=1; fi
+
 # full scope: an exclude glob that matches the scan root (".*") must not make Gitleaks skip the whole tree
 git checkout -q -b gl-root main
 mkdir -p src vendor9 && printf '[paths]\nexclude = [".*", "vendor9*", "sast-results/**"]\n' > .sast-check.toml
