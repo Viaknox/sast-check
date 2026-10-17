@@ -2,6 +2,11 @@
 
 A security gate for every pull request. One step in CI, one skill for your AI coding agent.
 
+> [!NOTE]
+> **Early release (pre-1.0).** Settings, rules and report format may still change between commits, and there are
+> no versioned releases yet. Pin the action to a full commit SHA (see below) and read the commit log before moving
+> the pin. Report security problems privately: [SECURITY.md](SECURITY.md).
+
 It runs five open-source scanners, merges the results, and applies **one** policy:
 **By default, critical issues your change introduces block the PR — everything else is a warning** (`block_on` can add other severities). Code and config findings block when they are on a changed line or absent from the base version; secrets in the PR's commits always block; dependency CVEs warn unless `[deps] block = true`.
 

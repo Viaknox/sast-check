@@ -13,6 +13,7 @@ All custom rules in `rules/` are original work under this repo's MIT license.
 | [gitleaks](https://github.com/gitleaks/gitleaks) | v8.30.1 | MIT | `go install` (Go checksum DB) |
 | [osv-scanner](https://github.com/google/osv-scanner) | v2.7.0 | Apache-2.0 | `go install` (Go checksum DB) |
 | [Trivy](https://github.com/aquasecurity/trivy) (optional) | user-installed | Apache-2.0 | off by default |
+| [cosign](https://github.com/sigstore/cosign) via [cosign-installer](https://github.com/sigstore/cosign-installer) | installer v4.1.2 (pinned by SHA) | Apache-2.0 | GitHub Action; used only to verify the Opengrep signature |
 
 ## Deliberately NOT used
 
