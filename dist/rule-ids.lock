@@ -1,3 +1,4 @@
+opengrep.not-parsed
 sast.docker.remote-fetch-no-checksum
 sast.gha.ai-prompt-injection
 sast.gha.compromised-action
