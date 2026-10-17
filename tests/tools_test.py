@@ -848,6 +848,21 @@ class NotParsed(unittest.TestCase):
             self.assertTrue(g.blocking)
             self.assertEqual(g.suppressed, "")
 
+    def test_an_inline_suppression_never_waives_a_gap_reached_through_a_symlink(self):
+        """A new symlink's one-line hunk must not make the target's old line-1 sast-ignore look edited (Cursor
+        security review on 7f6c3ea): in diff mode a gap on a path reached through a link is never waived inline."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            (repo / "vendor").mkdir()
+            (repo / "vendor" / "p.js").write_text("// sast-ignore[opengrep.not-parsed]: old, reviewed\nclass A { static { x } }\n")
+            (repo / "src.js").symlink_to(repo / "vendor" / "p.js")
+            ctx = self.ctx(repo, "diff")
+            ctx.changed_files, ctx.changed_lines, ctx.edited_lines = ["src.js"], {"src.js": {1, 2}}, {"src.js": {1}}
+            g = sast.gap_finding("src.js", {}, 2, 2, False)
+            sast.apply_policy(ctx, [g])
+            self.assertTrue(g.blocking)
+            self.assertEqual(g.suppressed, "")
+
     def test_a_tolerated_tool_error_keeps_the_findings_the_scanner_returned(self):
         """With fail_on_tool_error = false, a known tool error (e.g. a "Too many matches" warning from one noisy
         file) is recorded but the results Opengrep did return still block (Codex security review on 348783e:

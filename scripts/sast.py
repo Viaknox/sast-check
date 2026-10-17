@@ -1515,6 +1515,8 @@ def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] | froz
         # change, so the reviewer sees it: an old comment must not silently cover new unscanned code
         fresh = ctx.edited_lines.get(f.path, set()) if ctx.mode == "diff" and f.rule == NOT_PARSED and f.in_diff \
             else None
+        if fresh is not None and (ctx.repo / f.path).resolve() != ctx.repo.resolve() / f.path:
+            fresh = set()   # reached through a symlink: the link's one-line hunk is not an edit of the comment
         f.suppressed = "" if f.kind == "secret" else (
             inline_suppression(ctx.repo, f, fresh) or config_suppression(ctx.cfg, f, today))
         if fresh is not None and not f.suppressed and inline_suppression(ctx.repo, f):
