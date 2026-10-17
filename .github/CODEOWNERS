@@ -1,0 +1,21 @@
+# Review routing for the files workflow-guard protects (keep in step with PROTECTED in scripts/workflow_guard.py).
+# The approval is the workflow-change-approved label (README "Protect the workflow itself"). Do NOT turn on
+# "Require review from Code Owners" in a one-person repo: the author cannot approve their own PR.
+# Keep this file listed, or a PR could first remove the protection.
+/.github/CODEOWNERS         @pjpoulose
+/CODEOWNERS                 @pjpoulose
+/docs/CODEOWNERS            @pjpoulose
+/.github/workflows/         @pjpoulose
+/action.yml                 @pjpoulose
+/action.yaml                @pjpoulose
+/.sast-check.toml           @pjpoulose
+/.gitleaks.toml             @pjpoulose
+/.gitleaksignore            @pjpoulose
+/.github/zizmor.yml         @pjpoulose
+/.github/zizmor.yaml        @pjpoulose
+/zizmor.yml                 @pjpoulose
+/zizmor.yaml                @pjpoulose
+/osv-scanner.toml           @pjpoulose
+/trivy.yaml                 @pjpoulose
+/.trivyignore               @pjpoulose
+/scripts/workflow_guard.py  @pjpoulose

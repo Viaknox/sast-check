@@ -1,3 +1,8 @@
 # sast-check scanning itself: rule fixtures are intentionally vulnerable code.
 [paths]
 exclude = ["rules/custom/**", "tests/**", "dist/**", "sast-results/**"]
+
+[[ignore]]
+rule = "zizmor.dangerous-triggers"
+path = ".github/workflows/workflow-guard.yml"
+reason = "The guard runs from the base branch on pull_request_target, never checks out or runs PR code, and has only contents/actions read and pull-requests write."
