@@ -1217,6 +1217,12 @@ class LocalRules(unittest.TestCase):
         for text in ("rules: []\n", "- id: local.x\n", "rules: [1]\n", "other: 1\nrules: []\n", "rules: [\n"):
             with self.assertRaises(RuntimeError, msg=text):
                 sast.parse_local_rules({"a.yaml": text})
+        loop = "rules:\n  - id: local.demo.loop\n    message: m\n    languages: [python]\n    pattern: eval(...)\n" \
+               "    metadata: {sast_severity: high, cwe: CWE-95}\n    options: &o {x: *o}\n"
+        with self.assertRaisesRegex(RuntimeError, "local.demo.loop: cannot be used"):   # a recursive alias
+            sast.parse_local_rules({"a.yaml": loop})
+        # a YAML date (metadata: {added: 2026-01-01}) is fine: it is passed on as text
+        sast.parse_local_rules({"a.yaml": self.rules({**self.RULE, "metadata": {**self.RULE["metadata"], "added": sast.date(2026, 1, 1)}})})
         with self.assertRaisesRegex(RuntimeError, "duplicate rule id local.demo.eval"):
             sast.parse_local_rules({"a.yaml": self.rules(), "b.yaml": self.rules()})
 
@@ -1276,6 +1282,15 @@ class LocalRules(unittest.TestCase):
             self.git(repo, "commit", "-qm", "dir link")
             with self.assertRaisesRegex(RuntimeError, "must be a folder on the base branch"):
                 sast.local_rule_files(repo, "HEAD")
+        with tempfile.TemporaryDirectory() as td:     # a file name that is not UTF-8 next to the rules
+            import subprocess  # noqa: PLC0415
+            repo = self.repo(td, {rf: self.rules()})
+            blob = sast.sh(["git", "hash-object", "-w", str(repo / rf)], repo).stdout.strip()
+            subprocess.run([b"git", b"update-index", b"--add", b"--cacheinfo",
+                            b"100644," + blob.encode() + b"," + sast.LOCAL_RULES_DIR.encode() + b"/\xff.txt"],
+                           cwd=repo, check=True, capture_output=True)
+            self.git(repo, "commit", "-qm", "odd name")
+            self.assertEqual(list(sast.local_rule_files(repo, "HEAD")), [rf])
         with tempfile.TemporaryDirectory() as td:     # a submodule (gitlink) where the folder should be
             repo = self.repo(td, {"a.txt": "x\n"})
             sha = sast.sh(["git", "rev-parse", "HEAD"], repo).stdout.strip()
@@ -1316,6 +1331,11 @@ class LocalRules(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:     # deleting the rule in the same PR does not help
             code, data = self.gate(td, good, {"app.py": "x = eval(input())\n", rf: None})
         self.assertEqual((code, [f["rule"] for f in data["findings"]]), (1, ["local.demo.eval"]))
+        # Opengrep must accept every rule in both modes: these each pass one of --strict / no --strict
+        for r in ({**self.RULE, "min-version": "99.0.0"}, {**self.RULE, "max-version": "0.0.1"}):
+            with self.assertRaisesRegex(RuntimeError, "Opengrep rejected", msg=str(r)):
+                sast.validate_local_rules([r])
+        sast.validate_local_rules([self.RULE])
         broken = self.rules({**self.RULE, "pattern": "eval("})
         with tempfile.TemporaryDirectory() as td:     # a proposed rule Opengrep rejects is an error now, not after merge
             code, data = self.gate(td, good, {rf: broken})
