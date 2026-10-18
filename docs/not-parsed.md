@@ -206,4 +206,6 @@ A parse error with missing or malformed spans, or an error type sast-check does 
 inspected, it stays exit code 2. To upgrade: bump the pin in `action.yml` and `.github/workflows/test.yml`, run
 the tests in CI, and for each new error type, look at what it means, add it to the right list only if it is
 truly a parse gap or a tool error, and add a test fixture that produces it. Never add a type to make the check
-pass without that inspection.
+pass without that inspection. A new Opengrep can also read more or less of a file, so an unread range can start
+or end on different lines: every `[[ignore]]` entry whose `range_sha` stops matching after the upgrade must be
+looked at and re-approved (the finding shows the new value), never copied over blindly.
