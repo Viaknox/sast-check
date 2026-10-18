@@ -1083,7 +1083,7 @@ class GapWaivers(unittest.TestCase):
         sast.check_settings({"ignore": [ok]}, sast.load_config(None))
         bad = [{"rule": self.NP, "path": "w.js", "reason": "legacy path-only"},          # no range_sha (legacy)
                {"rule": self.NP, "reason": "no path", "range_sha": ok["range_sha"]},
-               self.entry(path="src/*.js"), self.entry(path="src/[ab].js"), self.entry(path="/w.js"),
+               self.entry(path="/w.js"),
                self.entry(path="../w.js"), self.entry(path="a/../w.js"), self.entry(path="./w.js"),
                self.entry(range_sha="abc"), self.entry(range_sha=ok["range_sha"].upper()),
                self.entry(range_sha=ok["range_sha"] + "0"),
@@ -1093,6 +1093,13 @@ class GapWaivers(unittest.TestCase):
                 sast.check_settings({"ignore": [ig]}, sast.load_config(None))
         sast.check_settings({"ignore": [{"rule": "sast.js.code-eval", "path": "src/**", "reason": "r"}]},
                             sast.load_config(None))   # other rules keep path globs and need no range_sha
+        # literal names with glob characters are valid (Next.js routes); they are compared, never expanded
+        sast.check_settings({"ignore": [self.entry(path="app/[slug]/page.tsx"), self.entry(path="src/*.js")]},
+                            sast.load_config(None))
+        route = self.gap(path="app/[slug]/page.tsx")
+        self.assertEqual(sast.config_suppression({"ignore": [self.entry(path="app/[slug]/page.tsx")]}, route,
+                                                 "2026-10-18"), "config: reviewed")
+        self.assertEqual(sast.config_suppression({"ignore": [self.entry(path="*.js")]}, self.gap(), "2026-10-18"), "")
 
     def test_a_waiver_applies_only_to_the_exact_path_and_range(self):
         f, today = self.gap(), "2026-10-18"
@@ -1170,10 +1177,13 @@ class GapWaivers(unittest.TestCase):
         self.assertIn("For the repo owner: approve an unread range only if a rewrite is impossible", md)
         self.assertIn('path = "src/q\\"x.js"', md)
         self.assertIn(f'range_sha = "{g.range_sha}"', md)
-        toml = sast.gap_waiver_toml(g).replace("<why a rewrite is impossible; who reviewed the unread lines>", "r")
         import tomllib  # noqa: PLC0415
-        parsed = tomllib.loads(toml)["ignore"][0]
-        self.assertEqual((parsed["path"], parsed["range_sha"]), ('src/q"x.js', g.range_sha))
+        for path in ('src/q"x.js', "src/\U0001f600/a.js", "a\nb\\c\x7f\x01.js", "app/[slug]/page.tsx", "é/ü.ts"):
+            toml = sast.gap_waiver_toml(self.gap(path=path)).replace(
+                "<why a rewrite is impossible; who reviewed the unread lines>", "r")
+            parsed = tomllib.loads(toml)["ignore"][0]
+            self.assertEqual((parsed["path"], parsed["range_sha"]), (path, g.range_sha), path)
+        self.assertEqual(sast.toml_str("a\ud800b"), '"a\\uFFFDb"')   # a lone surrogate cannot round-trip
 
 
 if __name__ == "__main__":

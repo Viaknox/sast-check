@@ -1300,7 +1300,7 @@ check "waiver: an expired entry blocks and says so"             "$(q "$W25") $(g
 git checkout -q -f main
 
 # #25 settings: a not-parsed [[ignore]] without an exact path and a valid range_sha is a settings error (exit 2)
-for bad in 'path = "src/w.js"' 'path = "src/*.js"\nrange_sha = "'"$SHA25"'"' 'path = "src/w.js"\nrange_sha = "abc"'; do
+for bad in 'path = "src/w.js"' 'path = "/src/w.js"\nrange_sha = "'"$SHA25"'"' 'path = "src/w.js"\nrange_sha = "abc"'; do
   git checkout -q -b np25s main
   printf '[[ignore]]\nrule = "opengrep.not-parsed"\n'"$bad"'\nreason = "legacy"\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm s
   set +e; python3 -I "$HERE/scripts/sast.py" --mode full --only opengrep >/dev/null 2>&1; code=$?; set -e

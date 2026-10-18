@@ -260,10 +260,11 @@ def check_gap_waiver(ig: dict) -> None:
             raise RuntimeError(f"[[ignore]] range_sha only applies to rule = \"{NOT_PARSED}\"; got {ig!r}"[:250])
         return
     path = ig.get("path")
-    if (not isinstance(path, str) or not path or any(c in path for c in "*?[]") or path.startswith("/")
-            or os.path.normpath(path) != path or path == ".." or path.startswith("../")):
-        raise RuntimeError(f"[[ignore]] for {NOT_PARSED} needs path = one exact repo-relative file (no globs); "
-                           f"got {path!r}"[:250])
+    # matched by string equality, never as a glob: `app/[slug]/page.tsx` is a literal name, and a pattern such as
+    # `src/*.js` simply matches no finding (the gap keeps blocking)
+    if (not isinstance(path, str) or not path or path.startswith("/") or os.path.normpath(path) != path
+            or path == ".." or path.startswith("../")):
+        raise RuntimeError(f"[[ignore]] for {NOT_PARSED} needs path = one exact repo-relative file; got {path!r}"[:250])
     if not isinstance(ig.get("range_sha"), str) or not SHA256_HEX.fullmatch(ig["range_sha"]):
         raise RuntimeError(f"[[ignore]] for {NOT_PARSED} on {path!r} needs range_sha = the 64-character value shown "
                            f"in that finding (run the check without this entry to see it; {NOT_PARSED_DOC}#waivers)"[:300])
@@ -1521,9 +1522,10 @@ def config_suppression(cfg: dict, f: Finding, today: str) -> str:
     for ig in cfg.get("ignore", []):
         if not rule_listed(str(ig.get("rule")), f):
             continue
-        if f.rule == NOT_PARSED and not (f.range_sha and ig.get("path") == f.path and ig.get("range_sha") == f.range_sha):
-            continue
-        if ig.get("path") and not glob_any(f.path, [ig["path"]]):
+        if f.rule == NOT_PARSED:
+            if not (f.range_sha and ig.get("path") == f.path and ig.get("range_sha") == f.range_sha):
+                continue                 # exact path + range only: the path is never expanded as a glob
+        elif ig.get("path") and not glob_any(f.path, [ig["path"]]):
             continue
         if not str(ig.get("reason") or "").strip():
             continue
@@ -1546,10 +1548,28 @@ def gap_waiver_note(cfg: dict, f: Finding) -> str:
     return ""
 
 
+def toml_str(s: str) -> str:
+    """s as a TOML basic string: quote and backslash escaped, control characters (U+0000-U+001F, U+007F) as
+    \\uXXXX, everything else (including characters outside the BMP) literal. A lone surrogate cannot be written
+    and becomes U+FFFD, so the entry names another path and matches nothing (fails closed)."""
+    out = []
+    for ch in s:
+        o = ord(ch)
+        if ch in '"\\':
+            out.append("\\" + ch)
+        elif o < 0x20 or o == 0x7F:
+            out.append(f"\\u{o:04X}")
+        elif 0xD800 <= o <= 0xDFFF:
+            out.append("\\uFFFD")
+        else:
+            out.append(ch)
+    return '"' + "".join(out) + '"'
+
+
 def gap_waiver_toml(f: Finding) -> str:
-    """A ready-to-paste [[ignore]] entry that approves exactly this unread range (TOML basic strings via JSON,
-    which escapes quotes and control characters in a PR-controlled path)."""
-    return (f"[[ignore]]\nrule = \"{NOT_PARSED}\"\npath = {json.dumps(f.path)}\nrange_sha = \"{f.range_sha}\"\n"
+    """A ready-to-paste [[ignore]] entry that approves exactly this unread range (the PR-controlled path written
+    as a TOML basic string)."""
+    return (f"[[ignore]]\nrule = \"{NOT_PARSED}\"\npath = {toml_str(f.path)}\nrange_sha = \"{f.range_sha}\"\n"
             "reason = \"<why a rewrite is impossible; who reviewed the unread lines>\"")
 
 
