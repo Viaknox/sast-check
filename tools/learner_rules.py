@@ -366,19 +366,23 @@ def write_new(root: Path, path: Path, text: str) -> None:
         if cur.is_symlink() or not cur.is_dir():
             raise OSError(20, f"{cur.relative_to(root).as_posix()} is not a folder")  # 20 = ENOTDIR
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
-    with os.fdopen(fd, "w") as f:
-        f.write(text)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+    except BaseException:
+        path.unlink(missing_ok=True)   # this call created it: never leave a partial file behind
+        raise
 
 
 def target_ids(target: Path) -> set[str]:
-    """Rule ids already in a private rules repo's .sast-check/rules/ (unreadable files count as taken names only)."""
-    ids = set()
-    for f in sorted((target / LOCAL_DIR).glob("*.y*ml")):
-        try:
-            ids |= {r["id"] for r in yaml.safe_load(f.read_text())["rules"] if isinstance(r, dict) and "id" in r}
-        except (yaml.YAMLError, TypeError, KeyError, OSError, ValueError):   # ValueError: not UTF-8
-            continue   # check_target refuses the whole folder later
-    return ids
+    """Rule ids already in a private rules repo's .sast-check/rules/, read with sast-check's guarded reader (size,
+    nesting and alias limits). target_problem has already refused a folder that reader cannot read."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import sast
+    try:
+        return {r["id"] for r in sast.parse_local_rules(sast.local_rule_files(target, None))}
+    except (RuntimeError, OSError, subprocess.TimeoutExpired):
+        return set()
 
 
 def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int = 2, target: Path | None = None) -> dict:
@@ -475,12 +479,22 @@ def target_problem(target: Path) -> str:
     """Why TARGET cannot take rules ("" if it can): every folder on the way must be a real folder (a link
     would send writes outside the checkout), and its settings must keep the fixtures out of its own scans
     (they hold findings on purpose)."""
-    for rel in (".sast-check", LOCAL_DIR, LOCAL_DIR + "/tests"):
-        p = target / rel
-        if p.is_symlink() or (p.exists() and not p.is_dir()):
-            return f"{rel} in the target must be a folder, not a symlink or file"
     sys.path.insert(0, str(ROOT / "scripts"))
-    import sast  # the scanner's own settings reader
+    import sast  # the scanner's own settings and rules readers
+    folders = (".sast-check", LOCAL_DIR, LOCAL_DIR + "/tests")
+    try:   # a submodule (gitlink) looks like a plain folder on disk, but writes into it never reach this repo
+        gitlinks = {e.split("\t", 1)[1] for e in sast.git_z(target, ["ls-files", "-z", "-s", "--", *folders])
+                    if e.startswith("160000 ")}
+    except RuntimeError as e:
+        return f"cannot read the target's git index: {e}"
+    for rel in folders:
+        p = target / rel
+        if p.is_symlink() or (p.exists() and not p.is_dir()) or rel in gitlinks:
+            return f"{rel} in the target must be a folder, not a symlink, file or submodule"
+    try:   # the rules already there must be readable now, or the run's final check would discard its work
+        sast.parse_local_rules(sast.local_rule_files(target, None))
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
+        return f"the target's existing rules are invalid: {e}"
     try:
         cfg = sast.load_config(sast.settings_file(target, None, ".sast-check.toml"))
     except (RuntimeError, ValueError) as e:
@@ -635,6 +649,8 @@ def main() -> int:
     if not a.engine or Path(a.engine).name != "opengrep":
         print("opengrep is required (the only supported engine)", file=sys.stderr)
         return 2
+    if a.engine and "/" not in a.engine:
+        a.engine = shutil.which(a.engine) or a.engine   # a bare name is looked up on PATH, as subprocess would
     if not Path(a.engine).is_file():
         print(f"--engine {a.engine} does not exist", file=sys.stderr)
         return 2

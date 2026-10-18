@@ -554,6 +554,55 @@ class TargetSafety(unittest.TestCase):
             os.chdir(here)
         self.assertEqual(seen["engines"], [str(Path(OPENGREP).parent.absolute() / "opengrep")])
 
+    def test_a_bare_engine_name_is_found_on_path(self):
+        seen = {}
+
+        def fake_run(patterns, repo, engines, drafter, attempts, target):
+            seen["engines"] = engines
+            return {"accepted": [], "rejected": [], "skipped": []}
+
+        with tempfile.TemporaryDirectory() as td:
+            here = os.getcwd()
+            try:
+                os.chdir(td)                                         # no opengrep in this folder
+                with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
+                                                     "--engine", "opengrep"]), \
+                        mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k",
+                                                     "PATH": f"{Path(OPENGREP).parent}:{os.environ['PATH']}"}), \
+                        mock.patch.object(lr, "run", fake_run), redirect_stdout(io.StringIO()):
+                    self.assertEqual(lr.main(), 0)
+            finally:
+                os.chdir(here)
+        self.assertEqual(seen["engines"], [str(Path(OPENGREP).parent.absolute() / "opengrep")])
+
+    def test_a_failed_write_leaves_no_partial_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            t = Path(td)
+            real = os.fdopen
+
+            def broken(fd, *a, **kw):
+                f = real(fd, *a, **kw)
+                f.write = mock.Mock(side_effect=OSError(28, "No space left on device"))
+                return f
+            with mock.patch.object(lr.os, "fdopen", broken), self.assertRaises(OSError):
+                lr.write_new(t, t / "r" / "a.yaml", "private-derived text")
+            self.assertFalse((t / "r" / "a.yaml").exists())
+
+    def test_existing_target_rules_and_submodules_are_checked_before_drafting(self):
+        with tempfile.TemporaryDirectory() as td:
+            t = self.target(td)
+            (t / ".sast-check" / "rules").mkdir(parents=True)
+            (t / ".sast-check" / "rules" / "old.yaml").write_text("rules:\n  - " + "[" * 2000 + "]" * 2000 + "\n")
+            self.assertIn("existing rules are invalid", lr.target_problem(t))   # no RecursionError
+            self.assertEqual(lr.target_ids(t), set())
+        with tempfile.TemporaryDirectory() as td:
+            t = self.target(td)
+            sha = "0" * 39 + "1"
+            subprocess.run(["git", "update-index", "--add", "--cacheinfo", f"160000,{sha},.sast-check/rules/tests"],
+                           cwd=t, check=True)
+            (t / ".sast-check" / "rules" / "tests").mkdir(parents=True)  # a checked-out submodule looks like this
+            self.assertIn("submodule", lr.target_problem(t))
+
     def test_a_report_in_this_repo_or_an_existing_local_branch_stops_the_run(self):
         with tempfile.TemporaryDirectory() as td:
             t = self.target(td)
