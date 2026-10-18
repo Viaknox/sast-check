@@ -321,6 +321,92 @@ class FixtureRun(unittest.TestCase):
             self.assertNotIn(r["id"], bundle)
 
 
+class LocalDrafter(Drafter):
+    """The canned drafts, with fixture annotations naming the `local.` id the rule gets in a private rules repo."""
+
+    def __call__(self, p, train, rule_id, ext, feedback):
+        d = super().__call__(p, train, rule_id, ext, feedback)
+        return {**d, "fixture": d["fixture"].replace(rule_id.replace("local.", "sast.", 1), rule_id)}
+
+
+class TargetRun(unittest.TestCase):
+    """--target: the same checks, but accepted rules land as `local.` rules in a private rules repo's
+    .sast-check/rules/ (fixtures in its tests/ subfolder), never in this public repo."""
+
+    @classmethod
+    def setUpClass(cls):
+        need_engines()
+        cls.td = tempfile.TemporaryDirectory()
+        cls.repo = repo_copy(cls.td.name)
+        cls.target = Path(cls.td.name) / "private-rules"
+        (cls.target / ".git").mkdir(parents=True)
+        before = sorted(p.relative_to(cls.repo).as_posix() for p in cls.repo.rglob("*"))
+        cls.report = lr.run(PATTERNS, cls.repo, ENGINES, LocalDrafter(DRAFTS), target=cls.target)
+        cls.check_error = lr.check_target(cls.target, cls.report)
+        cls.repo_unchanged = before == sorted(p.relative_to(cls.repo).as_posix() for p in cls.repo.rglob("*"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.td.cleanup()
+
+    def test_rules_land_in_the_private_repo_as_local_rules_that_sast_check_accepts(self):
+        self.assertEqual(self.check_error, "")
+        self.assertTrue(self.repo_unchanged)          # nothing written to the public repo
+        self.assertEqual([a["rule_id"] for a in self.report["accepted"]],
+                         ["local.python.lp-py-yaml-unsafe-load", "local.python.lp-py-tar-extractall-unfiltered",
+                          "local.python.lp-py-requests-no-timeout"])
+        for a in self.report["accepted"]:
+            self.assertEqual(a["files"], [f".sast-check/rules/{a['id']}.yaml", f".sast-check/rules/tests/{a['id']}.py"])
+            for f in a["files"]:
+                self.assertTrue((self.target / f).is_file(), f)
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import sast
+        got = sast.parse_local_rules(sast.local_rule_files(self.target, None))
+        self.assertEqual(sorted(r["id"] for r in got), sorted(a["rule_id"] for a in self.report["accepted"]))
+
+    def test_a_second_run_skips_rules_the_private_repo_already_has(self):
+        again = lr.run([pattern("lp-py-yaml-unsafe-load")], self.repo, ENGINES, LocalDrafter(DRAFTS), target=self.target)
+        self.assertEqual(again["accepted"], [])
+        self.assertIn("already exists", again["skipped"][0]["reason"])
+
+    def test_a_rule_set_sast_check_would_refuse_keeps_nothing(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td)
+            (target / ".sast-check" / "rules").mkdir(parents=True)
+            (target / ".sast-check" / "rules" / "a.yaml").write_text("rules:\n  - id: sast.not.local\n")
+            mine = target / ".sast-check" / "rules" / "new.yaml"
+            mine.write_text("rules: []\n")
+            report = {"accepted": [{"id": "new", "files": [".sast-check/rules/new.yaml"]}]}
+            self.assertIn("must start with `local.`", lr.check_target(target, report))
+            self.assertFalse(mine.exists())
+            self.assertEqual(report["accepted"], [])
+
+    def test_the_pr_goes_to_the_private_repo_without_dist_files(self):
+        cmds = []
+
+        def runner(cmd, repo):
+            cmds.append((cmd, repo))
+            return mock.Mock(stdout="url\n")
+
+        lr.open_pr(self.target, self.report, "main", "m", runner, dist=False)
+        self.assertTrue(all(repo == self.target for _, repo in cmds))
+        add = next(c for c, _ in cmds if c[:2] == ["git", "add"])
+        self.assertEqual(add[3:], [f for a in self.report["accepted"] for f in a["files"]])
+
+    def test_the_target_must_be_a_separate_checkout(self):
+        for bad in (str(ROOT), str(ROOT / "rules"), self.td.name):
+            with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
+                                                 "--target", bad]), \
+                    mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(lr.main(), 2, bad)
+            self.assertIn("--target", err.getvalue())
+        with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--target",
+                                             str(self.target), "--report", str(self.target / "run.json")]), \
+                mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(lr.main(), 2)          # the report would be committed with the rules
+        self.assertIn("outside the --target checkout", err.getvalue())
+
+
 class Rejections(unittest.TestCase):
     """Each acceptance check on its own: the draft is rejected, with a reason, and nothing is written."""
 

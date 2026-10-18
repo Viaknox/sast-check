@@ -45,6 +45,23 @@ to `rules/custom/`; the reason is printed and written to `--report`.
 - `--open-pr` commits only those files and `dist/` on `learner/rules-<date>` and opens one PR. It stops if the
   working tree is dirty or the branch already exists. It never merges and never enables auto-merge.
 
+## Rules from private code: `--target`
+
+This repo is public. A rule learned from private repositories can carry private details (names, paths, logic), so it must never be proposed here. Use `--target` instead:
+
+```
+python tools/learner_rules.py --patterns patterns.json --target ../private-rules --report run.json --open-pr
+```
+
+`--target` is a checkout of a private rules repo (a separate git checkout, never this one). The same checks run, and then:
+
+- the rule lands as `.sast-check/rules/<pattern id>.yaml` with id `local.<area>.<pattern id>`, and its fixture in `.sast-check/rules/tests/`;
+- a pattern whose `local.` id is already in the target is skipped;
+- instead of `scripts/build_rules.py`, the target's whole `.sast-check/rules/` is checked with sast-check's own reader ([local-rules.md](local-rules.md)); if it fails, nothing from the run is kept;
+- `--open-pr` opens the PR in the target repo, with no `dist/` files. It never merges.
+
+Repos then run these rules from their own `.sast-check/rules/` (see [local-rules.md](local-rules.md)).
+
 ## Limits
 
 - Stacks: `python`, `javascript`/`node`, `typescript`. This repo has no JavaScript of its own, so JS patterns are
