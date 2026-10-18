@@ -306,15 +306,25 @@ def check_local_rule(r: object, where: str) -> None:
         raise RuntimeError(f"{rid}: metadata.fix must be text")   # noqa: TRY004 - a settings error
 
 
-def yaml_aliases(text: str) -> int:
-    """Line of the first YAML alias (*name) in TEXT, or 0. A few bytes of nested aliases (&a [*b, *b] ...) expand
-    to an exponential tree once the rules are passed on, and a rule never needs one. Read as parser events only,
-    so nothing is expanded."""
+LOCAL_RULES_MAX_DEPTH = 32   # nesting of mappings/lists in one rule file; real rules stay far below it
+
+
+def yaml_shape_problem(text: str) -> str:
+    """Why TEXT may not be loaded ("" if it may): an alias (*name), since a few bytes of nested aliases expand
+    to an exponential tree once the rules are passed on, or nesting deeper than LOCAL_RULES_MAX_DEPTH, which
+    would exhaust the loader's recursion. Read as parser events only, so nothing is built or expanded."""
     import yaml  # only repositories with their own rules need it
+    depth = 0
     for ev in yaml.parse(text, Loader=yaml.SafeLoader):
         if isinstance(ev, yaml.AliasEvent):
-            return ev.start_mark.line + 1
-    return 0
+            return f"uses YAML aliases (*name, line {ev.start_mark.line + 1}); they are not allowed"
+        if isinstance(ev, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
+            depth += 1
+            if depth > LOCAL_RULES_MAX_DEPTH:
+                return f"nests deeper than {LOCAL_RULES_MAX_DEPTH} levels (line {ev.start_mark.line + 1})"
+        elif isinstance(ev, (yaml.MappingEndEvent, yaml.SequenceEndEvent)):
+            depth -= 1
+    return ""
 
 
 def parse_local_rules(files: dict[str, str]) -> list[dict]:
@@ -329,9 +339,11 @@ def parse_local_rules(files: dict[str, str]) -> list[dict]:
     seen: dict[str, str] = {}
     for path, text in files.items():
         try:
-            if line := yaml_aliases(text):
-                raise RuntimeError(f"{path} uses YAML aliases (*name, line {line}); they are not allowed")
+            if why := yaml_shape_problem(text):
+                raise RuntimeError(f"{path} {why}")
             doc = yaml.safe_load(text)
+        except RecursionError:   # backstop: the depth check above should make this unreachable
+            raise RuntimeError(f"{path} nests too deeply to read") from None
         except yaml.YAMLError as e:
             raise RuntimeError(f"{path} is not valid YAML: {' '.join(str(e).split())[:200]}") from None
         if not isinstance(doc, dict) or set(doc) != {"rules"} or not isinstance(doc["rules"], list) or not doc["rules"]:

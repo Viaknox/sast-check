@@ -1226,6 +1226,16 @@ class LocalRules(unittest.TestCase):
                + "".join(f"      b{i}: &b{i} [*{'a' if i == 0 else f'b{i - 1}'}, *{'a' if i == 0 else f'b{i - 1}'}]\n" for i in range(40))
         with self.assertRaisesRegex(RuntimeError, "aliases"):   # 2^40 nodes once expanded, from under 2 KB
             sast.parse_local_rules({"a.yaml": bomb})
+        deep = self.rules({**self.RULE, "options": {"x": "[" * 2000 + "]" * 2000}}).replace("'", "")
+        for text in (deep, "rules:\n  - " + "[" * 2000 + "]" * 2000 + "\n"):   # a RecursionError for safe_load
+            with self.assertRaisesRegex(RuntimeError, "nests deeper than 32"):
+                sast.parse_local_rules({"a.yaml": text})
+        nested = {**self.RULE, "options": {}}
+        cur = nested["options"]
+        for _ in range(25):                                 # well inside the limit: still fine
+            cur["n"] = {}
+            cur = cur["n"]
+        sast.parse_local_rules({"a.yaml": self.rules(nested)})
         # a YAML date (metadata: {added: 2026-01-01}) is fine: it is passed on as text
         sast.parse_local_rules({"a.yaml": self.rules({**self.RULE, "metadata": {**self.RULE["metadata"], "added": sast.date(2026, 1, 1)}})})
         with self.assertRaisesRegex(RuntimeError, "duplicate rule id local.demo.eval"):
