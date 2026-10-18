@@ -53,7 +53,7 @@ This repo is public. A rule learned from private repositories can carry private 
 python tools/learner_rules.py --patterns patterns.json --target ../private-rules --report /tmp/run.json --open-pr
 ```
 
-`--target` is a checkout of a private rules repo (a separate git checkout, never this one). With `--open-pr`, every URL its `origin` uses (fetch and push) must be that same private GitHub repo. `--report` must sit outside both checkouts. The same checks run, and then:
+`--target` is a checkout of a private rules repo (a separate git checkout, never this one). With `--open-pr`, every URL its `origin` uses (fetch and push) must be that same private repo on github.com (GitHub Enterprise is not supported). Its `.sast-check.toml` must keep Opengrep on and exclude `.sast-check/rules/tests/**` (the fixtures hold findings on purpose). Rule and fixture files are created fresh, never through a symlink or over an existing file. `--report` must sit outside both checkouts. The same checks run, and then:
 
 - the rule lands as `.sast-check/rules/<pattern id>.yaml` with id `local.<area>.<pattern id>`, and its fixture in `.sast-check/rules/tests/`;
 - a pattern whose `local.` id is already in the target is skipped;
