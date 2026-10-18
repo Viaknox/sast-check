@@ -64,6 +64,8 @@ path = "examples/**"
 reason = "demo apps, never deployed"
 expires = "2027-01-01"
 ```
+For `opengrep.not-parsed` (code the scanner could not read), an `[[ignore]]` entry must name one exact `path` and the `range_sha` printed in that finding, so it approves only those lines; any later change to them needs a new approval. See [docs/not-parsed.md](docs/not-parsed.md#waivers).
+
 Inline, on or above the line: `// sast-ignore[sast.js.code-eval]: <reason>` (no reason = not suppressed).
 This is the **only** inline suppression. The scanners' own comments (`# noqa`, `// nosemgrep`, `gitleaks:allow`,
 `# zizmor: ignore[...]`, `trivy:ignore`) are ignored, so every suppression has a written reason and shows up in the report.

@@ -651,11 +651,11 @@ class NotParsed(unittest.TestCase):
         return sast.Ctx(repo=repo, cfg=sast.load_config(None), mode=mode, base=None)
 
     def parse(self, errors, files=("a.js",), renamed=None, targets=None):
-        """not_parsed_findings in a temp dir holding FILES (3 lines each); returns the findings."""
+        """not_parsed_findings in a temp dir holding FILES (20 lines each); returns the findings."""
         with tempfile.TemporaryDirectory() as td:
             for f in files:
                 (Path(td) / f).parent.mkdir(parents=True, exist_ok=True)
-                (Path(td) / f).write_text("a\nb\nc\n")
+                (Path(td) / f).write_text("".join(f"l{i}\n" for i in range(1, 21)))
             return sast.not_parsed_findings(self.ctx(Path(td)), errors, Path(td), renamed or {},
                                             list(files) if targets is None else targets)
 
@@ -962,7 +962,7 @@ class NotParsed(unittest.TestCase):
         """In diff mode an inline not-parsed suppression waives a gap the change touches only if the comment line
         itself is added or edited in this change; an inherited comment leaves it blocking (Codex security review on
         839ec24: appending an unreadable block under an old suppression passed). Base-config waivers and full mode
-        are unchanged."""
+        are unchanged, except that a config waiver must pin the range (#25)."""
         src = "// sast-ignore[opengrep.not-parsed]: generated parser, reviewed\nclass A { static { x } }\n" \
               "class B { static { eval(req.query.code) } }\n"
         with tempfile.TemporaryDirectory() as td:
@@ -975,6 +975,7 @@ class NotParsed(unittest.TestCase):
                 if cfg_ignore:
                     ctx.cfg["ignore"] = [cfg_ignore]
                 g = sast.gap_finding("a.js", {}, 2, 3, False)
+                g.range_sha = sast.gap_range_sha(Path(td) / "a.js", 2, 3)
                 sast.apply_policy(ctx, [g])
                 return g
             appended = run("diff", {3})                      # new block, old comment untouched
@@ -985,8 +986,11 @@ class NotParsed(unittest.TestCase):
             self.assertFalse(restated.blocking)
             self.assertEqual(restated.suppressed, "inline: generated parser, reviewed")
             self.assertEqual(run("full", set()).suppressed, "inline: generated parser, reviewed")
-            base = run("diff", {3}, {"rule": "opengrep.not-parsed", "path": "a.js", "reason": "vendored"})
-            self.assertFalse(base.blocking)                  # trusted base-config waiver still applies
+            pinned = {"rule": "opengrep.not-parsed", "path": "a.js", "reason": "vendored",
+                      "range_sha": sast.gap_range_sha(Path(td) / "a.js", 2, 3)}
+            self.assertFalse(run("diff", {3}, pinned).blocking)   # trusted base waiver pinned to this range applies
+            path_only = run("diff", {3}, {"rule": "opengrep.not-parsed", "path": "a.js", "reason": "vendored"})
+            self.assertTrue(path_only.blocking)          # #25: a path-only waiver no longer covers new unread code
             untouched = run("diff", set())                   # change elsewhere: gap not in diff, still suppressed
             self.assertFalse(untouched.in_diff)
             self.assertEqual(untouched.suppressed, "inline: generated parser, reviewed")
@@ -1024,6 +1028,162 @@ class NotParsed(unittest.TestCase):
                      "fix the root cause. Never suppress to pass"):
             self.assertIn(want, text)
         self.assertEqual(sast.fence("a ``` b").splitlines()[0], "````")   # code cannot close the fence early
+
+
+class GapWaivers(unittest.TestCase):
+    """#25: an [[ignore]] waiver for opengrep.not-parsed covers only the exact unread range it was approved for
+    (exact path + range_sha). New unreadable code in the same file, or an edit inside the range, needs a new
+    approval; moving the range down the file does not."""
+
+    NP = "opengrep.not-parsed"
+    SRC = "var a = 1;\nclass W { static { init(); } }\nvar s = \"x  y\";\n"
+
+    def sha(self, text, a, b):
+        """gap_range_sha of lines a-b of TEXT (written as bytes)."""
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "w.js").write_bytes(text.encode() if isinstance(text, str) else text)
+            return sast.gap_range_sha(Path(td) / "w.js", a, b)
+
+    def gap(self, path="w.js", a=2, b=3, sha=None):
+        """A not-parsed finding with a fingerprint (default: lines 2-3 of SRC)."""
+        f = sast.gap_finding(path, {}, a, b, False)
+        f.range_sha = sha if sha is not None else self.sha(self.SRC, a, b)
+        return f
+
+    def entry(self, **kw):
+        """A valid pinned waiver for the default gap, with overrides."""
+        return {"rule": self.NP, "path": "w.js", "range_sha": self.sha(self.SRC, 2, 3), "reason": "reviewed", **kw}
+
+    def test_fingerprint_ignores_position_line_endings_bom_and_trailing_spaces(self):
+        base = self.sha(self.SRC, 2, 3)
+        self.assertRegex(base, r"^[0-9a-f]{64}$")
+        self.assertEqual(self.sha("// new\n// lines\n" + self.SRC, 4, 5), base)          # moved down two lines
+        self.assertEqual(self.sha(self.SRC.replace("\n", "\r\n"), 2, 3), base)              # CRLF
+        self.assertEqual(self.sha(b"\xef\xbb\xbf" + self.SRC.encode(), 2, 3), base)         # BOM
+        self.assertEqual(self.sha(self.SRC.replace("} }\n", "} }  \t\n"), 2, 3), base)      # trailing spaces
+
+    def test_fingerprint_changes_with_any_change_inside_the_range(self):
+        base = self.sha(self.SRC, 2, 3)
+        self.assertNotEqual(self.sha(self.SRC.replace("init()", "init2()"), 2, 3), base)    # edited code
+        self.assertNotEqual(self.sha(self.SRC.replace("x  y", "x y"), 2, 3), base)          # spacing in a string
+        self.assertNotEqual(self.sha(self.SRC, 2, 2), base)                                 # range shrank
+        self.assertNotEqual(self.sha(self.SRC + "class Z { accessor q = 1; }\n", 2, 4), base)  # range grew
+
+    def test_fingerprint_counts_lines_like_opengrep_and_rejects_ranges_outside_the_file(self):
+        # a lone CR does not end a line (Opengrep numbers lines by LF), so the fingerprint covers what it reported
+        self.assertEqual(self.sha("a\rb\nc\n", 1, 2), self.sha("a\rb\nc\n", 1, 2))
+        with self.assertRaises(ValueError):
+            self.sha("a\rb\nc\n", 1, 3)
+        with self.assertRaises(ValueError):
+            self.sha(self.SRC, 3, 9)
+        self.assertRegex(self.sha("", 1, 1), r"^[0-9a-f]{64}$")                            # empty file: line 1
+
+    def test_settings_require_an_exact_path_and_a_valid_range_sha(self):
+        ok = self.entry()
+        sast.check_settings({"ignore": [ok]}, sast.load_config(None))
+        bad = [{"rule": self.NP, "path": "w.js", "reason": "legacy path-only"},          # no range_sha (legacy)
+               {"rule": self.NP, "reason": "no path", "range_sha": ok["range_sha"]},
+               self.entry(path="/w.js"),
+               self.entry(path="../w.js"), self.entry(path="a/../w.js"), self.entry(path="./w.js"),
+               self.entry(range_sha="abc"), self.entry(range_sha=ok["range_sha"].upper()),
+               self.entry(range_sha=ok["range_sha"] + "0"),
+               {"rule": "sast.js.code-eval", "path": "w.js", "reason": "r", "range_sha": ok["range_sha"]}]
+        for ig in bad:
+            with self.assertRaises(RuntimeError, msg=str(ig)):
+                sast.check_settings({"ignore": [ig]}, sast.load_config(None))
+        sast.check_settings({"ignore": [{"rule": "sast.js.code-eval", "path": "src/**", "reason": "r"}]},
+                            sast.load_config(None))   # other rules keep path globs and need no range_sha
+        # literal names with glob characters are valid (Next.js routes); they are compared, never expanded
+        sast.check_settings({"ignore": [self.entry(path="app/[slug]/page.tsx"), self.entry(path="src/*.js")]},
+                            sast.load_config(None))
+        route = self.gap(path="app/[slug]/page.tsx")
+        self.assertEqual(sast.config_suppression({"ignore": [self.entry(path="app/[slug]/page.tsx")]}, route,
+                                                 "2026-10-18"), "config: reviewed")
+        self.assertEqual(sast.config_suppression({"ignore": [self.entry(path="*.js")]}, self.gap(), "2026-10-18"), "")
+
+    def test_a_waiver_applies_only_to_the_exact_path_and_range(self):
+        f, today = self.gap(), "2026-10-18"
+        self.assertEqual(sast.config_suppression({"ignore": [self.entry()]}, f, today), "config: reviewed")
+        for ig in (self.entry(range_sha="0" * 64), self.entry(path="other.js"), self.entry(expires="2026-10-17"),
+                   {"rule": self.NP, "path": "w.js", "reason": "legacy path-only"},
+                   {"rule": "*", "path": "w.js", "reason": "all", "range_sha": f.range_sha}):
+            self.assertEqual(sast.config_suppression({"ignore": [ig]}, f, today), "", ig)
+        moved = self.gap(sha="")          # no fingerprint: never matched (fail closed)
+        self.assertEqual(sast.config_suppression({"ignore": [self.entry(range_sha="")]}, moved, today), "")
+        # rotation: the old and the new approval can sit side by side until the new code merges
+        both = {"ignore": [self.entry(range_sha="0" * 64, reason="old"), self.entry(reason="new")]}
+        self.assertEqual(sast.config_suppression(both, f, today), "config: new")
+
+    def test_new_unread_code_in_a_waived_file_blocks_and_says_why(self):
+        """The #25 hole: a base waiver for w.js used to cover a new unreadable block added later in the file."""
+        new_src = self.SRC + "class Z { static { eval(req.query.code); } }\n"
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "w.js").write_text(new_src)
+            ctx = sast.Ctx(repo=Path(td), cfg=sast.load_config(None), mode="diff", base="HEAD")
+            ctx.cfg["ignore"] = [self.entry()]
+            ctx.changed_files, ctx.changed_lines, ctx.edited_lines = ["w.js"], {"w.js": {4}}, {"w.js": {4}}
+            g = self.gap(a=2, b=4, sha=sast.gap_range_sha(Path(td) / "w.js", 2, 4))
+            sast.apply_policy(ctx, [g])
+        self.assertTrue(g.blocking)
+        self.assertEqual(g.suppressed, "")
+        self.assertIn("was approved for different code", g.message)
+        self.assertIn("now lines 2-4", g.waiver_note)
+        ctx.cfg["ignore"] = []
+        md = sast.report_md(ctx, [g], "fail")
+        self.assertIn("was approved for different code", md.split("For the repo owner")[1])   # next to the fix
+        self.assertIn(f'range_sha = "{g.range_sha}"', md)
+
+    def test_an_expired_pinned_waiver_blocks_and_says_so(self):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "w.js").write_text(self.SRC)
+            ctx = sast.Ctx(repo=Path(td), cfg=sast.load_config(None), mode="full", base=None)
+            ctx.cfg["ignore"] = [self.entry(expires="2000-01-01")]
+            g = self.gap()
+            sast.apply_policy(ctx, [g])
+        self.assertTrue(g.blocking)
+        self.assertIn("has expired", g.message)
+
+    def test_findings_carry_their_fingerprint_and_an_unreadable_range_fails_closed(self):
+        span = {"file": "w.js", "start": {"line": 2, "col": 1, "offset": 0}, "end": {"line": 3, "col": 2, "offset": 1}}
+        err = {"level": "warn", "type": ["PartialParsing", []], "spans": [span]}
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "w.js").write_text(self.SRC)
+            ctx = sast.Ctx(repo=Path(td), cfg=sast.load_config(None), mode="full", base=None)
+            [g] = sast.not_parsed_findings(ctx, [err], Path(td), {}, ["w.js"])
+            self.assertEqual(g.range_sha, self.sha(self.SRC, 2, 3))
+            self.assertIn(f"range_sha (for an owner-approved [[ignore]] entry) is {g.range_sha}", g.message)
+            (Path(td) / "w.js").write_text("one line\n")      # the file no longer has the reported lines
+            with self.assertRaises(sast.ParseGapError):
+                sast.not_parsed_findings(ctx, [err], Path(td), {}, ["w.js"])
+
+    def test_a_whole_file_gap_is_pinned_to_the_whole_file(self):
+        err = {"level": "warn", "type": "Syntax error", "path": "w.js"}
+        with tempfile.TemporaryDirectory() as td:
+            ctx = sast.Ctx(repo=Path(td), cfg=sast.load_config(None), mode="full", base=None)
+            (Path(td) / "w.js").write_text(self.SRC)
+            [g] = sast.not_parsed_findings(ctx, [err], Path(td), {}, ["w.js"])
+            self.assertEqual((g.whole_file, g.line, g.end_line, g.range_sha), (True, 1, 3, self.sha(self.SRC, 1, 3)))
+            ctx.cfg["ignore"] = [self.entry(range_sha=g.range_sha)]
+            self.assertEqual(sast.config_suppression(ctx.cfg, g, "2026-10-18"), "config: reviewed")
+            (Path(td) / "w.js").write_text("// any edit\n" + self.SRC)
+            [g2] = sast.not_parsed_findings(ctx, [err], Path(td), {}, ["w.js"])
+            self.assertEqual(sast.config_suppression(ctx.cfg, g2, "2026-10-18"), "")
+
+    def test_report_gives_the_owner_a_paste_ready_entry_with_an_escaped_path(self):
+        ctx = sast.Ctx(repo=Path("."), cfg=sast.load_config(None), mode="full", base=None)
+        g = self.gap(path='src/q"x.js')
+        g.blocking = True
+        md = sast.report_md(ctx, [g], "fail")
+        self.assertIn("For the repo owner: approve an unread range only if a rewrite is impossible", md)
+        self.assertIn('path = "src/q\\"x.js"', md)
+        self.assertIn(f'range_sha = "{g.range_sha}"', md)
+        import tomllib  # noqa: PLC0415
+        for path in ('src/q"x.js', "src/\U0001f600/a.js", "a\nb\\c\x7f\x01.js", "app/[slug]/page.tsx", "é/ü.ts"):
+            toml = sast.gap_waiver_toml(self.gap(path=path)).replace(
+                "<why a rewrite is impossible; who reviewed the unread lines>", "r")
+            parsed = tomllib.loads(toml)["ignore"][0]
+            self.assertEqual((parsed["path"], parsed["range_sha"]), (path, g.range_sha), path)
+        self.assertEqual(sast.toml_str("a\ud800b"), '"a\\uFFFDb"')   # a lone surrogate cannot round-trip
 
 
 if __name__ == "__main__":
