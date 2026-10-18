@@ -7,6 +7,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -339,7 +340,8 @@ class TargetRun(unittest.TestCase):
         cls.td = tempfile.TemporaryDirectory()
         cls.repo = repo_copy(cls.td.name)
         cls.target = Path(cls.td.name) / "private-rules"
-        (cls.target / ".git").mkdir(parents=True)
+        cls.target.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=cls.target, check=True)
         before = sorted(p.relative_to(cls.repo).as_posix() for p in cls.repo.rglob("*"))
         cls.report = lr.run(PATTERNS, cls.repo, ENGINES, LocalDrafter(DRAFTS), target=cls.target)
         cls.check_error = lr.check_target(cls.target, cls.report)
@@ -372,6 +374,7 @@ class TargetRun(unittest.TestCase):
     def test_a_rule_set_sast_check_would_refuse_keeps_nothing(self):
         with tempfile.TemporaryDirectory() as td:
             target = Path(td)
+            subprocess.run(["git", "init", "-q"], cwd=target, check=True)
             (target / ".sast-check" / "rules").mkdir(parents=True)
             (target / ".sast-check" / "rules" / "a.yaml").write_text("rules:\n  - id: sast.not.local\n")
             mine = target / ".sast-check" / "rules" / "new.yaml"
