@@ -431,7 +431,7 @@ class TargetSafety(unittest.TestCase):
             os.symlink(td, t / ".sast-check" / "rules" / "tests")
             self.assertIn("must be a folder", lr.target_problem(t))
         with tempfile.TemporaryDirectory() as td:
-            self.assertIn("must exclude the fixtures", lr.target_problem(self.target(td, toml=None)))
+            self.assertIn("must exclude every fixture", lr.target_problem(self.target(td, toml=None)))
         with tempfile.TemporaryDirectory() as td:
             self.assertIn("invalid", lr.target_problem(self.target(td, toml="[nope]\n")))
 
@@ -492,6 +492,67 @@ class TargetSafety(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td, mock.patch.object(sast, "validate_local_rules") as v:
             lr.check_target(self.target(td), {"accepted": []}, "/x/opengrep")
         self.assertEqual(v.call_args.args[1], "/x/opengrep")
+
+    def test_writes_never_follow_a_link_or_replace_a_file(self):
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as outside:
+            t = self.target(td)
+            (t / ".sast-check" / "rules").mkdir(parents=True)
+            os.symlink(Path(outside) / "x.yaml", t / ".sast-check" / "rules" / "lp-py-yaml-unsafe-load.yaml")  # dangling
+            got = lr.run([pattern("lp-py-yaml-unsafe-load")], ROOT, ENGINES, LocalDrafter(DRAFTS), target=t)
+            self.assertEqual(got["accepted"], [])
+            self.assertEqual(os.listdir(outside), [])                 # nothing written through the link
+            os.symlink(outside, t / "linked")
+            with self.assertRaises(OSError):
+                lr.write_new(t, t / "linked" / "a.yaml", "x")         # a link on the way
+            (t / "f.yaml").write_text("mine")
+            with self.assertRaises(FileExistsError):
+                lr.write_new(t, t / "f.yaml", "x")                    # never over an existing file
+            self.assertEqual((t / "f.yaml").read_text(), "mine")
+            self.assertEqual(os.listdir(outside), [])
+
+    def test_every_fixture_type_must_be_excluded_and_opengrep_must_run(self):
+        with tempfile.TemporaryDirectory() as td:
+            only_py = '[paths]\nexclude = [".sast-check/rules/tests/*.py"]\n'
+            self.assertIn("exclude every fixture", lr.target_problem(self.target(td, toml=only_py)))
+        with tempfile.TemporaryDirectory() as td:
+            off = '[paths]\nexclude = [".sast-check/rules/tests/**"]\n[tools]\nopengrep = false\n'
+            self.assertIn("turns Opengrep off", lr.target_problem(self.target(td, toml=off)))
+        self.assertEqual(lr.FIXTURE_EXTS, [".js", ".py", ".ts"])
+
+    def test_only_github_com_and_no_credentials_in_messages(self):
+        self.assertEqual(lr.redact("https://user:ghp_secret@github.com/o/r"), "https://***@github.com/o/r")
+        self.assertEqual(lr.redact("https://x-access-token:abc@github.com/o/r.git"), "https://***@github.com/o/r.git")
+        self.assertEqual(lr.redact("git@github.com:o/r.git"), "git@github.com:o/r.git")
+        for url, host in (("https://github.com/o/r", "github.com"), ("git@github.com:o/r.git", "github.com"),
+                          ("ssh://git@ghe.example.com/o/r", "ghe.example.com"), ("https://t@GitHub.com/o/r", "github.com")):
+            self.assertEqual(lr.url_host(url), host, url)
+        for url in ("https://tok123@ghe.example.com/o/r", "https://user:tok123@github.com/o/pub"):
+            def fake(cmd, url=url, **kw):
+                if cmd[:3] == ["git", "remote", "get-url"]:
+                    return mock.Mock(returncode=0, stdout=url + "\n")
+                return mock.Mock(returncode=0, stdout='{"nameWithOwner": "o/pub", "visibility": "PUBLIC"}')
+            with mock.patch.object(lr.subprocess, "run", fake), self.assertRaises(ValueError) as e:
+                lr.private_repo(Path("."))
+            self.assertNotIn("tok123", str(e.exception))
+
+    def test_a_relative_engine_path_is_made_absolute_before_use(self):
+        seen = {}
+
+        def fake_run(patterns, repo, engines, drafter, attempts, target):
+            seen["engines"] = engines
+            return {"accepted": [], "rejected": [], "skipped": []}
+
+        here = os.getcwd()
+        try:
+            os.chdir(Path(OPENGREP).parent)
+            with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
+                                                 "--engine", "./opengrep"]), \
+                    mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), mock.patch.object(lr, "run", fake_run), \
+                    redirect_stdout(io.StringIO()):
+                self.assertEqual(lr.main(), 0)
+        finally:
+            os.chdir(here)
+        self.assertEqual(seen["engines"], [str(Path(OPENGREP).parent.absolute() / "opengrep")])
 
     def test_a_report_in_this_repo_or_an_existing_local_branch_stops_the_run(self):
         with tempfile.TemporaryDirectory() as td:

@@ -37,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import date
 from pathlib import Path
@@ -60,6 +61,7 @@ STACKS = {
 }
 STACKS["node"] = STACKS["javascript"]
 COMMENT = {".py": "#", ".js": "//", ".ts": "//"}
+FIXTURE_EXTS = sorted({v[2] for v in STACKS.values()})   # the fixture file types this tool writes
 # docs/RULE_SPEC.md: critical/high -> ERROR (blocking), medium -> WARNING, low -> INFO
 SEVERITY = {"critical": "ERROR", "high": "ERROR", "medium": "WARNING", "low": "INFO"}
 # the only rule keys a draft may set; id, languages, severity, message and metadata are set here
@@ -351,6 +353,23 @@ def evaluate(p: dict, rule_text: str, fixture: str, train: list[dict], held: lis
 
 
 # ---------------------------------------------------------------- the run
+def write_new(root: Path, path: Path, text: str) -> None:
+    """Create PATH (under ROOT) with TEXT, never through a link and never over an existing file: each folder
+    from ROOT down must be a real folder (created if missing), and the file is opened with O_EXCL|O_NOFOLLOW.
+    Raises OSError otherwise, so a planted symlink can never send a private-derived rule outside the checkout."""
+    cur = root
+    for part in path.parent.relative_to(root).parts:
+        cur = cur / part
+        if cur.is_symlink():
+            raise OSError(40, f"{cur.relative_to(root).as_posix()} is a symlink")   # 40 = ELOOP
+        cur.mkdir(exist_ok=True)
+        if cur.is_symlink() or not cur.is_dir():
+            raise OSError(20, f"{cur.relative_to(root).as_posix()} is not a folder")  # 20 = ENOTDIR
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+
+
 def target_ids(target: Path) -> set[str]:
     """Rule ids already in a private rules repo's .sast-check/rules/ (unreadable files count as taken names only)."""
     ids = set()
@@ -389,6 +408,7 @@ def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int =
             dest = repo / "rules" / "custom" / area if target is None else target / LOCAL_DIR
             fx_dest = dest if target is None else dest / "tests"
             if rule_id in taken or rule_id in seen or (dest / f"{p['id']}.yaml").exists() \
+                    or (dest / f"{p['id']}.yaml").is_symlink() \
                     or (fx_dest / f"{p['id']}{ext}").exists() or (fx_dest / f"{p['id']}{ext}").is_symlink():
                 report["skipped"].append({"id": pid, "reason": f"{rule_id} already exists, was shipped or retired"})
                 continue
@@ -415,9 +435,16 @@ def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int =
                 except Reject as e:
                     reason = feedback = f"attempt {attempt}: {e}"
                     continue
-                fx_dest.mkdir(parents=True, exist_ok=True)
-                (dest / f"{p['id']}.yaml").write_text(rule_text)
-                (fx_dest / f"{p['id']}{ext}").write_text(fixture)
+                try:
+                    write_new(target or repo, dest / f"{p['id']}.yaml", rule_text)
+                    try:
+                        write_new(target or repo, fx_dest / f"{p['id']}{ext}", fixture)
+                    except OSError:
+                        (dest / f"{p['id']}.yaml").unlink()   # this run created it: never leave half a rule
+                        raise
+                except OSError as e:
+                    reason = f"cannot write the rule safely ({e.strerror or type(e).__name__})"
+                    break
                 report["accepted"].append({"id": pid, "rule_id": rule_id, "hits": p["hits"],
                                            "cwe": yaml.safe_load(rule_text)["rules"][0]["metadata"]["cwe"],
                                            "cwe_source": "pattern" if p["cwe"] else "drafted", "orgs": source_orgs(p),
@@ -458,16 +485,40 @@ def target_problem(target: Path) -> str:
         cfg = sast.load_config(sast.settings_file(target, None, ".sast-check.toml"))
     except (RuntimeError, ValueError) as e:
         return f"the target's .sast-check.toml is invalid: {e}"
-    if not sast.glob_any(f"{LOCAL_DIR}/tests/x.py", cfg["paths"]["exclude"]):
-        return (f"the target's .sast-check.toml must exclude the fixtures: add \"{LOCAL_DIR}/tests/**\" to "
+    unscanned = [f"{LOCAL_DIR}/tests/{sub}x{ext}" for ext in FIXTURE_EXTS for sub in ("", "a/")]
+    if not all(sast.glob_any(f, cfg["paths"]["exclude"]) for f in unscanned):
+        return (f"the target's .sast-check.toml must exclude every fixture: add \"{LOCAL_DIR}/tests/**\" to "
                 "[paths] exclude")
+    if cfg["tools"].get("opengrep") is not True:   # repository rules run only through Opengrep
+        return "the target's .sast-check.toml turns Opengrep off, so its rules would never run"
     return ""
 
 
+def redact(url: str) -> str:
+    """URL without any user:password@ part (a token can be embedded there), for messages and logs."""
+    try:
+        u = urllib.parse.urlsplit(url)
+    except ValueError:
+        return "<unparsable URL>"
+    if u.scheme and "@" in u.netloc:
+        return urllib.parse.urlunsplit(u._replace(netloc="***@" + u.netloc.rsplit("@", 1)[1]))
+    return url
+
+
+def url_host(url: str) -> str:
+    """Host of a git remote URL: https://host/..., ssh://user@host/... or scp-like user@host:path."""
+    u = urllib.parse.urlsplit(url)
+    if u.scheme:
+        return (u.hostname or "").lower()
+    m = re.fullmatch(r"(?:[^@/]+@)?([^:/]+):.*", url)
+    return m.group(1).lower() if m else ""
+
+
 def private_repo(target: Path) -> str:
-    """owner/name of TARGET's origin, checked to be a private GitHub repo; raises ValueError otherwise. The rules
-    come from private code, so nothing may be pushed or proposed to a public (or internal) repo. Every URL git
-    would use for origin (the fetch URL and each push URL) must name that same private repo."""
+    """owner/name of TARGET's origin, checked to be a private repo on github.com; raises ValueError otherwise.
+    The rules come from private code, so nothing may be pushed or proposed to a public (or internal) repo.
+    Every URL git would use for origin (the fetch URL and each push URL) must name that same private repo.
+    GitHub Enterprise hosts are not supported. Messages never show credentials embedded in a URL."""
     def git_urls(*args):
         r = subprocess.run(["git", "remote", "get-url", *args, "origin"], cwd=target, capture_output=True,
                            text=True, check=False)
@@ -478,6 +529,8 @@ def private_repo(target: Path) -> str:
         raise ValueError("the target has no origin remote")
     names = set()
     for url in dict.fromkeys(urls):
+        if url_host(url) != "github.com":
+            raise ValueError(f"the target's origin URL {redact(url)} is not on github.com (only github.com is supported)")
         r = subprocess.run(["gh", "repo", "view", url, "--json", "nameWithOwner,visibility"], cwd=target,
                            capture_output=True, text=True, check=False, timeout=60)
         try:
@@ -485,7 +538,7 @@ def private_repo(target: Path) -> str:
         except ValueError:
             info = {}
         if info.get("visibility") != "PRIVATE" or not info.get("nameWithOwner"):
-            raise ValueError(f"the target's origin URL {url} must be a private GitHub repo "
+            raise ValueError(f"the target's origin URL {redact(url)} must be a private GitHub repo "
                              f"(got {info.get('visibility', 'unknown')})")
         names.add(info["nameWithOwner"])
     if len(names) != 1:
@@ -582,6 +635,10 @@ def main() -> int:
     if not a.engine or Path(a.engine).name != "opengrep":
         print("opengrep is required (the only supported engine)", file=sys.stderr)
         return 2
+    if not Path(a.engine).is_file():
+        print(f"--engine {a.engine} does not exist", file=sys.stderr)
+        return 2
+    a.engine = os.path.abspath(a.engine)   # later steps run from other folders; keep the name (no symlink resolve)
     if not os.environ.get("OPENROUTER_API_KEY"):
         print("OPENROUTER_API_KEY is not set", file=sys.stderr)
         return 2
