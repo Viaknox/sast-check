@@ -186,7 +186,7 @@ class Secrets(unittest.TestCase):
 
     def test_a_report_path_inside_dist_or_rules_is_refused_before_anything_runs(self):
         """A --report path inside dist/ or rules/ exits 2 before any draft runs."""
-        base = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep"]
+        base = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", str(OPENGREP)]
         for report in ("dist/rules.yaml", str(ROOT / "dist" / "rule-ids.lock"), "rules/custom/python/x.yaml"):
             with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), \
                     mock.patch.object(sys, "argv", base + ["--report", str(ROOT / report)]), \
@@ -198,7 +198,7 @@ class Secrets(unittest.TestCase):
     def test_no_key_stops_the_run_before_anything_is_drafted(self):
         """Without OPENROUTER_API_KEY the tool exits 2 before drafting anything."""
         env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
-        argv = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep"]
+        argv = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", str(OPENGREP)]
         with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(sys, "argv", argv), \
                 mock.patch.object(lr, "run", side_effect=AssertionError("drafted without a key")), redirect_stderr(io.StringIO()):
             self.assertEqual(lr.main(), 2)
