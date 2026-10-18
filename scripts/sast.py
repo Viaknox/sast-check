@@ -100,7 +100,7 @@ KNOWN_TOOL_ERRORS = (
     "Out of memory", "Fixpoint timeout", "Stack overflow", "Timeout during interfile analysis",
     "OOM during interfile analysis", "Missing plugin", "PatternParseError", "IncompatibleRule", "Pattern parse error",
     "Incompatible rule", "DependencyResolutionError")
-NOT_PARSED_DOC = "https://github.com/SathiaAI/sast-check/blob/main/docs/not-parsed.md"   # absolute: the action runs from $GITHUB_ACTION_PATH
+NOT_PARSED_DOC = "https://github.com/Viaknox/sast-check/blob/main/docs/not-parsed.md"   # absolute: the action runs from $GITHUB_ACTION_PATH
 
 
 class ParseGapError(RuntimeError):
