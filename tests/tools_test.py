@@ -1219,8 +1219,13 @@ class LocalRules(unittest.TestCase):
                 sast.parse_local_rules({"a.yaml": text})
         loop = "rules:\n  - id: local.demo.loop\n    message: m\n    languages: [python]\n    pattern: eval(...)\n" \
                "    metadata: {sast_severity: high, cwe: CWE-95}\n    options: &o {x: *o}\n"
-        with self.assertRaisesRegex(RuntimeError, "local.demo.loop: cannot be used"):   # a recursive alias
+        with self.assertRaisesRegex(RuntimeError, "aliases"):   # a recursive alias
             sast.parse_local_rules({"a.yaml": loop})
+        bomb = "rules:\n  - id: local.demo.bomb\n    message: m\n    languages: [python]\n    pattern: eval(...)\n" \
+               "    metadata: {sast_severity: high, cwe: CWE-95}\n    options:\n      a: &a [x, x]\n" \
+               + "".join(f"      b{i}: &b{i} [*{'a' if i == 0 else f'b{i - 1}'}, *{'a' if i == 0 else f'b{i - 1}'}]\n" for i in range(40))
+        with self.assertRaisesRegex(RuntimeError, "aliases"):   # 2^40 nodes once expanded, from under 2 KB
+            sast.parse_local_rules({"a.yaml": bomb})
         # a YAML date (metadata: {added: 2026-01-01}) is fine: it is passed on as text
         sast.parse_local_rules({"a.yaml": self.rules({**self.RULE, "metadata": {**self.RULE["metadata"], "added": sast.date(2026, 1, 1)}})})
         with self.assertRaisesRegex(RuntimeError, "duplicate rule id local.demo.eval"):
@@ -1291,6 +1296,11 @@ class LocalRules(unittest.TestCase):
                            cwd=repo, check=True, capture_output=True)
             self.git(repo, "commit", "-qm", "odd name")
             self.assertEqual(list(sast.local_rule_files(repo, "HEAD")), [rf])
+        with tempfile.TemporaryDirectory() as td:     # the size limit holds before any file is read
+            repo = self.repo(td, {rf: "#" * (sast.LOCAL_RULES_MAX_BYTES + 1)})
+            for base in (None, "HEAD"):
+                with self.assertRaisesRegex(RuntimeError, "larger than"):
+                    sast.local_rule_files(repo, base)
         with tempfile.TemporaryDirectory() as td:     # a submodule (gitlink) where the folder should be
             repo = self.repo(td, {"a.txt": "x\n"})
             sha = sast.sh(["git", "rev-parse", "HEAD"], repo).stdout.strip()
@@ -1352,6 +1362,26 @@ class LocalRules(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:     # a base over the file limit is repaired the same way
             code, data = self.gate(td, {**good, **many}, dict.fromkeys(many))
         self.assertEqual((code, data["verdict"]), (0, "pass"), data["runs"])
+        with tempfile.TemporaryDirectory() as td:     # a base whose .sast-check is a link is repaired by a real folder
+            repo = self.repo(td, {**good, "elsewhere/rules/demo.yaml": self.rules()})
+            (repo / ".sast-check" / "rules" / "demo.yaml").unlink()
+            (repo / ".sast-check" / "rules").rmdir()
+            (repo / ".sast-check").rmdir()
+            os.symlink("elsewhere", repo / ".sast-check")
+            self.git(repo, "add", "-A")
+            self.git(repo, "commit", "-qm", "link")
+            os.remove(repo / ".sast-check")
+            (repo / sast.LOCAL_RULES_DIR).mkdir(parents=True)
+            (repo / rf).write_text(self.rules())
+            self.git(repo, "add", "-A")
+            self.git(repo, "commit", "-qm", "repair")
+            import subprocess  # noqa: PLC0415
+            out = Path(td) / "out"
+            r = subprocess.run([sys.executable, "-I", str(ROOT / "scripts" / "sast.py"), "--repo", str(repo), "--mode",
+                                "diff", "--base", "HEAD~1", "--only", "opengrep", "--out", str(out)],
+                               capture_output=True, text=True, check=False)
+            data = json.loads((out / "findings.json").read_text())
+        self.assertEqual((r.returncode, data["verdict"]), (0, "pass"), data["runs"])
         with tempfile.TemporaryDirectory() as td:     # a repair PR that also changes code gets no exception
             code, data = self.gate(td, {**good, rf: broken}, {rf: self.rules(), "app.py": "x = eval(input())\n"})
         self.assertEqual(code, 2)
