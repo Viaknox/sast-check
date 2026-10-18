@@ -74,6 +74,8 @@ Secrets cannot be suppressed either way: remove the secret from the PR's commits
 A misspelled `block_on` severity is a settings error (the check fails) rather than a gate that never blocks.
 All keys and defaults: [config/default.toml](config/default.toml).
 
+**Your own rules:** put Opengrep rules in `.sast-check/rules/*.yaml` (ids start with `local.`, each with `metadata.sast_severity` and `metadata.cwe`). They run with the built-in rules, are read from the base branch like the settings, and a PR that edits them must leave them valid. Keep rules learned from private code here, not in the public rule set. See [docs/local-rules.md](docs/local-rules.md).
+
 ## Run locally / with an AI agent
 
 Install the scanners (any OS): `pip install ruff==0.16.8 zizmor==1.30.1`, then

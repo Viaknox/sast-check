@@ -32,7 +32,7 @@ Warnings (`"blocking": false`, in the change) — list them briefly; fix the che
 
 ## 3. Rules you must follow
 
-- **Never** add a `sast-ignore[...]` comment, an `[[ignore]]` entry, or loosen `.sast-check.toml` on your own. If you believe a finding is a false positive, show the evidence and ask the user. If they approve, the suppression must carry their reason: `// sast-ignore[sast.js.code-eval]: <reason>`.
+- **Never** add a `sast-ignore[...]` comment, an `[[ignore]]` entry, loosen `.sast-check.toml`, or delete or weaken a rule in `.sast-check/rules/` on your own. If you believe a finding is a false positive, show the evidence and ask the user. If they approve, the suppression must carry their reason: `// sast-ignore[sast.js.code-eval]: <reason>`.
 - **Never** disable a scanner or switch to `--mode diff` with a fake base to make the gate pass.
 - Do not merge, approve, or resolve the PR. A human approves every PR.
 - Cheap work (reading many findings, drafting explanations) can go to a lower-cost sub-agent tier; the fix and the final verdict are checked by you by re-running the scan.
