@@ -135,27 +135,75 @@ interface I { "new": string; }
 Other constructs can trigger the same finding. The report shows the lines Opengrep could not read; rewrite them
 in an older or plainer form.
 
-## Last resort: suppress with a reason
+## Waivers
 
-Only if a rewrite is impossible. Put this on the span's first line or the line above it:
+Only if a rewrite is impossible. There are two ways, and both approve **exactly** the lines in the finding:
+
+**1. In the PR itself: a comment with a reason.** Put it on the range's first line or the line above it:
 
 ```js
 // sast-ignore[opengrep.not-parsed]: generated parser output, reviewed by hand in PR 123
 class A { static { /* ... */ } }
 ```
 
-- A reason is required. Without one the finding is not suppressed.
-- It suppresses only `opengrep.not-parsed`, never another rule on the same line. `sast-ignore[*]` does **not**
-  cover it; the rule must be named. The same holds for an `[[ignore]]` entry in `.sast-check.toml`.
-- Suppressed gaps stay listed in the report with their reason, and the summary shows a separate count of
-  coverage-gap suppressions. Code under a suppressed gap is still **not scanned**: review it by hand.
-- sast-check reads the comment from the source file, so it works even though Opengrep skipped those lines.
+**2. Owner-approved, merged first: an `[[ignore]]` entry pinned to the code.** The finding and the report give
+the entry ready to paste, including the range's fingerprint (`range_sha`):
+
+```toml
+[[ignore]]
+rule = "opengrep.not-parsed"
+path = "src/legacy/parser.js"        # one exact file, no globs
+range_sha = "47fb4daf1a06158d5ca8c40e9bc5ab75f99ac59a5de9b50973252e5b3d0122ac"
+reason = "generated parser, reviewed by hand in PR 123"
+expires = "2027-01-01"
+```
+
+- A reason is required. Without one nothing is suppressed.
+- Only `opengrep.not-parsed` is suppressed, never another rule on the same lines. `sast-ignore[*]` and
+  `rule = "*"` do **not** cover it; the rule must be named.
+- An `[[ignore]]` entry for this rule must have an exact `path` and a valid `range_sha`, or the settings are
+  rejected (exit code 2). An older entry with only a `path` is rejected too: it could cover any unreadable code
+  added to that file later. Run the check without it, then copy the entry from the finding.
+- `range_sha` is a SHA-256 of the range's lines: line endings (CRLF), a leading byte-order mark and trailing
+  spaces are ignored, so do line numbers. Moving the code down the file keeps the waiver. **Any other change in
+  the range** — new unreadable code that makes the range grow, an edit inside it, even a spacing change inside a
+  string — makes it stop matching, and the PR blocks until someone looks at the new lines. The finding then says
+  why the old entry no longer applies.
+- To change waived code in one step: merge the new entry first, keeping the old one next to it; merge the code
+  change; then delete the old entry. Or waive the new code in the PR with a comment (way 1).
 - In a PR, a comment that was already there does **not** waive unreadable lines that the PR adds or edits: the
-  comment must be added or edited in the same PR, so the reviewer sees the suppression being made. (Otherwise a
-  later PR could add new unscanned code under an old comment.) A waiver that should last belongs in
-  `.sast-check.toml` as an `[[ignore]]` entry with a reason and an expiry; it is read from the base branch.
+  comment must be added or edited in the same PR, so the reviewer sees it. A comment reached through a symlink
+  never counts.
+- Suppressed gaps stay listed in the report with their reason, with a separate count of coverage-gap
+  suppressions. Code under a suppressed gap is still **not scanned**: review it by hand.
+- sast-check reads the comment and the fingerprint from the source file, so both work even though Opengrep
+  skipped those lines. To get a `range_sha` without CI, run `python3 scripts/sast.py --mode full --only opengrep`
+  locally: it is in `sast-results/findings.json` and the report.
+
+## Why the range is never made smaller
+
+Opengrep 1.30.2 reports only the tokens it could not read. It never says which code between them it did read,
+so sast-check cannot prove any of that code was scanned, and keeps the whole range. A smaller range would need
+that proof from Opengrep's own output; until an Opengrep release gives it, the range stays as it is.
+
+## Who decides what (trust boundary)
+
+- **Settings come from the base branch.** A PR cannot add, widen or extend its own `[[ignore]]` entry; the owner
+  merges it first, and a PR that changes `.sast-check.toml` is checked with the old one.
+- **Waivers are reviewed by a person.** An inline comment shows in the PR diff; a config entry is a separate,
+  owner-merged change. Both carry a reason, and both are listed in every report.
+- **The "Prompt for AI agents" block is guidance, not enforcement.** It tells an agent to rewrite and never to
+  suppress. What actually stops a bad suppression is the gate: settings from the base branch, the fresh-comment
+  rule and the `range_sha` pin.
 
 ## If the check errors instead
 
 A parse error with missing or malformed spans, or an error type sast-check does not know, fails the check
 (exit code 2). It is never ignored. Report it as a bug if your code is valid.
+
+**Opengrep upgrades.** sast-check pins Opengrep (currently 1.30.2) and lists every error type it knows in
+`scripts/sast.py` (`WHOLE_FILE_ERRORS`, `KNOWN_TOOL_ERRORS`). A new release can add error types; until one is
+inspected, it stays exit code 2. To upgrade: bump the pin in `action.yml` and `.github/workflows/test.yml`, run
+the tests in CI, and for each new error type, look at what it means, add it to the right list only if it is
+truly a parse gap or a tool error, and add a test fixture that produces it. Never add a type to make the check
+pass without that inspection.

@@ -1239,6 +1239,75 @@ gate --mode full --only opengrep
 check "not-parsed: two spans far apart in a file are one finding"  "$(q "[(f['line'], f['end_line']) for f in d['findings'] if f['rule']=='opengrep.not-parsed' and f['path']=='src/far.js']")" "[(2, 4)]"
 git checkout -q -f main
 
+# #25 pinned-engine fixture: Opengrep 1.30.2 marks only the braces of a multi-line static block, never the sink
+# between them, and reports no finding for that sink: the reason sast-check covers the whole envelope
+git checkout -q -b np25raw main
+printf 'class A {\n  static {\n    eval(req.query.code);\n  }\n}\n' > src/blk.js && git add src/blk.js && git commit -qm blk
+opengrep scan --config "$HERE/dist/rules.yaml" --json --quiet --disable-version-check src/blk.js > "$T/raw25.json" 2>/dev/null || true
+RAW="import json;r=json.load(open('$T/raw25.json'))"
+check "not-parsed raw: Opengrep reports PartialParsing spans"     "$(python3 -c "$RAW;print(any((e.get('type') or [''])[0]=='PartialParsing' for e in r['errors']))")" "True"
+check "not-parsed raw: no span covers the sink on line 3"        "$(python3 -c "$RAW;print(any(s['start']['line']<=3<=s['end']['line'] for e in r['errors'] for s in e.get('spans') or []))")" "False"
+check "not-parsed raw: the sink between the spans is not found"   "$(python3 -c "$RAW;print([x['start']['line'] for x in r['results'] if 'code-eval' in x['check_id']])")" "[]"
+gate --mode full --only opengrep
+check "not-parsed raw: sast-check covers the envelope 2-5"        "$(q "[(f['line'], f['end_line']) for f in d['findings'] if f['rule']=='opengrep.not-parsed']")" "[(2, 5)]"
+rm -f "$T/raw25.json"
+git checkout -q -f main
+
+# #25 waivers: a config [[ignore]] for opengrep.not-parsed covers only the exact path + range_sha it approved
+# (full mode blocks every finding in the repo, so these checks look at the src/w.js gap itself)
+W25="[(f['line'], f['end_line'], f['suppressed'], f['blocking']) for f in d['findings'] if f['rule']=='opengrep.not-parsed' and f['path']=='src/w.js']"
+git checkout -q -b np25 main
+printf 'var a = 1;\nclass W { static { init("x  y"); } }\nvar b = 2;\n' > src/w.js && git add src/w.js && git commit -qm w
+gate --mode full --only opengrep
+SHA25=$(q "[f['range_sha'] for f in d['findings'] if f['rule']=='opengrep.not-parsed' and f['path']=='src/w.js'][0]")
+check "waiver: the finding carries a 64-hex range_sha"           "$(echo "$SHA25" | grep -cE '^[0-9a-f]{64}$') $(q "$W25")" "1 [(2, 2, '', True)]"
+check "waiver: the report gives the owner a paste-ready entry"   "$(grep -c "^range_sha = \"$SHA25\"" sast-results/report.md)" "1"
+printf '[[ignore]]\nrule = "opengrep.not-parsed"\npath = "src/w.js"\nrange_sha = "%s"\nreason = "static init, reviewed"\n' "$SHA25" > .sast-check.toml
+git add .sast-check.toml && git commit -qm waive
+gate --mode full --only opengrep
+check "waiver: exact path + range_sha waives the gap"            "$(q "$W25")" "[(2, 2, 'config: static init, reviewed', False)]"
+sed -i '1i // header\n// header' src/w.js && sed -i 's/} }$/} }   /' src/w.js && git commit -qam moved
+gate --mode full --only opengrep
+check "waiver: still applies after moving down (+trailing spaces)" "$(q "$W25")" "[(4, 4, 'config: static init, reviewed', False)]"
+sed -i 's/$/\r/' src/w.js && git commit -qam crlf
+gate --mode full --only opengrep
+check "waiver: still applies with CRLF line endings"             "$(q "$W25")" "[(4, 4, 'config: static init, reviewed', False)]"
+git checkout -q HEAD~2 -- src/w.js && git commit -qam back && git branch -q np25base
+# the #25 hole: a PR adds a new unreadable block later in the waived file; the envelope grows and must block
+printf 'class Z { static { eval(req.query.code); } }\n' >> src/w.js && git commit -qam newgap
+gate --mode diff --base HEAD~1 --only opengrep
+check "waiver: new unread code in a waived file blocks (diff)"   "$code $(q "$W25")" "1 [(2, 4, '', True)]"
+check "waiver: the report says the waiver was for other code"    "$(grep -c 'was approved for different code' sast-results/report.md)" "1"
+git checkout -q -f -B np25x np25base
+sed -i 's/init(/init2(/' src/w.js && git commit -qam editin
+gate --mode diff --base HEAD~1 --only opengrep
+check "waiver: an edit inside the approved range blocks"         "$code $(q "$W25")" "1 [(2, 2, '', True)]"
+git checkout -q -f -B np25x np25base
+sed -i 's/x  y/x y/' src/w.js && git commit -qam spacing
+gate --mode full --only opengrep
+check "waiver: a spacing change inside a string needs re-approval" "$(q "$W25")" "[(2, 2, '', True)]"
+git checkout -q -f -B np25x np25base
+# rotation: the old and the new approval side by side
+NEW25=$(printf 'class W { static { init2("x  y"); } }' | sha256sum | cut -d' ' -f1)
+printf '[[ignore]]\nrule = "opengrep.not-parsed"\npath = "src/w.js"\nrange_sha = "%s"\nreason = "new"\n' "$NEW25" >> .sast-check.toml
+sed -i 's/init(/init2(/' src/w.js && git commit -qam rotate
+gate --mode full --only opengrep
+check "waiver: a second entry approves the new code (rotation)"  "$(q "$W25")" "[(2, 2, 'config: new', False)]"
+git checkout -q -f -B np25x np25base
+sed -i 's/^reason = .*/&\nexpires = "2000-01-01"/' .sast-check.toml && git commit -qam expired
+gate --mode full --only opengrep
+check "waiver: an expired entry blocks and says so"             "$(q "$W25") $(grep -c 'has expired' sast-results/report.md)" "[(2, 2, '', True)] 2"
+git checkout -q -f main
+
+# #25 settings: a not-parsed [[ignore]] without an exact path and a valid range_sha is a settings error (exit 2)
+for bad in 'path = "src/w.js"' 'path = "src/*.js"\nrange_sha = "'"$SHA25"'"' 'path = "src/w.js"\nrange_sha = "abc"'; do
+  git checkout -q -b np25s main
+  printf '[[ignore]]\nrule = "opengrep.not-parsed"\n'"$bad"'\nreason = "legacy"\n' > .sast-check.toml && git add .sast-check.toml && git commit -qm s
+  set +e; python3 -I "$HERE/scripts/sast.py" --mode full --only opengrep >/dev/null 2>&1; code=$?; set -e
+  check "waiver settings error: $(printf "$bad" | head -c 40 | tr '\n' ' ')" "$code" "2"
+  git checkout -q -f main && git branch -q -D np25s
+done
+
 # clean PR passes
 git checkout -q -b clean main~1 && echo "y = 2" >> src/util.py && git commit -qam clean
 gate --mode diff --base main~1 --only opengrep,ruff,gitleaks
