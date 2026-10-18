@@ -241,10 +241,10 @@ def local_rule_files(repo: Path, base: str | None) -> dict[str, str]:
     names: list[str] = []
     if base:
         settings_file(repo, base, ".sast-check.toml")          # fails closed on an unknown base
-        for i in range(1, len(parts) + 1):                     # .sast-check or .sast-check/rules as a link
+        for i in range(1, len(parts) + 1):   # .sast-check and .sast-check/rules: absent or a real folder
             entry = sh(["git", "ls-tree", "-z", base, "--", "/".join(parts[:i])], repo).stdout.strip("\0")
-            if entry.startswith("120000 "):
-                raise RuntimeError(f"{'/'.join(parts[:i])} is a symlink on the base branch; it must be a folder")
+            if entry and not entry.startswith("040000 tree "):   # a link (120000), file or submodule (160000)
+                raise RuntimeError(f"{'/'.join(parts[:i])} must be a folder on the base branch, not a symlink, file or submodule")
         for e in sh(["git", "ls-tree", "-z", base, "--", LOCAL_RULES_DIR + "/"], repo).stdout.split("\0"):
             if not e:
                 continue
@@ -254,10 +254,12 @@ def local_rule_files(repo: Path, base: str | None) -> dict[str, str]:
                     raise RuntimeError(f"{path} must be a regular file (base branch)")
                 names.append(path)
     else:
+        gitlinks = {e.split("\t", 1)[1] for e in git_z(repo, ["ls-files", "-z", "-s", "--", *[
+            "/".join(parts[:i]) for i in range(1, len(parts) + 1)]]) if e.startswith("160000 ")}
         for i in range(1, len(parts) + 1):
             p = repo.joinpath(*parts[:i])
-            if p.is_symlink() or (p.exists() and not p.is_dir()):
-                raise RuntimeError(f"{'/'.join(parts[:i])} must be a folder, not a symlink or file")
+            if p.is_symlink() or (p.exists() and not p.is_dir()) or "/".join(parts[:i]) in gitlinks:
+                raise RuntimeError(f"{'/'.join(parts[:i])} must be a folder, not a symlink, file or submodule")
         d = repo / LOCAL_RULES_DIR
         for e in sorted(os.scandir(d), key=lambda e: e.name) if d.is_dir() else []:
             if e.name.endswith((".yaml", ".yml")):
@@ -280,7 +282,7 @@ def check_local_rule(r: object, where: str) -> None:
     rid = r.get("id")
     if not isinstance(rid, str) or not LOCAL_RULE_ID.fullmatch(rid):
         raise RuntimeError(f"{where}: id must start with `local.` and use only a-z, 0-9, `_`, `-` and dots; got {rid!r}")
-    if bad := sorted(set(r) - LOCAL_RULE_KEYS):
+    if bad := sorted(str(k) for k in r if k not in LOCAL_RULE_KEYS):
         raise RuntimeError(f"{rid}: unsupported key(s) {', '.join(bad)}; allowed: {', '.join(sorted(LOCAL_RULE_KEYS))}")
     if r.get("mode", "search") not in ("search", "taint"):
         raise RuntimeError(f"{rid}: mode must be search or taint; got {r['mode']!r}")
@@ -296,6 +298,12 @@ def check_local_rule(r: object, where: str) -> None:
         raise RuntimeError(f"{rid}: metadata.cwe must name a CWE, e.g. \"CWE-78\"")
     if md.get("confidence", "medium") not in ("low", "medium", "high"):
         raise RuntimeError(f"{rid}: metadata.confidence must be low, medium or high")
+    # read when a finding is reported: a wrong shape must be refused here, not crash the report later
+    refs = md.get("references", [])
+    if not isinstance(refs, list) or not all(isinstance(x, str) for x in refs):
+        raise RuntimeError(f"{rid}: metadata.references must be a list of URLs (strings)")
+    if not isinstance(md.get("fix", ""), str):
+        raise RuntimeError(f"{rid}: metadata.fix must be text")
 
 
 def parse_local_rules(files: dict[str, str]) -> list[dict]:
@@ -370,8 +378,11 @@ def local_rules_repair(repo: Path, base: str) -> list[dict] | None:
 
 
 def local_rule_id(check_id: str, local_ids: set[str]) -> str | None:
-    """The repository rule id a result's check_id names (Opengrep may prefix it with the config path)."""
-    return next((rid for rid in local_ids if check_id == rid or check_id.endswith("." + rid)), None)
+    """The repository rule id a result's check_id names (Opengrep may prefix it with the config path): an exact
+    match, else the longest matching suffix, so `x.local.a.local.b` is never reported as `local.b`'s finding."""
+    if check_id in local_ids:
+        return check_id
+    return max((rid for rid in local_ids if check_id.endswith("." + rid)), key=len, default=None)
 
 
 def load_config(text: str | None) -> dict:
@@ -2239,8 +2250,12 @@ def main(argv=None) -> int:
         # the PR's repository rules: used only after merge, but checked now so a merged rule cannot break every scan
         if not settings_error:
             try:
+                base_files = local_rule_files(repo, a.base)
+            except (RuntimeError, OSError, subprocess.TimeoutExpired):
+                base_files = None   # the base's own problem: reported (or repaired) when the rules are loaded below
+            try:
                 proposed = local_rule_files(repo, None)
-                if proposed != local_rule_files(repo, a.base):
+                if proposed != base_files:
                     ctx.notes.append(f"This change edits `{LOCAL_RULES_DIR}/`. The check used the base branch's "
                                      "rules; the new rules take effect after merge.")
                     validate_local_rules(parse_local_rules(proposed))

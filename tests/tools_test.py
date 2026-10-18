@@ -1206,7 +1206,11 @@ class LocalRules(unittest.TestCase):
                       {**self.RULE, "metadata": {"sast_severity": "severe", "cwe": "CWE-95"}},
                       {**self.RULE, "metadata": {"sast_severity": "high"}},
                       {**self.RULE, "metadata": {"sast_severity": "high", "cwe": "95"}},
-                      {**self.RULE, "metadata": {"sast_severity": "high", "cwe": "CWE-95", "confidence": "sure"}}]
+                      {**self.RULE, "metadata": {"sast_severity": "high", "cwe": "CWE-95", "confidence": "sure"}},
+                      {**self.RULE, 1: "a non-string key"},
+                      {**self.RULE, "metadata": {**self.RULE["metadata"], "references": [123]}},
+                      {**self.RULE, "metadata": {**self.RULE["metadata"], "references": "https://x"}},
+                      {**self.RULE, "metadata": {**self.RULE["metadata"], "fix": ["x"]}}]
         for r in bad_rules:
             with self.assertRaises(RuntimeError, msg=str(r)):
                 sast.parse_local_rules({"a.yaml": self.rules(r)})
@@ -1222,6 +1226,8 @@ class LocalRules(unittest.TestCase):
         self.assertEqual(sast.local_rule_id("local.a", ids), "local.a")
         self.assertIsNone(sast.local_rule_id("tmp.local.a.bc", ids))
         self.assertIsNone(sast.local_rule_id("dist.sast.python.eval", ids))
+        # the longest id wins, so a suppression for local.a never hides local.x.local.a
+        self.assertEqual(sast.local_rule_id("tmp.local.x.local.a", {"local.a", "local.x.local.a"}), "local.x.local.a")
         # no built-in id can be mistaken for a repository rule
         built = yaml.safe_load((ROOT / "dist" / "rules.yaml").read_text())["rules"]
         self.assertFalse([r["id"] for r in built if r["id"].startswith("local.") or ".local." in r["id"]])
@@ -1268,7 +1274,16 @@ class LocalRules(unittest.TestCase):
                 sast.local_rule_files(repo, None)
             self.git(repo, "add", "-A")
             self.git(repo, "commit", "-qm", "dir link")
-            with self.assertRaisesRegex(RuntimeError, "symlink on the base branch"):
+            with self.assertRaisesRegex(RuntimeError, "must be a folder on the base branch"):
+                sast.local_rule_files(repo, "HEAD")
+        with tempfile.TemporaryDirectory() as td:     # a submodule (gitlink) where the folder should be
+            repo = self.repo(td, {"a.txt": "x\n"})
+            sha = sast.sh(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.git(repo, "update-index", "--add", "--cacheinfo", f"160000,{sha},.sast-check/rules")
+            with self.assertRaisesRegex(RuntimeError, "submodule"):
+                sast.local_rule_files(repo, None)
+            self.git(repo, "commit", "-qm", "gitlink")
+            with self.assertRaisesRegex(RuntimeError, "submodule"):
                 sast.local_rule_files(repo, "HEAD")
 
     def gate(self, td, base, pr):
@@ -1312,6 +1327,10 @@ class LocalRules(unittest.TestCase):
         self.assertEqual(code, 2)
         with tempfile.TemporaryDirectory() as td:     # ...but a PR that only repairs the rules can pass, using them
             code, data = self.gate(td, {**good, rf: broken}, {rf: self.rules()})
+        self.assertEqual((code, data["verdict"]), (0, "pass"), data["runs"])
+        many = {f"{sast.LOCAL_RULES_DIR}/r{i}.yaml": "rules: []\n" for i in range(sast.LOCAL_RULES_MAX_FILES + 1)}
+        with tempfile.TemporaryDirectory() as td:     # a base over the file limit is repaired the same way
+            code, data = self.gate(td, {**good, **many}, dict.fromkeys(many))
         self.assertEqual((code, data["verdict"]), (0, "pass"), data["runs"])
         with tempfile.TemporaryDirectory() as td:     # a repair PR that also changes code gets no exception
             code, data = self.gate(td, {**good, rf: broken}, {rf: self.rules(), "app.py": "x = eval(input())\n"})
