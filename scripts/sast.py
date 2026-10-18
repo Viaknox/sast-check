@@ -242,12 +242,10 @@ def local_rule_files(repo: Path, base: str | None) -> dict[str, str]:
     if base:
         settings_file(repo, base, ".sast-check.toml")          # fails closed on an unknown base
         for i in range(1, len(parts) + 1):   # .sast-check and .sast-check/rules: absent or a real folder
-            entry = sh(["git", "ls-tree", "-z", base, "--", "/".join(parts[:i])], repo).stdout.strip("\0")
+            entry = "".join(git_z(repo, ["ls-tree", "-z", base, "--", "/".join(parts[:i])]))
             if entry and not entry.startswith("040000 tree "):   # a link (120000), file or submodule (160000)
                 raise RuntimeError(f"{'/'.join(parts[:i])} must be a folder on the base branch, not a symlink, file or submodule")
-        for e in sh(["git", "ls-tree", "-z", base, "--", LOCAL_RULES_DIR + "/"], repo).stdout.split("\0"):
-            if not e:
-                continue
+        for e in git_z(repo, ["ls-tree", "-z", base, "--", LOCAL_RULES_DIR + "/"]):   # bytes: any file name
             meta, path = e.split("\t", 1)
             if path.endswith((".yaml", ".yml")):
                 if not meta.startswith(("100644 blob", "100755 blob")):
@@ -303,7 +301,7 @@ def check_local_rule(r: object, where: str) -> None:
     if not isinstance(refs, list) or not all(isinstance(x, str) for x in refs):
         raise RuntimeError(f"{rid}: metadata.references must be a list of URLs (strings)")
     if not isinstance(md.get("fix", ""), str):
-        raise RuntimeError(f"{rid}: metadata.fix must be text")
+        raise RuntimeError(f"{rid}: metadata.fix must be text")   # noqa: TRY004 - a settings error
 
 
 def parse_local_rules(files: dict[str, str]) -> list[dict]:
@@ -325,6 +323,10 @@ def parse_local_rules(files: dict[str, str]) -> list[dict]:
             raise RuntimeError(f"{path} must hold one key, `rules:`, with a non-empty list of rules")
         for i, r in enumerate(doc["rules"], 1):
             check_local_rule(r, f"{path} rule {i}")
+            try:
+                json.dumps(r, default=str)   # a recursive YAML alias (&a {x: *a}) or a non-JSON value cannot be passed on
+            except (ValueError, TypeError) as e:
+                raise RuntimeError(f"{r['id']}: cannot be used ({e})") from None
             if r["id"] in seen:
                 raise RuntimeError(f"duplicate rule id {r['id']} in {seen[r['id']]} and {path}")
             seen[r["id"]] = path
@@ -337,27 +339,31 @@ def parse_local_rules(files: dict[str, str]) -> list[dict]:
 def write_local_rules(rules: list[dict], td: Path) -> Path:
     """The rules as one Opengrep config file (JSON is valid YAML), for --config."""
     p = td / "local-rules.yaml"
-    p.write_text(json.dumps({"rules": rules}, default=str))
+    p.write_text(json.dumps({"rules": rules}, default=str))   # parse_local_rules checked each rule serializes
     return p
 
 
-def validate_local_rules(rules: list[dict]) -> None:
-    """Have Opengrep itself check the rules (pattern syntax, languages); raises with its first error.
+def validate_local_rules(rules: list[dict], engine: str | None = None) -> None:
+    """Have Opengrep itself check the rules (pattern syntax, languages, versions); raises with its first error.
+    Run with and without --strict: each mode lets through a rule the other refuses (Opengrep 1.30.2 accepts a
+    rule whose max-version excludes it under --strict, and some warnings only fail under --strict).
     Without Opengrep nothing is checked here: the scan reports the missing engine and fails anyway."""
-    engine = shutil.which("opengrep")
+    engine = engine or shutil.which("opengrep")   # ENGINE: the binary a caller (the learner) scans with
     if not rules or not engine:
         return
     with tempfile.TemporaryDirectory() as td:
         conf = write_local_rules(rules, Path(td))
-        p = subprocess.run([engine, "scan", "--validate", "--config", str(conf), "--json", "--quiet",
-                            "--disable-version-check"], cwd=td, capture_output=True, text=True, timeout=300, check=False)
-    if p.returncode != 0:
-        try:
-            errs = json.loads(p.stdout or "{}").get("errors") or []
-            why = " ".join(str(errs[0].get("message", errs[0])).split()) if errs else p.stderr
-        except (ValueError, AttributeError):
-            why = p.stderr or p.stdout
-        raise RuntimeError(f"Opengrep rejected the rules: {' '.join(str(why).split())[:250]}")
+        for strict in ([], ["--strict"]):
+            p = subprocess.run([engine, "scan", "--validate", *strict, "--config", str(conf), "--json", "--quiet",
+                                "--disable-version-check"], cwd=td, capture_output=True, text=True, timeout=300,
+                               check=False)
+            if p.returncode != 0:
+                try:
+                    errs = json.loads(p.stdout or "{}").get("errors") or []
+                    why = " ".join(str(errs[0].get("message", errs[0])).split()) if errs else p.stderr
+                except (ValueError, AttributeError):
+                    why = p.stderr or p.stdout
+                raise RuntimeError(f"Opengrep rejected the rules: {' '.join(str(why).split())[:250]}")
 
 
 def local_rules_repair(repo: Path, base: str) -> list[dict] | None:
