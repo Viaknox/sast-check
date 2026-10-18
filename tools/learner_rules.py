@@ -466,19 +466,31 @@ def target_problem(target: Path) -> str:
 
 def private_repo(target: Path) -> str:
     """owner/name of TARGET's origin, checked to be a private GitHub repo; raises ValueError otherwise. The rules
-    come from private code, so the PR must never go to a public (or internal) repo."""
-    url = subprocess.run(["git", "remote", "get-url", "origin"], cwd=target, capture_output=True, text=True,
-                         check=False).stdout.strip()
-    r = subprocess.run(["gh", "repo", "view", url, "--json", "nameWithOwner,visibility"], cwd=target,
-                       capture_output=True, text=True, check=False, timeout=60) if url else None
-    try:
-        info = json.loads(r.stdout) if r and r.returncode == 0 else {}
-    except ValueError:
-        info = {}
-    if info.get("visibility") != "PRIVATE" or not info.get("nameWithOwner"):
-        raise ValueError(f"the target's origin ({url or 'none'}) must be a private GitHub repo "
-                         f"(got {info.get('visibility', 'unknown')})")
-    return info["nameWithOwner"]
+    come from private code, so nothing may be pushed or proposed to a public (or internal) repo. Every URL git
+    would use for origin (the fetch URL and each push URL) must name that same private repo."""
+    def git_urls(*args):
+        r = subprocess.run(["git", "remote", "get-url", *args, "origin"], cwd=target, capture_output=True,
+                           text=True, check=False)
+        return r.stdout.split() if r.returncode == 0 else []
+
+    urls = git_urls() + git_urls("--push", "--all")
+    if not urls:
+        raise ValueError("the target has no origin remote")
+    names = set()
+    for url in dict.fromkeys(urls):
+        r = subprocess.run(["gh", "repo", "view", url, "--json", "nameWithOwner,visibility"], cwd=target,
+                           capture_output=True, text=True, check=False, timeout=60)
+        try:
+            info = json.loads(r.stdout) if r.returncode == 0 else {}
+        except ValueError:
+            info = {}
+        if info.get("visibility") != "PRIVATE" or not info.get("nameWithOwner"):
+            raise ValueError(f"the target's origin URL {url} must be a private GitHub repo "
+                             f"(got {info.get('visibility', 'unknown')})")
+        names.add(info["nameWithOwner"])
+    if len(names) != 1:
+        raise ValueError(f"the target's origin fetch and push URLs name different repos: {', '.join(sorted(names))}")
+    return names.pop()
 
 
 def check_target(target: Path, report: dict, engine: str | None = None) -> str:

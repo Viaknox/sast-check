@@ -400,12 +400,12 @@ class TargetRun(unittest.TestCase):
     def test_the_target_must_be_a_separate_checkout(self):
         for bad in (str(ROOT), str(ROOT / "rules"), self.td.name):
             with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
-                                                 "--target", bad]), \
+                                                 "--target", bad, "--engine", str(OPENGREP)]), \
                     mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), redirect_stderr(io.StringIO()) as err:
                 self.assertEqual(lr.main(), 2, bad)
             self.assertIn("--target", err.getvalue())
         with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--target",
-                                             str(self.target), "--report", str(self.target / "run.json")]), \
+                                             str(self.target), "--report", str(self.target / "run.json"), "--engine", str(OPENGREP)]), \
                 mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), redirect_stderr(io.StringIO()) as err:
             self.assertEqual(lr.main(), 2)          # the report would be committed with the rules
         self.assertIn("outside the --target checkout", err.getvalue())
@@ -447,6 +447,17 @@ class TargetSafety(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError, msg=out):
                         lr.private_repo(Path("."))
+        # a private fetch URL with a public push URL: the push would leak the branch
+        views = {"https://github.com/o/r": '{"nameWithOwner": "o/r", "visibility": "PRIVATE"}',
+                 "https://github.com/o/pub": '{"nameWithOwner": "o/pub", "visibility": "PUBLIC"}',
+                 "https://github.com/o/r2": '{"nameWithOwner": "o/r2", "visibility": "PRIVATE"}'}
+        for push in ("https://github.com/o/pub", "https://github.com/o/r2"):
+            def fake2(cmd, push=push, **kw):
+                if cmd[:3] == ["git", "remote", "get-url"]:
+                    return mock.Mock(returncode=0, stdout=(push if "--push" in cmd else "https://github.com/o/r") + "\n")
+                return mock.Mock(returncode=0, stdout=views[cmd[3]])
+            with mock.patch.object(lr.subprocess, "run", fake2), self.assertRaises(ValueError, msg=push):
+                lr.private_repo(Path("."))
         cmds = []
         lr.open_pr(Path("."), OpenPr.REPORT, "main", "m", lambda c, r: cmds.append(c) or mock.Mock(stdout="u"),
                    dist=False, gh_repo="o/r")
@@ -487,7 +498,7 @@ class TargetSafety(unittest.TestCase):
             t = self.target(td)
             for extra in (["--report", str(ROOT / "run.json")], ["--report", str(t / "run.json")]):
                 with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
-                                                     "--target", str(t), *extra]), \
+                                                     "--target", str(t), *extra, "--engine", str(OPENGREP)]), \
                         mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), redirect_stderr(io.StringIO()) as err:
                     self.assertEqual(lr.main(), 2, extra)
                 self.assertIn("--report must be outside", err.getvalue())
@@ -497,7 +508,7 @@ class TargetSafety(unittest.TestCase):
             subprocess.run([*git, "commit", "-qm", "toml"], cwd=t, check=True)
             subprocess.run(["git", "branch", f"learner/rules-{date.today().isoformat()}"], cwd=t, check=True)
             with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
-                                                 "--target", str(t), "--open-pr"]), \
+                                                 "--target", str(t), "--open-pr", "--engine", str(OPENGREP)]), \
                     mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), redirect_stderr(io.StringIO()) as err:
                 self.assertEqual(lr.main(), 2)
             self.assertIn("already exists in the checkout", err.getvalue())

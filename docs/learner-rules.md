@@ -50,10 +50,10 @@ to `rules/custom/`; the reason is printed and written to `--report`.
 This repo is public. A rule learned from private repositories can carry private details (names, paths, logic), so it must never be proposed here. Use `--target` instead:
 
 ```
-python tools/learner_rules.py --patterns patterns.json --target ../private-rules --report run.json --open-pr
+python tools/learner_rules.py --patterns patterns.json --target ../private-rules --report /tmp/run.json --open-pr
 ```
 
-`--target` is a checkout of a private rules repo (a separate git checkout, never this one). The same checks run, and then:
+`--target` is a checkout of a private rules repo (a separate git checkout, never this one). With `--open-pr`, every URL its `origin` uses (fetch and push) must be that same private GitHub repo. `--report` must sit outside both checkouts. The same checks run, and then:
 
 - the rule lands as `.sast-check/rules/<pattern id>.yaml` with id `local.<area>.<pattern id>`, and its fixture in `.sast-check/rules/tests/`;
 - a pattern whose `local.` id is already in the target is skipped;
