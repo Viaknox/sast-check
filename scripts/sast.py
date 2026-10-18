@@ -239,18 +239,20 @@ def local_rule_files(repo: Path, base: str | None) -> dict[str, str]:
     symlink anywhere on the way, or a file that is not strict UTF-8, raises: once merged it would be junk."""
     parts = PurePosixPath(LOCAL_RULES_DIR).parts
     names: list[str] = []
+    size = 0   # bytes of the rule files, counted before any is read (one huge file must not exhaust memory)
     if base:
         settings_file(repo, base, ".sast-check.toml")          # fails closed on an unknown base
         for i in range(1, len(parts) + 1):   # .sast-check and .sast-check/rules: absent or a real folder
             entry = "".join(git_z(repo, ["ls-tree", "-z", base, "--", "/".join(parts[:i])]))
             if entry and not entry.startswith("040000 tree "):   # a link (120000), file or submodule (160000)
                 raise RuntimeError(f"{'/'.join(parts[:i])} must be a folder on the base branch, not a symlink, file or submodule")
-        for e in git_z(repo, ["ls-tree", "-z", base, "--", LOCAL_RULES_DIR + "/"]):   # bytes: any file name
+        for e in git_z(repo, ["ls-tree", "-z", "-l", base, "--", LOCAL_RULES_DIR + "/"]):   # bytes: any file name
             meta, path = e.split("\t", 1)
             if path.endswith((".yaml", ".yml")):
                 if not meta.startswith(("100644 blob", "100755 blob")):
                     raise RuntimeError(f"{path} must be a regular file (base branch)")
                 names.append(path)
+                size += int(meta.split()[-1])
     else:
         gitlinks = {e.split("\t", 1)[1] for e in git_z(repo, ["ls-files", "-z", "-s", "--", *[
             "/".join(parts[:i]) for i in range(1, len(parts) + 1)]]) if e.startswith("160000 ")}
@@ -264,12 +266,12 @@ def local_rule_files(repo: Path, base: str | None) -> dict[str, str]:
                 if e.is_symlink() or not e.is_file():
                     raise RuntimeError(f"{LOCAL_RULES_DIR}/{e.name} must be a regular file, not a symlink or folder")
                 names.append(f"{LOCAL_RULES_DIR}/{e.name}")
+                size += e.stat().st_size
     if len(names) > LOCAL_RULES_MAX_FILES:
         raise RuntimeError(f"{LOCAL_RULES_DIR} has {len(names)} rule files; the limit is {LOCAL_RULES_MAX_FILES}")
-    files = {n: settings_file(repo, base, n) or "" for n in sorted(names)}
-    if sum(len(t.encode()) for t in files.values()) > LOCAL_RULES_MAX_BYTES:
+    if size > LOCAL_RULES_MAX_BYTES:
         raise RuntimeError(f"{LOCAL_RULES_DIR} is larger than {LOCAL_RULES_MAX_BYTES} bytes")
-    return files
+    return {n: settings_file(repo, base, n) or "" for n in sorted(names)}
 
 
 def check_local_rule(r: object, where: str) -> None:
@@ -304,6 +306,17 @@ def check_local_rule(r: object, where: str) -> None:
         raise RuntimeError(f"{rid}: metadata.fix must be text")   # noqa: TRY004 - a settings error
 
 
+def yaml_aliases(text: str) -> int:
+    """Line of the first YAML alias (*name) in TEXT, or 0. A few bytes of nested aliases (&a [*b, *b] ...) expand
+    to an exponential tree once the rules are passed on, and a rule never needs one. Read as parser events only,
+    so nothing is expanded."""
+    import yaml  # only repositories with their own rules need it
+    for ev in yaml.parse(text, Loader=yaml.SafeLoader):
+        if isinstance(ev, yaml.AliasEvent):
+            return ev.start_mark.line + 1
+    return 0
+
+
 def parse_local_rules(files: dict[str, str]) -> list[dict]:
     """The validated rules of the repository rule files (needs PyYAML, which the action installs)."""
     if not files:
@@ -316,6 +329,8 @@ def parse_local_rules(files: dict[str, str]) -> list[dict]:
     seen: dict[str, str] = {}
     for path, text in files.items():
         try:
+            if line := yaml_aliases(text):
+                raise RuntimeError(f"{path} uses YAML aliases (*name, line {line}); they are not allowed")
             doc = yaml.safe_load(text)
         except yaml.YAMLError as e:
             raise RuntimeError(f"{path} is not valid YAML: {' '.join(str(e).split())[:200]}") from None
@@ -371,9 +386,12 @@ def local_rules_repair(repo: Path, base: str) -> list[dict] | None:
     (else None). Without this, a rule an Opengrep upgrade stops accepting would fail every PR, including the
     one that fixes it; a PR that only edits rules has no code a weaker rule set could let through."""
     mb = sh(["git", "merge-base", base, "HEAD"], repo).stdout.strip()
-    changed = set(sh(["git", "diff", "--name-only", "-z", mb, "--"], repo).stdout.split("\0")) - {""}
-    changed |= set(untracked_files(repo))
-    if not changed or any(PurePosixPath(f).parent != PurePosixPath(LOCAL_RULES_DIR) for f in changed):
+    changed = set(git_z(repo, ["diff", "--name-only", "-z", mb, "--"])) | set(untracked_files(repo))
+    # the folders themselves count as rule changes: replacing a broken .sast-check (a link, file or submodule)
+    # with a real folder changes that entry too
+    folders = {".sast-check", LOCAL_RULES_DIR}
+    if not changed or any(f not in folders and PurePosixPath(f).parent != PurePosixPath(LOCAL_RULES_DIR)
+                          for f in changed):
         return None
     try:
         rules = parse_local_rules(local_rule_files(repo, None))
