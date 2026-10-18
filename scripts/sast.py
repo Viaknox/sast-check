@@ -136,6 +136,8 @@ class Finding:
     suppressed: str = ""        # reason, if suppressed
     blocking: bool = False
     whole_file: bool = False    # opengrep.not-parsed only: the parse error covers the whole file
+    range_sha: str = ""         # opengrep.not-parsed only: gap_range_sha of the unread range (waivers pin it)
+    waiver_note: str = ""       # opengrep.not-parsed only: why an [[ignore]] entry for this file did not apply
 
 
 @dataclass
@@ -244,7 +246,28 @@ def iso_date(v: str) -> bool:
     return True
 
 
-IGNORE_KEYS: dict[str, type | tuple[type, ...]] = {"rule": str, "path": str, "reason": str, "expires": (str, date)}
+IGNORE_KEYS: dict[str, type | tuple[type, ...]] = {"rule": str, "path": str, "reason": str, "expires": (str, date),
+                                                   "range_sha": str}
+SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+
+
+def check_gap_waiver(ig: dict) -> None:
+    """An [[ignore]] entry for opengrep.not-parsed must name one exact file and the range_sha of the unread range
+    it approves, so it can never cover code added or changed after the owner reviewed it. range_sha belongs to
+    that rule only."""
+    if ig.get("rule") != NOT_PARSED:
+        if "range_sha" in ig:
+            raise RuntimeError(f"[[ignore]] range_sha only applies to rule = \"{NOT_PARSED}\"; got {ig!r}"[:250])
+        return
+    path = ig.get("path")
+    # matched by string equality, never as a glob: `app/[slug]/page.tsx` is a literal name, and a pattern such as
+    # `src/*.js` simply matches no finding (the gap keeps blocking)
+    if (not isinstance(path, str) or not path or path.startswith("/") or os.path.normpath(path) != path
+            or path == ".." or path.startswith("../")):
+        raise RuntimeError(f"[[ignore]] for {NOT_PARSED} needs path = one exact repo-relative file; got {path!r}"[:250])
+    if not isinstance(ig.get("range_sha"), str) or not SHA256_HEX.fullmatch(ig["range_sha"]):
+        raise RuntimeError(f"[[ignore]] for {NOT_PARSED} on {path!r} needs range_sha = the 64-character value shown "
+                           f"in that finding (run the check without this entry to see it; {NOT_PARSED_DOC}#waivers)"[:300])
 
 
 def check_settings(uc: dict, defaults: dict) -> None:
@@ -263,6 +286,7 @@ def check_settings(uc: dict, defaults: dict) -> None:
                 if "expires" in ig and not isinstance(ig["expires"], date) and not iso_date(ig["expires"]):
                     # a typo ("never", "") must not keep a suppression alive forever
                     raise RuntimeError(f"[[ignore]] expires must be a YYYY-MM-DD date; got {ig['expires']!r}"[:250])
+                check_gap_waiver(ig)
             continue
         if sec not in defaults or not isinstance(val, dict):
             raise RuntimeError(f"unknown settings section [{sec}]; valid: {', '.join([*defaults, 'ignore'])}")
@@ -726,13 +750,43 @@ def not_parsed_findings(ctx: Ctx, errors: list, cwd: Path, renamed: dict, target
                 raise ParseGapError(f"opengrep {name} path is not a scanned file: {str(e)[:200]}")
             path = renamed.get(rel(cwd, path), rel(cwd, path))
             try:
-                n = len((ctx.repo / path).read_text(errors="ignore").splitlines())
+                n = len(file_lines(ctx.repo / path))
             except OSError:
-                n = 1
+                n = 1                    # the fingerprint step below reads it again and fails closed
             out.append(gap_finding(path, {}, 1, max(n, 1), True))
         else:
             raise ParseGapError(f"unknown opengrep error type {str(t)[:80]!r}: {str(e)[:200]}")
-    return envelope(out)
+    gaps = envelope(out)
+    for g in gaps:
+        try:
+            g.range_sha = gap_range_sha(ctx.repo / g.path, g.line, g.end_line)
+            g.message += f" Its range_sha (for an owner-approved [[ignore]] entry) is {g.range_sha}."
+        except (OSError, ValueError) as err:
+            # no fingerprint means no waiver could ever match it correctly: fail closed
+            raise ParseGapError(f"cannot fingerprint the unread range {g.path}:{g.line}-{g.end_line} ({err})") from None
+    return gaps
+
+
+def file_lines(path: Path) -> list[bytes]:
+    """The file's lines as bytes, split on LF the way Opengrep numbers lines (a lone CR does not end a line): a
+    leading UTF-8 BOM dropped, CRLF read as LF, and a final newline not starting another line."""
+    data = path.read_bytes().removeprefix(b"\xef\xbb\xbf").replace(b"\r\n", b"\n")
+    lines = data.split(b"\n")
+    if lines and lines[-1] == b"":
+        lines.pop()
+    return lines
+
+
+def gap_range_sha(path: Path, start: int, end: int) -> str:
+    """sha256 (hex) of lines start..end (1-based, inclusive) of the file as file_lines reads them, with trailing
+    spaces, tabs and CRs cut from each line, joined with LF. Line numbers are not part of it, so code above the
+    range can move it without changing the value; any other change inside the range (including spacing inside a
+    string) does. ValueError if the range is not inside the file."""
+    import hashlib
+    lines = file_lines(path) or [b""]    # an empty file is one empty line (a whole-file gap is lines 1-1)
+    if not (1 <= start <= end <= len(lines)):
+        raise ValueError(f"lines {start}-{end} outside a {len(lines)}-line file")
+    return hashlib.sha256(b"\n".join(ln.rstrip(b" \t\r") for ln in lines[start - 1:end])).hexdigest()
 
 
 def envelope(gaps: list[Finding]) -> list[Finding]:
@@ -1462,11 +1516,16 @@ def inline_suppression(repo: Path, f: Finding, changed: set[int] | None = None) 
 
 def config_suppression(cfg: dict, f: Finding, today: str) -> str:
     """The reason of the first `[[ignore]]` entry in .sast-check.toml that covers the finding (rule, path glob,
-    reason and expiry all checked); "" if none."""
+    reason and expiry all checked); "" if none. An opengrep.not-parsed gap is covered only by an entry naming its
+    exact path and its current range_sha: any change to the unread range (new code, edits inside it) needs a new
+    approval."""
     for ig in cfg.get("ignore", []):
         if not rule_listed(str(ig.get("rule")), f):
             continue
-        if ig.get("path") and not glob_any(f.path, [ig["path"]]):
+        if f.rule == NOT_PARSED:
+            if not (f.range_sha and ig.get("path") == f.path and ig.get("range_sha") == f.range_sha):
+                continue                 # exact path + range only: the path is never expanded as a glob
+        elif ig.get("path") and not glob_any(f.path, [ig["path"]]):
             continue
         if not str(ig.get("reason") or "").strip():
             continue
@@ -1474,6 +1533,44 @@ def config_suppression(cfg: dict, f: Finding, today: str) -> str:
             continue
         return "config: " + ig["reason"]
     return ""
+
+
+def gap_waiver_note(cfg: dict, f: Finding) -> str:
+    """Why an [[ignore]] entry naming this unsuppressed gap's file did not apply ("" if there is none): it was
+    approved for different code (its range_sha no longer matches) or, when the range_sha matches, it expired."""
+    mine = [ig for ig in cfg.get("ignore", []) if ig.get("rule") == NOT_PARSED and ig.get("path") == f.path]
+    if any(ig.get("range_sha") == f.range_sha for ig in mine):
+        return "The [[ignore]] entry for this range has expired: review the lines again, then renew or remove it."
+    if mine:
+        return (f"The [[ignore]] entry for this file (range_sha {str(mine[0].get('range_sha'))[:12]}…) was approved "
+                f"for different code: the unread range is now lines {f.line}-{f.end_line}. Review it, then update "
+                "range_sha in .sast-check.toml (merged first), or add a sast-ignore comment in this change.")
+    return ""
+
+
+def toml_str(s: str) -> str:
+    """s as a TOML basic string: quote and backslash escaped, control characters (U+0000-U+001F, U+007F) as
+    \\uXXXX, everything else (including characters outside the BMP) literal. A lone surrogate cannot be written
+    and becomes U+FFFD, so the entry names another path and matches nothing (fails closed)."""
+    out = []
+    for ch in s:
+        o = ord(ch)
+        if ch in '"\\':
+            out.append("\\" + ch)
+        elif o < 0x20 or o == 0x7F:
+            out.append(f"\\u{o:04X}")
+        elif 0xD800 <= o <= 0xDFFF:
+            out.append("\\uFFFD")
+        else:
+            out.append(ch)
+    return '"' + "".join(out) + '"'
+
+
+def gap_waiver_toml(f: Finding) -> str:
+    """A ready-to-paste [[ignore]] entry that approves exactly this unread range (the PR-controlled path written
+    as a TOML basic string)."""
+    return (f"[[ignore]]\nrule = \"{NOT_PARSED}\"\npath = {toml_str(f.path)}\nrange_sha = \"{f.range_sha}\"\n"
+            "reason = \"<why a rewrite is impossible; who reviewed the unread lines>\"")
 
 
 def fingerprint(repo: Path, findings: list[Finding]) -> None:
@@ -1602,6 +1699,9 @@ def apply_policy(ctx: Ctx, findings: list[Finding], new_by_base: set[int] | froz
                           if via_link else
                           " The existing sast-ignore comment above it was not applied: this change touches the "
                           "unread lines, so the suppression must be re-stated (edited) in this change to count.")
+        if f.rule == NOT_PARSED and not f.suppressed and (note := gap_waiver_note(ctx.cfg, f)):
+            f.waiver_note = note
+            f.message += " " + note
         f.blocking = (
             f.severity in block_on and f.in_diff and not f.suppressed
             and (f.confidence != "low" or pol.get("low_confidence_blocks", False))
@@ -1683,6 +1783,17 @@ def report_md(ctx: Ctx, findings: list[Finding], verdict: str) -> str:
         for f in sorted(blocking, key=lambda x: (x.path, x.line)):
             L.append(row(f))     # no source excerpt: unread code may hold a secret, and the report is published
         L += ["", "<details><summary>🤖 Prompt for AI agents</summary>", "", fence(ai_prompt(blocking)), "", "</details>", ""]
+        if gaps := [f for f in blocking if f.rule == NOT_PARSED]:
+            L += ["<details><summary>For the repo owner: approve an unread range only if a rewrite is impossible"
+                  "</summary>", "",
+                  "Either add a `sast-ignore[opengrep.not-parsed]: reason` comment on the range's first line in this "
+                  "change (visible in the diff), or merge this entry into `.sast-check.toml` first (settings are read "
+                  "from the base branch). It covers only these exact lines; any later change to them needs a new "
+                  f"approval. See {NOT_PARSED_DOC}#waivers.", "",
+                  *[ln for f in sorted(gaps, key=lambda x: (x.path, x.line))[:20]
+                    for ln in ([f"{md_code(f'{f.path}:{f.line}-{f.end_line}')}: {md_text(f.waiver_note)}"]
+                               if f.waiver_note else []) + [fence(gap_waiver_toml(f))]],
+                  "", "</details>", ""]
     if new:
         new.sort(key=lambda x: (-SEV_ORDER.index(x.severity), x.path, x.line))
         L += [f"<details><summary>Warnings in this change ({len(new)})</summary>", "",
