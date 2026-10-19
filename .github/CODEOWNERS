@@ -19,3 +19,5 @@
 /trivy.yaml                 @pjpoulose
 /.trivyignore               @pjpoulose
 /scripts/workflow_guard.py  @pjpoulose
+/.sast-check                @pjpoulose
+/.sast-check/               @pjpoulose

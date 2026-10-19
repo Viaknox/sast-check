@@ -33,7 +33,7 @@ PUSH_ACTIONS = ("opened", "reopened", "synchronize", "edited")   # events that c
 PROTECTED = (".github/workflows/*", "action.yml", "action.yaml", "CODEOWNERS", ".github/CODEOWNERS",
              "docs/CODEOWNERS", ".sast-check.toml", ".gitleaks.toml", ".gitleaksignore", ".github/zizmor.yml",
              ".github/zizmor.yaml", "zizmor.yml", "zizmor.yaml", "osv-scanner.toml", "trivy.yaml", ".trivyignore",
-             "scripts/workflow_guard.py")
+             "scripts/workflow_guard.py", ".sast-check", ".sast-check/*")
 TRUSTED_ROLES = ("admin", "maintain")
 FILES_API_CAP = 3000
 LABEL_NOTE = "Note: label approval assumes only trusted people have write access — see README › Known limitations."

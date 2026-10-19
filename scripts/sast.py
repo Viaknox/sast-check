@@ -160,6 +160,7 @@ class Ctx:
     runs: list[ToolRun] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     new_keys: set[tuple[str, str, str, int]] = field(default_factory=set)
+    local_rules: list[dict] = field(default_factory=list)   # the repository's own rules (.sast-check/rules)
     baseline: bool = False      # scanning the base version for the comparison (lenient on unparsable files)   # (tool, rule, path, line) found new by a scanner
 
 
@@ -217,6 +218,207 @@ def utf8(data: bytes, name: str) -> str:
         return data.decode("utf-8")
     except UnicodeDecodeError as e:
         raise RuntimeError(f"{name} is not valid UTF-8 (byte {e.start})") from e
+
+
+# Repository rules: extra Opengrep rules a repo keeps for itself (for example rules learned from its own code,
+# which must never go into the public rule set). Like the other settings they are read from the base branch.
+LOCAL_RULES_DIR = ".sast-check/rules"
+LOCAL_RULES_DOC = "https://github.com/Viaknox/sast-check/blob/main/docs/local-rules.md"
+LOCAL_RULE_ID = re.compile(r"local(\.[a-z0-9][a-z0-9_-]*)+")
+# rule keys a repository rule may use; anything else (join, extract, ...) could read other files or change how
+# targets are read, so it is refused rather than passed to the engine
+LOCAL_RULE_KEYS = {"id", "message", "severity", "languages", "metadata", "mode", "options", "paths", "fix",
+                   "fix-regex", "pattern", "patterns", "pattern-either", "pattern-regex", "pattern-sources",
+                   "pattern-sinks", "pattern-sanitizers", "pattern-propagators", "min-version", "max-version"}
+LOCAL_RULES_MAX_FILES, LOCAL_RULES_MAX_BYTES, LOCAL_RULES_MAX = 100, 1 << 20, 500
+
+
+def local_rule_files(repo: Path, base: str | None) -> dict[str, str]:
+    """Text of each repository rule file (*.yaml / *.yml directly in .sast-check/rules/), by path: from the base
+    branch when scanning a PR, else from the working tree. Subfolders (test fixtures) are not rule files. A
+    symlink anywhere on the way, or a file that is not strict UTF-8, raises: once merged it would be junk."""
+    parts = PurePosixPath(LOCAL_RULES_DIR).parts
+    names: list[str] = []
+    size = 0   # bytes of the rule files, counted before any is read (one huge file must not exhaust memory)
+    if base:
+        settings_file(repo, base, ".sast-check.toml")          # fails closed on an unknown base
+        for i in range(1, len(parts) + 1):   # .sast-check and .sast-check/rules: absent or a real folder
+            entry = "".join(git_z(repo, ["ls-tree", "-z", base, "--", "/".join(parts[:i])]))
+            if entry and not entry.startswith("040000 tree "):   # a link (120000), file or submodule (160000)
+                raise RuntimeError(f"{'/'.join(parts[:i])} must be a folder on the base branch, not a symlink, file or submodule")
+        for e in git_z(repo, ["ls-tree", "-z", "-l", base, "--", LOCAL_RULES_DIR + "/"]):   # bytes: any file name
+            meta, path = e.split("\t", 1)
+            if path.endswith((".yaml", ".yml")):
+                if not meta.startswith(("100644 blob", "100755 blob")):
+                    raise RuntimeError(f"{path} must be a regular file (base branch)")
+                names.append(path)
+                size += int(meta.split()[-1])
+    else:
+        gitlinks = {e.split("\t", 1)[1] for e in git_z(repo, ["ls-files", "-z", "-s", "--", *[
+            "/".join(parts[:i]) for i in range(1, len(parts) + 1)]]) if e.startswith("160000 ")}
+        for i in range(1, len(parts) + 1):
+            p = repo.joinpath(*parts[:i])
+            if p.is_symlink() or (p.exists() and not p.is_dir()) or "/".join(parts[:i]) in gitlinks:
+                raise RuntimeError(f"{'/'.join(parts[:i])} must be a folder, not a symlink, file or submodule")
+        d = repo / LOCAL_RULES_DIR
+        for e in sorted(os.scandir(d), key=lambda e: e.name) if d.is_dir() else []:
+            if e.name.endswith((".yaml", ".yml")):
+                if e.is_symlink() or not e.is_file():
+                    raise RuntimeError(f"{LOCAL_RULES_DIR}/{e.name} must be a regular file, not a symlink or folder")
+                names.append(f"{LOCAL_RULES_DIR}/{e.name}")
+                size += e.stat().st_size
+    if len(names) > LOCAL_RULES_MAX_FILES:
+        raise RuntimeError(f"{LOCAL_RULES_DIR} has {len(names)} rule files; the limit is {LOCAL_RULES_MAX_FILES}")
+    if size > LOCAL_RULES_MAX_BYTES:
+        raise RuntimeError(f"{LOCAL_RULES_DIR} is larger than {LOCAL_RULES_MAX_BYTES} bytes")
+    return {n: settings_file(repo, base, n) or "" for n in sorted(names)}
+
+
+def check_local_rule(r: object, where: str) -> None:
+    """Refuse a repository rule that could break or weaken scans: unknown keys, an id outside local.*, or
+    missing severity/CWE metadata (the same contract as the built-in rules)."""
+    if not isinstance(r, dict):
+        raise RuntimeError(f"{where}: a rule must be a mapping")   # noqa: TRY004 - callers report settings errors
+    rid = r.get("id")
+    if not isinstance(rid, str) or not LOCAL_RULE_ID.fullmatch(rid):
+        raise RuntimeError(f"{where}: id must start with `local.` and use only a-z, 0-9, `_`, `-` and dots; got {rid!r}")
+    if bad := sorted(str(k) for k in r if k not in LOCAL_RULE_KEYS):
+        raise RuntimeError(f"{rid}: unsupported key(s) {', '.join(bad)}; allowed: {', '.join(sorted(LOCAL_RULE_KEYS))}")
+    if r.get("mode", "search") not in ("search", "taint"):
+        raise RuntimeError(f"{rid}: mode must be search or taint; got {r['mode']!r}")
+    if not isinstance(r.get("message"), str) or not r["message"].strip():
+        raise RuntimeError(f"{rid}: message is required")
+    langs = r.get("languages")
+    if not isinstance(langs, list) or not langs or not all(isinstance(x, str) and x for x in langs):
+        raise RuntimeError(f"{rid}: languages must be a non-empty list")
+    md = r.get("metadata")
+    if not isinstance(md, dict) or md.get("sast_severity") not in SEV_ORDER:
+        raise RuntimeError(f"{rid}: metadata.sast_severity must be one of {', '.join(SEV_ORDER)}")
+    if not isinstance(md.get("cwe"), str) or not re.fullmatch(r"CWE-\d+", md["cwe"].split(":")[0].strip()):
+        raise RuntimeError(f"{rid}: metadata.cwe must name a CWE, e.g. \"CWE-78\"")
+    if md.get("confidence", "medium") not in ("low", "medium", "high"):
+        raise RuntimeError(f"{rid}: metadata.confidence must be low, medium or high")
+    # read when a finding is reported: a wrong shape must be refused here, not crash the report later
+    refs = md.get("references", [])
+    if not isinstance(refs, list) or not all(isinstance(x, str) for x in refs):
+        raise RuntimeError(f"{rid}: metadata.references must be a list of URLs (strings)")
+    if not isinstance(md.get("fix", ""), str):
+        raise RuntimeError(f"{rid}: metadata.fix must be text")   # noqa: TRY004 - a settings error
+
+
+LOCAL_RULES_MAX_DEPTH = 32   # nesting of mappings/lists in one rule file; real rules stay far below it
+
+
+def yaml_shape_problem(text: str) -> str:
+    """Why TEXT may not be loaded ("" if it may): an alias (*name), since a few bytes of nested aliases expand
+    to an exponential tree once the rules are passed on, or nesting deeper than LOCAL_RULES_MAX_DEPTH, which
+    would exhaust the loader's recursion. Read as parser events only, so nothing is built or expanded."""
+    import yaml  # only repositories with their own rules need it
+    depth = 0
+    for ev in yaml.parse(text, Loader=yaml.SafeLoader):
+        if isinstance(ev, yaml.AliasEvent):
+            return f"uses YAML aliases (*name, line {ev.start_mark.line + 1}); they are not allowed"
+        if isinstance(ev, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
+            depth += 1
+            if depth > LOCAL_RULES_MAX_DEPTH:
+                return f"nests deeper than {LOCAL_RULES_MAX_DEPTH} levels (line {ev.start_mark.line + 1})"
+        elif isinstance(ev, (yaml.MappingEndEvent, yaml.SequenceEndEvent)):
+            depth -= 1
+    return ""
+
+
+def parse_local_rules(files: dict[str, str]) -> list[dict]:
+    """The validated rules of the repository rule files (needs PyYAML, which the action installs)."""
+    if not files:
+        return []
+    try:
+        import yaml  # only repositories with their own rules need it
+    except ImportError:
+        raise RuntimeError(f"{LOCAL_RULES_DIR} needs PyYAML to read (pip install pyyaml)") from None
+    rules: list[dict] = []
+    seen: dict[str, str] = {}
+    for path, text in files.items():
+        try:
+            if why := yaml_shape_problem(text):
+                raise RuntimeError(f"{path} {why}")
+            doc = yaml.safe_load(text)
+        except RecursionError:   # backstop: the depth check above should make this unreachable
+            raise RuntimeError(f"{path} nests too deeply to read") from None
+        except yaml.YAMLError as e:
+            raise RuntimeError(f"{path} is not valid YAML: {' '.join(str(e).split())[:200]}") from None
+        if not isinstance(doc, dict) or set(doc) != {"rules"} or not isinstance(doc["rules"], list) or not doc["rules"]:
+            raise RuntimeError(f"{path} must hold one key, `rules:`, with a non-empty list of rules")
+        for i, r in enumerate(doc["rules"], 1):
+            check_local_rule(r, f"{path} rule {i}")
+            try:
+                json.dumps(r, default=str)   # a recursive YAML alias (&a {x: *a}) or a non-JSON value cannot be passed on
+            except (ValueError, TypeError) as e:
+                raise RuntimeError(f"{r['id']}: cannot be used ({e})") from None
+            if r["id"] in seen:
+                raise RuntimeError(f"duplicate rule id {r['id']} in {seen[r['id']]} and {path}")
+            seen[r["id"]] = path
+            rules.append(r)
+    if len(rules) > LOCAL_RULES_MAX:
+        raise RuntimeError(f"{LOCAL_RULES_DIR} has {len(rules)} rules; the limit is {LOCAL_RULES_MAX}")
+    return rules
+
+
+def write_local_rules(rules: list[dict], td: Path) -> Path:
+    """The rules as one Opengrep config file (JSON is valid YAML), for --config."""
+    p = td / "local-rules.yaml"
+    p.write_text(json.dumps({"rules": rules}, default=str))   # parse_local_rules checked each rule serializes
+    return p
+
+
+def validate_local_rules(rules: list[dict], engine: str | None = None) -> None:
+    """Have Opengrep itself check the rules (pattern syntax, languages, versions); raises with its first error.
+    Run with and without --strict: each mode lets through a rule the other refuses (Opengrep 1.30.2 accepts a
+    rule whose max-version excludes it under --strict, and some warnings only fail under --strict).
+    Without Opengrep nothing is checked here: the scan reports the missing engine and fails anyway."""
+    engine = engine or shutil.which("opengrep")   # ENGINE: the binary a caller (the learner) scans with
+    if not rules or not engine:
+        return
+    with tempfile.TemporaryDirectory() as td:
+        conf = write_local_rules(rules, Path(td))
+        for strict in ([], ["--strict"]):
+            p = subprocess.run([engine, "scan", "--validate", *strict, "--config", str(conf), "--json", "--quiet",
+                                "--disable-version-check"], cwd=td, capture_output=True, text=True, timeout=300,
+                               check=False)
+            if p.returncode != 0:
+                try:
+                    errs = json.loads(p.stdout or "{}").get("errors") or []
+                    why = " ".join(str(errs[0].get("message", errs[0])).split()) if errs else p.stderr
+                except (ValueError, AttributeError):
+                    why = p.stderr or p.stdout
+                raise RuntimeError(f"Opengrep rejected the rules: {' '.join(str(why).split())[:250]}")
+
+
+def local_rules_repair(repo: Path, base: str) -> list[dict] | None:
+    """The PR's rules, when the base branch's are unusable and the PR changes nothing but valid rule files
+    (else None). Without this, a rule an Opengrep upgrade stops accepting would fail every PR, including the
+    one that fixes it; a PR that only edits rules has no code a weaker rule set could let through."""
+    mb = sh(["git", "merge-base", base, "HEAD"], repo).stdout.strip()
+    changed = set(git_z(repo, ["diff", "--name-only", "-z", mb, "--"])) | set(untracked_files(repo))
+    # the folders themselves count as rule changes: replacing a broken .sast-check (a link, file or submodule)
+    # with a real folder changes that entry too
+    folders = {".sast-check", LOCAL_RULES_DIR}
+    if not changed or any(f not in folders and PurePosixPath(f).parent != PurePosixPath(LOCAL_RULES_DIR)
+                          for f in changed):
+        return None
+    try:
+        rules = parse_local_rules(local_rule_files(repo, None))
+        validate_local_rules(rules)
+    except (RuntimeError, OSError, subprocess.TimeoutExpired):
+        return None
+    return rules
+
+
+def local_rule_id(check_id: str, local_ids: set[str]) -> str | None:
+    """The repository rule id a result's check_id names (Opengrep may prefix it with the config path): an exact
+    match, else the longest matching suffix, so `x.local.a.local.b` is never reported as `local.b`'s finding."""
+    if check_id in local_ids:
+        return check_id
+    return max((rid for rid in local_ids if check_id.endswith("." + rid)), key=len, default=None)
 
 
 def load_config(text: str | None) -> dict:
@@ -625,6 +827,7 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     cmd.append("--taint-intrafile")
     for g in ctx.cfg["paths"]["exclude"]:
         cmd += ["--exclude", g]
+    local_ids = {r["id"] for r in ctx.local_rules}
     # Opengrep refuses a symlink as a target ("File not found"), so a file reached through a link is scanned
     # as a copy under its logical path in a temp mirror (paths, and so findings, stay the same)
     # The same mirror holds .mts/.cts and extensionless node/python scripts under a name Opengrep scans.
@@ -644,6 +847,9 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
     with tempfile.TemporaryDirectory() as td:
         # separate trees: a renamed copy (src/tool -> src/tool.js) must never overwrite a linked src/tool.js
         tl, tr = Path(td) / "linked", Path(td) / "renamed"
+        if ctx.local_rules:   # the repository's own rules run with the built-in ones (outside every scanned tree)
+            (Path(td) / "conf").mkdir()
+            cmd += ["--config", str(write_local_rules(ctx.local_rules, Path(td) / "conf"))]
         for tree, pairs in ((tl, [(f, f) for f in linked]), (tr, list(renamed.items()))):
             for dst, src in pairs:
                 (tree / dst).parent.mkdir(parents=True, exist_ok=True)
@@ -681,7 +887,7 @@ def run_opengrep(ctx: Ctx) -> list[Finding]:
         for cwd, r, via_rename in results:
             md = r["extra"].get("metadata", {})
             rid = r["check_id"]
-            rid = rid[rid.find("sast."):] if "sast." in rid else rid
+            rid = local_rule_id(rid, local_ids) or (rid[rid.find("sast."):] if "sast." in rid else rid)
             out.append(Finding(
                 tool="opengrep", rule=rid, severity=md.get("sast_severity", "medium"),
                 confidence=md.get("confidence", "medium"),
@@ -1621,7 +1827,8 @@ def baseline_new(ctx: Ctx, findings: list[Finding], enabled: list[str]) -> set[i
             present.append(f)
         base: list[Finding] = []
         if present:
-            bctx = Ctx(repo=root, cfg=ctx.cfg, mode="diff", base=None, changed_files=sorted(present), baseline=True)
+            bctx = Ctx(repo=root, cfg=ctx.cfg, mode="diff", base=None, changed_files=sorted(present), baseline=True,
+                       local_rules=ctx.local_rules)
             for n in names:
                 base += SCANNERS[n](bctx)             # errors propagate: fail closed
             fingerprint(root, base)
@@ -2076,6 +2283,38 @@ def main(argv=None) -> int:
         for n in [c for c in check if c] if not settings_error else []:
             if n not in bad_type and (why := proposed_settings_error(repo, n)):
                 ctx.runs.append(ToolRun("settings", "error", f"proposed {n} is invalid: {why[:250]}"))
+        # the PR's repository rules: used only after merge, but checked now so a merged rule cannot break every scan
+        if not settings_error:
+            try:
+                base_files = local_rule_files(repo, a.base)
+            except (RuntimeError, OSError, subprocess.TimeoutExpired):
+                base_files = None   # the base's own problem: reported (or repaired) when the rules are loaded below
+            try:
+                proposed = local_rule_files(repo, None)
+                if proposed != base_files:
+                    ctx.notes.append(f"This change edits `{LOCAL_RULES_DIR}/`. The check used the base branch's "
+                                     "rules; the new rules take effect after merge.")
+                    validate_local_rules(parse_local_rules(proposed))
+            except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
+                ctx.runs.append(ToolRun("settings", "error", f"proposed {LOCAL_RULES_DIR} is invalid: {str(e)[:250]}"
+                                        f" ({LOCAL_RULES_DOC})"))
+    if not settings_error:
+        try:
+            ctx.local_rules = parse_local_rules(local_rule_files(repo, a.base))
+            validate_local_rules(ctx.local_rules)
+        except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:   # unusable rules: fail closed
+            ctx.local_rules = []
+            fixed = local_rules_repair(repo, a.base) if a.base else None
+            if fixed is None:
+                settings_error = f"{LOCAL_RULES_DIR}: {str(e)[:250]} ({LOCAL_RULES_DOC})"
+                ctx.runs.append(ToolRun("settings", "error", settings_error))
+            else:
+                ctx.local_rules = fixed
+                ctx.notes.append(f"The base branch's `{LOCAL_RULES_DIR}/` cannot be used ({str(e)[:200]}). This change "
+                                 "repairs it and touches nothing else, so the check used its rules.")
+        if ctx.local_rules:
+            ctx.notes.append(f"Ran {len(ctx.local_rules)} repository rule(s) from `{LOCAL_RULES_DIR}/`"
+                             + (" (base branch)." if a.base else "."))
     enabled = a.only.split(",") if a.only else [k for k, v in cfg["tools"].items() if v]
     if settings_error:
         enabled = []                           # cannot trust the settings: report the error (fail closed)

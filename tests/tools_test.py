@@ -1186,6 +1186,217 @@ class GapWaivers(unittest.TestCase):
         self.assertEqual(sast.toml_str("a\ud800b"), '"a\\uFFFDb"')   # a lone surrogate cannot round-trip
 
 
+class LocalRules(unittest.TestCase):
+    """Repository rules (.sast-check/rules/*.yaml): read from the base branch like other settings, validated (ids
+    under local., CWE and severity metadata, only safe keys, Opengrep accepts them), and run with the built-ins."""
+
+    RULE = {"id": "local.demo.eval", "message": "no eval", "severity": "ERROR", "languages": ["python"],
+            "pattern": "eval(...)", "metadata": {"sast_severity": "critical", "cwe": "CWE-95"}}
+
+    def rules(self, *rules):
+        """A rule file holding RULES (default: the demo rule)."""
+        return yaml.safe_dump({"rules": list(rules) or [self.RULE]}, sort_keys=False)
+
+    def test_valid_rules_parse_and_every_unsafe_or_incomplete_rule_is_refused(self):
+        self.assertEqual([r["id"] for r in sast.parse_local_rules({"a.yaml": self.rules()})], ["local.demo.eval"])
+        bad_rules = [{**self.RULE, "id": i} for i in ("sast.python.eval", "local", "Local.x", "local..x", "local.x.", 7)]
+        bad_rules += [{**self.RULE, "join": {}}, {**self.RULE, "extract": "x"}, {**self.RULE, "mode": "join"},
+                      {**self.RULE, "message": " "}, {**self.RULE, "languages": []},
+                      {**self.RULE, "metadata": {"cwe": "CWE-95"}},
+                      {**self.RULE, "metadata": {"sast_severity": "severe", "cwe": "CWE-95"}},
+                      {**self.RULE, "metadata": {"sast_severity": "high"}},
+                      {**self.RULE, "metadata": {"sast_severity": "high", "cwe": "95"}},
+                      {**self.RULE, "metadata": {"sast_severity": "high", "cwe": "CWE-95", "confidence": "sure"}},
+                      {**self.RULE, 1: "a non-string key"},
+                      {**self.RULE, "metadata": {**self.RULE["metadata"], "references": [123]}},
+                      {**self.RULE, "metadata": {**self.RULE["metadata"], "references": "https://x"}},
+                      {**self.RULE, "metadata": {**self.RULE["metadata"], "fix": ["x"]}}]
+        for r in bad_rules:
+            with self.assertRaises(RuntimeError, msg=str(r)):
+                sast.parse_local_rules({"a.yaml": self.rules(r)})
+        for text in ("rules: []\n", "- id: local.x\n", "rules: [1]\n", "other: 1\nrules: []\n", "rules: [\n"):
+            with self.assertRaises(RuntimeError, msg=text):
+                sast.parse_local_rules({"a.yaml": text})
+        loop = "rules:\n  - id: local.demo.loop\n    message: m\n    languages: [python]\n    pattern: eval(...)\n" \
+               "    metadata: {sast_severity: high, cwe: CWE-95}\n    options: &o {x: *o}\n"
+        with self.assertRaisesRegex(RuntimeError, "aliases"):   # a recursive alias
+            sast.parse_local_rules({"a.yaml": loop})
+        bomb = "rules:\n  - id: local.demo.bomb\n    message: m\n    languages: [python]\n    pattern: eval(...)\n" \
+               "    metadata: {sast_severity: high, cwe: CWE-95}\n    options:\n      a: &a [x, x]\n" \
+               + "".join(f"      b{i}: &b{i} [*{'a' if i == 0 else f'b{i - 1}'}, *{'a' if i == 0 else f'b{i - 1}'}]\n" for i in range(40))
+        with self.assertRaisesRegex(RuntimeError, "aliases"):   # 2^40 nodes once expanded, from under 2 KB
+            sast.parse_local_rules({"a.yaml": bomb})
+        deep = self.rules({**self.RULE, "options": {"x": "[" * 2000 + "]" * 2000}}).replace("'", "")
+        for text in (deep, "rules:\n  - " + "[" * 2000 + "]" * 2000 + "\n"):   # a RecursionError for safe_load
+            with self.assertRaisesRegex(RuntimeError, "nests deeper than 32"):
+                sast.parse_local_rules({"a.yaml": text})
+        nested = {**self.RULE, "options": {}}
+        cur = nested["options"]
+        for _ in range(25):                                 # well inside the limit: still fine
+            cur["n"] = {}
+            cur = cur["n"]
+        sast.parse_local_rules({"a.yaml": self.rules(nested)})
+        # a YAML date (metadata: {added: 2026-01-01}) is fine: it is passed on as text
+        sast.parse_local_rules({"a.yaml": self.rules({**self.RULE, "metadata": {**self.RULE["metadata"], "added": sast.date(2026, 1, 1)}})})
+        with self.assertRaisesRegex(RuntimeError, "duplicate rule id local.demo.eval"):
+            sast.parse_local_rules({"a.yaml": self.rules(), "b.yaml": self.rules()})
+
+    def test_check_ids_map_back_to_the_rule_whatever_prefix_opengrep_adds(self):
+        ids = {"local.a.b", "local.a"}
+        self.assertEqual(sast.local_rule_id("tmp.x.conf.local.a.b", ids), "local.a.b")
+        self.assertEqual(sast.local_rule_id("local.a", ids), "local.a")
+        self.assertIsNone(sast.local_rule_id("tmp.local.a.bc", ids))
+        self.assertIsNone(sast.local_rule_id("dist.sast.python.eval", ids))
+        # the longest id wins, so a suppression for local.a never hides local.x.local.a
+        self.assertEqual(sast.local_rule_id("tmp.local.x.local.a", {"local.a", "local.x.local.a"}), "local.x.local.a")
+        # no built-in id can be mistaken for a repository rule
+        built = yaml.safe_load((ROOT / "dist" / "rules.yaml").read_text())["rules"]
+        self.assertFalse([r["id"] for r in built if r["id"].startswith("local.") or ".local." in r["id"]])
+
+    def git(self, repo, *args):
+        """Run git in REPO (test identity)."""
+        import subprocess  # noqa: PLC0415
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args], cwd=repo, check=True,
+                       capture_output=True)
+
+    def repo(self, td, files):
+        """A git repo in TD/repo with FILES committed on main; returns its path."""
+        repo = Path(td) / "repo"
+        for name, text in files.items():
+            (repo / name).parent.mkdir(parents=True, exist_ok=True)
+            (repo / name).write_text(text)
+        self.git(repo, "init", "-q", "-b", "main")
+        self.git(repo, "add", "-A")
+        self.git(repo, "commit", "-qm", "base")
+        return repo
+
+    def test_files_come_from_the_base_branch_and_links_or_odd_entries_are_refused(self):
+        rf = sast.LOCAL_RULES_DIR + "/a.yaml"
+        with tempfile.TemporaryDirectory() as td:
+            repo = self.repo(td, {rf: "base\n", sast.LOCAL_RULES_DIR + "/notes.txt": "x", sast.LOCAL_RULES_DIR + "/tests/t.yaml": "t"})
+            (repo / rf).write_text("pr\n")
+            self.git(repo, "commit", "-qam", "pr")
+            self.assertEqual(sast.local_rule_files(repo, "HEAD~1"), {rf: "base\n"})   # subfolders, .txt: not rules
+            self.assertEqual(sast.local_rule_files(repo, None), {rf: "pr\n"})
+            os.remove(repo / rf)
+            os.symlink("../../x.yaml", repo / rf)
+            with self.assertRaisesRegex(RuntimeError, "regular file"):
+                sast.local_rule_files(repo, None)
+            self.git(repo, "add", "-A")
+            self.git(repo, "commit", "-qm", "link")
+            with self.assertRaisesRegex(RuntimeError, "regular file"):
+                sast.local_rule_files(repo, "HEAD")
+            with self.assertRaises(RuntimeError):
+                sast.local_rule_files(repo, "no-such-base")
+        with tempfile.TemporaryDirectory() as td:
+            repo = self.repo(td, {"x/a.yaml": "r\n"})
+            os.symlink("x", repo / ".sast-check")
+            with self.assertRaisesRegex(RuntimeError, "must be a folder"):
+                sast.local_rule_files(repo, None)
+            self.git(repo, "add", "-A")
+            self.git(repo, "commit", "-qm", "dir link")
+            with self.assertRaisesRegex(RuntimeError, "must be a folder on the base branch"):
+                sast.local_rule_files(repo, "HEAD")
+        with tempfile.TemporaryDirectory() as td:     # a file name that is not UTF-8 next to the rules
+            import subprocess  # noqa: PLC0415
+            repo = self.repo(td, {rf: self.rules()})
+            blob = sast.sh(["git", "hash-object", "-w", str(repo / rf)], repo).stdout.strip()
+            subprocess.run([b"git", b"update-index", b"--add", b"--cacheinfo",
+                            b"100644," + blob.encode() + b"," + sast.LOCAL_RULES_DIR.encode() + b"/\xff.txt"],
+                           cwd=repo, check=True, capture_output=True)
+            self.git(repo, "commit", "-qm", "odd name")
+            self.assertEqual(list(sast.local_rule_files(repo, "HEAD")), [rf])
+        with tempfile.TemporaryDirectory() as td:     # the size limit holds before any file is read
+            repo = self.repo(td, {rf: "#" * (sast.LOCAL_RULES_MAX_BYTES + 1)})
+            for base in (None, "HEAD"):
+                with self.assertRaisesRegex(RuntimeError, "larger than"):
+                    sast.local_rule_files(repo, base)
+        with tempfile.TemporaryDirectory() as td:     # a submodule (gitlink) where the folder should be
+            repo = self.repo(td, {"a.txt": "x\n"})
+            sha = sast.sh(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.git(repo, "update-index", "--add", "--cacheinfo", f"160000,{sha},.sast-check/rules")
+            with self.assertRaisesRegex(RuntimeError, "submodule"):
+                sast.local_rule_files(repo, None)
+            self.git(repo, "commit", "-qm", "gitlink")
+            with self.assertRaisesRegex(RuntimeError, "submodule"):
+                sast.local_rule_files(repo, "HEAD")
+
+    def gate(self, td, base, pr):
+        """Commit BASE files, then PR files (None deletes), run sast.py on the PR with Opengrep; (exit, findings.json)."""
+        import subprocess  # noqa: PLC0415
+        repo = self.repo(td, base)
+        for name, text in pr.items():
+            if text is None:
+                os.remove(repo / name)
+            else:
+                (repo / name).parent.mkdir(parents=True, exist_ok=True)
+                (repo / name).write_text(text)
+        self.git(repo, "add", "-A")
+        self.git(repo, "commit", "-qm", "pr")
+        out = Path(td) / "out"
+        r = subprocess.run([sys.executable, "-I", str(ROOT / "scripts" / "sast.py"), "--repo", str(repo), "--mode", "diff",
+                            "--base", "HEAD~1", "--only", "opengrep", "--out", str(out)],
+                           capture_output=True, text=True, check=False)
+        return r.returncode, json.loads((out / "findings.json").read_text())
+
+    @unittest.skipUnless(sast.shutil.which("opengrep"), "needs opengrep")
+    def test_base_rules_block_new_code_and_a_pr_cannot_weaken_or_break_them(self):
+        rf = sast.LOCAL_RULES_DIR + "/demo.yaml"
+        good = {rf: self.rules(), "app.py": "x = 1\n"}
+        with tempfile.TemporaryDirectory() as td:     # the base rule finds the PR's new eval and blocks
+            code, data = self.gate(td, good, {"app.py": "x = eval(input())\n"})
+        self.assertEqual(code, 1)
+        self.assertEqual([(f["rule"], f["severity"], f["cwe"], f["blocking"]) for f in data["findings"]],
+                         [("local.demo.eval", "critical", "CWE-95", True)])
+        with tempfile.TemporaryDirectory() as td:     # deleting the rule in the same PR does not help
+            code, data = self.gate(td, good, {"app.py": "x = eval(input())\n", rf: None})
+        self.assertEqual((code, [f["rule"] for f in data["findings"]]), (1, ["local.demo.eval"]))
+        # Opengrep must accept every rule in both modes: these each pass one of --strict / no --strict
+        for r in ({**self.RULE, "min-version": "99.0.0"}, {**self.RULE, "max-version": "0.0.1"}):
+            with self.assertRaisesRegex(RuntimeError, "Opengrep rejected", msg=str(r)):
+                sast.validate_local_rules([r])
+        sast.validate_local_rules([self.RULE])
+        broken = self.rules({**self.RULE, "pattern": "eval("})
+        with tempfile.TemporaryDirectory() as td:     # a proposed rule Opengrep rejects is an error now, not after merge
+            code, data = self.gate(td, good, {rf: broken})
+        self.assertEqual(code, 2)
+        self.assertTrue(any(r["name"] == "settings" and "proposed .sast-check/rules is invalid" in r["detail"]
+                            for r in data["runs"]), data["runs"])
+        with tempfile.TemporaryDirectory() as td:     # an unusable base rule set fails closed for code changes
+            code, data = self.gate(td, {**good, rf: broken}, {"app.py": "x = 2\n"})
+        self.assertEqual(code, 2)
+        with tempfile.TemporaryDirectory() as td:     # ...but a PR that only repairs the rules can pass, using them
+            code, data = self.gate(td, {**good, rf: broken}, {rf: self.rules()})
+        self.assertEqual((code, data["verdict"]), (0, "pass"), data["runs"])
+        many = {f"{sast.LOCAL_RULES_DIR}/r{i}.yaml": "rules: []\n" for i in range(sast.LOCAL_RULES_MAX_FILES + 1)}
+        with tempfile.TemporaryDirectory() as td:     # a base over the file limit is repaired the same way
+            code, data = self.gate(td, {**good, **many}, dict.fromkeys(many))
+        self.assertEqual((code, data["verdict"]), (0, "pass"), data["runs"])
+        with tempfile.TemporaryDirectory() as td:     # a base whose .sast-check is a link is repaired by a real folder
+            repo = self.repo(td, {**good, "elsewhere/rules/demo.yaml": self.rules()})
+            (repo / ".sast-check" / "rules" / "demo.yaml").unlink()
+            (repo / ".sast-check" / "rules").rmdir()
+            (repo / ".sast-check").rmdir()
+            os.symlink("elsewhere", repo / ".sast-check")
+            self.git(repo, "add", "-A")
+            self.git(repo, "commit", "-qm", "link")
+            os.remove(repo / ".sast-check")
+            (repo / sast.LOCAL_RULES_DIR).mkdir(parents=True)
+            (repo / rf).write_text(self.rules())
+            self.git(repo, "add", "-A")
+            self.git(repo, "commit", "-qm", "repair")
+            import subprocess  # noqa: PLC0415
+            out = Path(td) / "out"
+            r = subprocess.run([sys.executable, "-I", str(ROOT / "scripts" / "sast.py"), "--repo", str(repo), "--mode",
+                                "diff", "--base", "HEAD~1", "--only", "opengrep", "--out", str(out)],
+                               capture_output=True, text=True, check=False)
+            data = json.loads((out / "findings.json").read_text())
+        self.assertEqual((r.returncode, data["verdict"]), (0, "pass"), data["runs"])
+        with tempfile.TemporaryDirectory() as td:     # a repair PR that also changes code gets no exception
+            code, data = self.gate(td, {**good, rf: broken}, {rf: self.rules(), "app.py": "x = eval(input())\n"})
+        self.assertEqual(code, 2)
+
+
 if __name__ == "__main__":
     os.chdir(ROOT)
     unittest.main(verbosity=1)
