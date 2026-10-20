@@ -7,6 +7,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -185,7 +186,7 @@ class Secrets(unittest.TestCase):
 
     def test_a_report_path_inside_dist_or_rules_is_refused_before_anything_runs(self):
         """A --report path inside dist/ or rules/ exits 2 before any draft runs."""
-        base = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep"]
+        base = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", str(OPENGREP)]
         for report in ("dist/rules.yaml", str(ROOT / "dist" / "rule-ids.lock"), "rules/custom/python/x.yaml"):
             with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), \
                     mock.patch.object(sys, "argv", base + ["--report", str(ROOT / report)]), \
@@ -197,7 +198,7 @@ class Secrets(unittest.TestCase):
     def test_no_key_stops_the_run_before_anything_is_drafted(self):
         """Without OPENROUTER_API_KEY the tool exits 2 before drafting anything."""
         env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
-        argv = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", "/x/opengrep"]
+        argv = ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--engine", str(OPENGREP)]
         with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(sys, "argv", argv), \
                 mock.patch.object(lr, "run", side_effect=AssertionError("drafted without a key")), redirect_stderr(io.StringIO()):
             self.assertEqual(lr.main(), 2)
@@ -319,6 +320,308 @@ class FixtureRun(unittest.TestCase):
             self.assertEqual(list((self.repo / "rules" / "custom").glob(f"*/{r['id']}.*")), [], r["id"])
             self.assertFalse(any(r["id"] in x for x in lock), r["id"])
             self.assertNotIn(r["id"], bundle)
+
+
+class LocalDrafter(Drafter):
+    """The canned drafts, with fixture annotations naming the `local.` id the rule gets in a private rules repo."""
+
+    def __call__(self, p, train, rule_id, ext, feedback):
+        d = super().__call__(p, train, rule_id, ext, feedback)
+        return {**d, "fixture": d["fixture"].replace(rule_id.replace("local.", "sast.", 1), rule_id)}
+
+
+class TargetRun(unittest.TestCase):
+    """--target: the same checks, but accepted rules land as `local.` rules in a private rules repo's
+    .sast-check/rules/ (fixtures in its tests/ subfolder), never in this public repo."""
+
+    @classmethod
+    def setUpClass(cls):
+        need_engines()
+        cls.td = tempfile.TemporaryDirectory()
+        cls.repo = repo_copy(cls.td.name)
+        cls.target = Path(cls.td.name) / "private-rules"
+        cls.target.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=cls.target, check=True)
+        (cls.target / ".sast-check.toml").write_text('[paths]\nexclude = [".sast-check/rules/tests/**"]\n')
+        before = sorted(p.relative_to(cls.repo).as_posix() for p in cls.repo.rglob("*"))
+        cls.report = lr.run(PATTERNS, cls.repo, ENGINES, LocalDrafter(DRAFTS), target=cls.target)
+        cls.check_error = lr.check_target(cls.target, cls.report)
+        cls.repo_unchanged = before == sorted(p.relative_to(cls.repo).as_posix() for p in cls.repo.rglob("*"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.td.cleanup()
+
+    def test_rules_land_in_the_private_repo_as_local_rules_that_sast_check_accepts(self):
+        self.assertEqual(self.check_error, "")
+        self.assertTrue(self.repo_unchanged)          # nothing written to the public repo
+        self.assertEqual([a["rule_id"] for a in self.report["accepted"]],
+                         ["local.python.lp-py-yaml-unsafe-load", "local.python.lp-py-tar-extractall-unfiltered",
+                          "local.python.lp-py-requests-no-timeout"])
+        for a in self.report["accepted"]:
+            self.assertEqual(a["files"], [f".sast-check/rules/{a['id']}.yaml", f".sast-check/rules/tests/{a['id']}.py"])
+            for f in a["files"]:
+                self.assertTrue((self.target / f).is_file(), f)
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import sast
+        got = sast.parse_local_rules(sast.local_rule_files(self.target, None))
+        self.assertEqual(sorted(r["id"] for r in got), sorted(a["rule_id"] for a in self.report["accepted"]))
+
+    def test_a_second_run_skips_rules_the_private_repo_already_has(self):
+        again = lr.run([pattern("lp-py-yaml-unsafe-load")], self.repo, ENGINES, LocalDrafter(DRAFTS), target=self.target)
+        self.assertEqual(again["accepted"], [])
+        self.assertIn("already exists", again["skipped"][0]["reason"])
+
+    def test_a_rule_set_sast_check_would_refuse_keeps_nothing(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td)
+            subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+            (target / ".sast-check" / "rules").mkdir(parents=True)
+            (target / ".sast-check" / "rules" / "a.yaml").write_text("rules:\n  - id: sast.not.local\n")
+            mine = target / ".sast-check" / "rules" / "new.yaml"
+            mine.write_text("rules: []\n")
+            report = {"accepted": [{"id": "new", "files": [".sast-check/rules/new.yaml"]}]}
+            self.assertIn("must start with `local.`", lr.check_target(target, report))
+            self.assertFalse(mine.exists())
+            self.assertEqual(report["accepted"], [])
+
+    def test_the_pr_goes_to_the_private_repo_without_dist_files(self):
+        cmds = []
+
+        def runner(cmd, repo):
+            cmds.append((cmd, repo))
+            return mock.Mock(stdout="url\n")
+
+        lr.open_pr(self.target, self.report, "main", "m", runner, dist=False)
+        self.assertTrue(all(repo == self.target for _, repo in cmds))
+        add = next(c for c, _ in cmds if c[:2] == ["git", "add"])
+        self.assertEqual(add[3:], [f for a in self.report["accepted"] for f in a["files"]])
+
+    def test_the_target_must_be_a_separate_checkout(self):
+        for bad in (str(ROOT), str(ROOT / "rules"), self.td.name):
+            with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
+                                                 "--target", bad, "--engine", str(OPENGREP)]), \
+                    mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(lr.main(), 2, bad)
+            self.assertIn("--target", err.getvalue())
+        with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"), "--target",
+                                             str(self.target), "--report", str(self.target / "run.json"), "--engine", str(OPENGREP)]), \
+                mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(lr.main(), 2)          # the report would be committed with the rules
+        self.assertIn("outside the --target checkout", err.getvalue())
+
+
+class TargetSafety(unittest.TestCase):
+    """--target refuses anything that could leak private-derived rules or text, or write outside the checkout."""
+
+    def target(self, td, toml='[paths]\nexclude = [".sast-check/rules/tests/**"]\n'):
+        """A git checkout in TD with an optional .sast-check.toml."""
+        t = Path(td) / "t"
+        t.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=t, check=True)
+        if toml is not None:
+            (t / ".sast-check.toml").write_text(toml)
+        return t
+
+    def test_links_on_the_way_and_scanned_fixtures_are_refused(self):
+        with tempfile.TemporaryDirectory() as td:
+            t = self.target(td)
+            self.assertEqual(lr.target_problem(t), "")
+            (t / ".sast-check" / "rules").mkdir(parents=True)
+            os.symlink(td, t / ".sast-check" / "rules" / "tests")
+            self.assertIn("must be a folder", lr.target_problem(t))
+        with tempfile.TemporaryDirectory() as td:
+            self.assertIn("must exclude every fixture", lr.target_problem(self.target(td, toml=None)))
+        with tempfile.TemporaryDirectory() as td:
+            self.assertIn("invalid", lr.target_problem(self.target(td, toml="[nope]\n")))
+
+    def test_the_pr_only_goes_to_a_private_repo(self):
+        for out, ok in (('{"nameWithOwner": "o/r", "visibility": "PRIVATE"}', True),
+                        ('{"nameWithOwner": "o/r", "visibility": "PUBLIC"}', False),
+                        ('{"nameWithOwner": "o/r", "visibility": "INTERNAL"}', False), ("not json", False)):
+            def fake(cmd, **kw):
+                return mock.Mock(returncode=0, stdout="https://github.com/o/r\n" if cmd[:2] == ["git", "remote"] else out)
+            with mock.patch.object(lr.subprocess, "run", fake):
+                if ok:
+                    self.assertEqual(lr.private_repo(Path(".")), "o/r")
+                else:
+                    with self.assertRaises(ValueError, msg=out):
+                        lr.private_repo(Path("."))
+        # a private fetch URL with a public push URL: the push would leak the branch
+        views = {"https://github.com/o/r": '{"nameWithOwner": "o/r", "visibility": "PRIVATE"}',
+                 "https://github.com/o/pub": '{"nameWithOwner": "o/pub", "visibility": "PUBLIC"}',
+                 "https://github.com/o/r2": '{"nameWithOwner": "o/r2", "visibility": "PRIVATE"}'}
+        for push in ("https://github.com/o/pub", "https://github.com/o/r2"):
+            def fake2(cmd, push=push, **kw):
+                if cmd[:3] == ["git", "remote", "get-url"]:
+                    return mock.Mock(returncode=0, stdout=(push if "--push" in cmd else "https://github.com/o/r") + "\n")
+                return mock.Mock(returncode=0, stdout=views[cmd[3]])
+            with mock.patch.object(lr.subprocess, "run", fake2), self.assertRaises(ValueError, msg=push):
+                lr.private_repo(Path("."))
+        cmds = []
+        lr.open_pr(Path("."), OpenPr.REPORT, "main", "m", lambda c, r: cmds.append(c) or mock.Mock(stdout="u"),
+                   dist=False, gh_repo="o/r")
+        self.assertEqual(next(c for c in cmds if c[:3] == ["gh", "pr", "create"])[3:5], ["-R", "o/r"])
+
+    def test_a_copied_example_line_is_never_quoted_in_a_reason(self):
+        p = pattern("lp-py-yaml-unsafe-load")
+        stolen = "job = yaml.load(body, Loader=yaml.Loader)\n"
+        with tempfile.TemporaryDirectory() as td, self.assertRaises(lr.Reject) as e:
+            lr.evaluate(p, "rules: []\n", stolen, p["examples"], [], ROOT, ENGINES, Path(td))
+        self.assertNotIn("yaml.load", str(e.exception))
+
+    def test_an_existing_fixture_is_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as td:
+            t = self.target(td)
+            fx = t / ".sast-check" / "rules" / "tests" / "lp-py-yaml-unsafe-load.py"
+            fx.parent.mkdir(parents=True)
+            fx.write_text("mine\n")
+            got = lr.run([pattern("lp-py-yaml-unsafe-load")], ROOT, ENGINES, LocalDrafter(DRAFTS), target=t)
+            self.assertEqual(got["accepted"], [])
+            self.assertEqual(fx.read_text(), "mine\n")
+
+    def test_the_rules_check_uses_the_requested_engine_and_survives_bad_bytes(self):
+        with tempfile.TemporaryDirectory() as td:
+            t = self.target(td)
+            (t / ".sast-check" / "rules").mkdir(parents=True)
+            (t / ".sast-check" / "rules" / "a.yaml").write_bytes(b"\xff\xfe")
+            self.assertEqual(lr.target_ids(t), set())                 # unreadable: no crash
+            self.assertIn("UTF-8", lr.check_target(t, {"accepted": []}))
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import sast
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(sast, "validate_local_rules") as v:
+            lr.check_target(self.target(td), {"accepted": []}, "/x/opengrep")
+        self.assertEqual(v.call_args.args[1], "/x/opengrep")
+
+    def test_writes_never_follow_a_link_or_replace_a_file(self):
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as outside:
+            t = self.target(td)
+            (t / ".sast-check" / "rules").mkdir(parents=True)
+            os.symlink(Path(outside) / "x.yaml", t / ".sast-check" / "rules" / "lp-py-yaml-unsafe-load.yaml")  # dangling
+            got = lr.run([pattern("lp-py-yaml-unsafe-load")], ROOT, ENGINES, LocalDrafter(DRAFTS), target=t)
+            self.assertEqual(got["accepted"], [])
+            self.assertEqual(os.listdir(outside), [])                 # nothing written through the link
+            os.symlink(outside, t / "linked")
+            with self.assertRaises(OSError):
+                lr.write_new(t, t / "linked" / "a.yaml", "x")         # a link on the way
+            (t / "f.yaml").write_text("mine")
+            with self.assertRaises(FileExistsError):
+                lr.write_new(t, t / "f.yaml", "x")                    # never over an existing file
+            self.assertEqual((t / "f.yaml").read_text(), "mine")
+            self.assertEqual(os.listdir(outside), [])
+
+    def test_every_fixture_type_must_be_excluded_and_opengrep_must_run(self):
+        with tempfile.TemporaryDirectory() as td:
+            only_py = '[paths]\nexclude = [".sast-check/rules/tests/*.py"]\n'
+            self.assertIn("exclude every fixture", lr.target_problem(self.target(td, toml=only_py)))
+        with tempfile.TemporaryDirectory() as td:
+            off = '[paths]\nexclude = [".sast-check/rules/tests/**"]\n[tools]\nopengrep = false\n'
+            self.assertIn("turns Opengrep off", lr.target_problem(self.target(td, toml=off)))
+        self.assertEqual(lr.FIXTURE_EXTS, [".js", ".py", ".ts"])
+
+    def test_only_github_com_and_no_credentials_in_messages(self):
+        self.assertEqual(lr.redact("https://user:ghp_secret@github.com/o/r"), "https://***@github.com/o/r")
+        self.assertEqual(lr.redact("https://x-access-token:abc@github.com/o/r.git"), "https://***@github.com/o/r.git")
+        self.assertEqual(lr.redact("git@github.com:o/r.git"), "git@github.com:o/r.git")
+        for url, host in (("https://github.com/o/r", "github.com"), ("git@github.com:o/r.git", "github.com"),
+                          ("ssh://git@ghe.example.com/o/r", "ghe.example.com"), ("https://t@GitHub.com/o/r", "github.com")):
+            self.assertEqual(lr.url_host(url), host, url)
+        for url in ("https://tok123@ghe.example.com/o/r", "https://user:tok123@github.com/o/pub"):
+            def fake(cmd, url=url, **kw):
+                if cmd[:3] == ["git", "remote", "get-url"]:
+                    return mock.Mock(returncode=0, stdout=url + "\n")
+                return mock.Mock(returncode=0, stdout='{"nameWithOwner": "o/pub", "visibility": "PUBLIC"}')
+            with mock.patch.object(lr.subprocess, "run", fake), self.assertRaises(ValueError) as e:
+                lr.private_repo(Path("."))
+            self.assertNotIn("tok123", str(e.exception))
+
+    def test_a_relative_engine_path_is_made_absolute_before_use(self):
+        seen = {}
+
+        def fake_run(patterns, repo, engines, drafter, attempts, target):
+            seen["engines"] = engines
+            return {"accepted": [], "rejected": [], "skipped": []}
+
+        here = os.getcwd()
+        try:
+            os.chdir(Path(OPENGREP).parent)
+            with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
+                                                 "--engine", "./opengrep"]), \
+                    mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), mock.patch.object(lr, "run", fake_run), \
+                    redirect_stdout(io.StringIO()):
+                self.assertEqual(lr.main(), 0)
+        finally:
+            os.chdir(here)
+        self.assertEqual(seen["engines"], [str(Path(OPENGREP).parent.absolute() / "opengrep")])
+
+    def test_a_bare_engine_name_is_found_on_path(self):
+        seen = {}
+
+        def fake_run(patterns, repo, engines, drafter, attempts, target):
+            seen["engines"] = engines
+            return {"accepted": [], "rejected": [], "skipped": []}
+
+        with tempfile.TemporaryDirectory() as td:
+            here = os.getcwd()
+            try:
+                os.chdir(td)                                         # no opengrep in this folder
+                with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
+                                                     "--engine", "opengrep"]), \
+                        mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k",
+                                                     "PATH": f"{Path(OPENGREP).parent}:{os.environ['PATH']}"}), \
+                        mock.patch.object(lr, "run", fake_run), redirect_stdout(io.StringIO()):
+                    self.assertEqual(lr.main(), 0)
+            finally:
+                os.chdir(here)
+        self.assertEqual(seen["engines"], [str(Path(OPENGREP).parent.absolute() / "opengrep")])
+
+    def test_a_failed_write_leaves_no_partial_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            t = Path(td)
+            real = os.fdopen
+
+            def broken(fd, *a, **kw):
+                f = real(fd, *a, **kw)
+                f.write = mock.Mock(side_effect=OSError(28, "No space left on device"))
+                return f
+            with mock.patch.object(lr.os, "fdopen", broken), self.assertRaises(OSError):
+                lr.write_new(t, t / "r" / "a.yaml", "private-derived text")
+            self.assertFalse((t / "r" / "a.yaml").exists())
+
+    def test_existing_target_rules_and_submodules_are_checked_before_drafting(self):
+        with tempfile.TemporaryDirectory() as td:
+            t = self.target(td)
+            (t / ".sast-check" / "rules").mkdir(parents=True)
+            (t / ".sast-check" / "rules" / "old.yaml").write_text("rules:\n  - " + "[" * 2000 + "]" * 2000 + "\n")
+            self.assertIn("existing rules are invalid", lr.target_problem(t))   # no RecursionError
+            self.assertEqual(lr.target_ids(t), set())
+        with tempfile.TemporaryDirectory() as td:
+            t = self.target(td)
+            sha = "0" * 39 + "1"
+            subprocess.run(["git", "update-index", "--add", "--cacheinfo", f"160000,{sha},.sast-check/rules/tests"],
+                           cwd=t, check=True)
+            (t / ".sast-check" / "rules" / "tests").mkdir(parents=True)  # a checked-out submodule looks like this
+            self.assertIn("submodule", lr.target_problem(t))
+
+    def test_a_report_in_this_repo_or_an_existing_local_branch_stops_the_run(self):
+        with tempfile.TemporaryDirectory() as td:
+            t = self.target(td)
+            for extra in (["--report", str(ROOT / "run.json")], ["--report", str(t / "run.json")]):
+                with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
+                                                     "--target", str(t), *extra, "--engine", str(OPENGREP)]), \
+                        mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), redirect_stderr(io.StringIO()) as err:
+                    self.assertEqual(lr.main(), 2, extra)
+                self.assertIn("--report must be outside", err.getvalue())
+            git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+            subprocess.run([*git, "commit", "-qm", "init", "--allow-empty"], cwd=t, check=True)
+            subprocess.run(["git", "add", "-A"], cwd=t, check=True)
+            subprocess.run([*git, "commit", "-qm", "toml"], cwd=t, check=True)
+            subprocess.run(["git", "branch", f"learner/rules-{date.today().isoformat()}"], cwd=t, check=True)
+            with mock.patch.object(sys, "argv", ["learner_rules.py", "--patterns", str(FX / "patterns.json"),
+                                                 "--target", str(t), "--open-pr", "--engine", str(OPENGREP)]), \
+                    mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(lr.main(), 2)
+            self.assertIn("already exists in the checkout", err.getvalue())
 
 
 class Rejections(unittest.TestCase):

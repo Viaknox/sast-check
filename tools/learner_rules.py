@@ -22,6 +22,11 @@ Usage:
   tools/learner_rules.py --patterns patterns.json                     # write accepted rules to the working tree
   tools/learner_rules.py --patterns patterns.json --report run.json   # also write the accept/reject report
   tools/learner_rules.py --patterns patterns.json --open-pr           # commit them on a new branch and open a PR
+  tools/learner_rules.py --patterns patterns.json --target ../rules --open-pr   # private rules repo (below)
+
+Rules learned from private code must never reach this public repo. With --target <checkout of a private rules
+repo>, accepted rules are written as `local.<area>.<id>` rules to its .sast-check/rules/ (fixtures in
+.sast-check/rules/tests/), checked with sast-check's own reader (docs/local-rules.md), and the PR opens there.
 """
 import argparse
 import json
@@ -32,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import date
 from pathlib import Path
@@ -41,6 +47,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = "learner-patterns/v1"
 MIN_HITS = 3
+LOCAL_DIR = ".sast-check/rules"   # where sast-check reads a repo's own rules (scripts/sast.py LOCAL_RULES_DIR)
 HOME_ORG = "SathiaAI"   # owner of this repo; a rule from another org's code needs the owner's recorded approval
 MIN_EXAMPLES = 3   # distinct examples: fewer leaves no held-out example, so the rule would be untested on unseen code
 DEFAULT_MODEL = "qwen/qwen3-coder-30b-a3b-instruct"   # cheap, non-frontier coding model; override with --model
@@ -54,6 +61,7 @@ STACKS = {
 }
 STACKS["node"] = STACKS["javascript"]
 COMMENT = {".py": "#", ".js": "//", ".ts": "//"}
+FIXTURE_EXTS = sorted({v[2] for v in STACKS.values()})   # the fixture file types this tool writes
 # docs/RULE_SPEC.md: critical/high -> ERROR (blocking), medium -> WARNING, low -> INFO
 SEVERITY = {"critical": "ERROR", "high": "ERROR", "medium": "WARNING", "low": "INFO"}
 # the only rule keys a draft may set; id, languages, severity, message and metadata are set here
@@ -290,7 +298,8 @@ def evaluate(p: dict, rule_text: str, fixture: str, train: list[dict], held: lis
     slug = p["id"]
     line = copied_line(fixture, train + held)
     if line:
-        raise Reject(f"fixture copies an example line ({line[:60]!r}); fixtures must be new synthetic code")
+        # the line itself is never quoted: examples can be private code, and reasons reach reports and PR bodies
+        raise Reject("fixture copies a line from an example; fixtures must be new synthetic code")
     ex = work / "examples"
     shutil.rmtree(ex, ignore_errors=True)
     ex.mkdir(parents=True)
@@ -344,13 +353,48 @@ def evaluate(p: dict, rule_text: str, fixture: str, train: list[dict], held: lis
 
 
 # ---------------------------------------------------------------- the run
-def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int = 2) -> dict:
-    """Process every pattern. Writes accepted rules and fixtures under repo/rules/custom and nothing else.
+def write_new(root: Path, path: Path, text: str) -> None:
+    """Create PATH (under ROOT) with TEXT, never through a link and never over an existing file: each folder
+    from ROOT down must be a real folder (created if missing), and the file is opened with O_EXCL|O_NOFOLLOW.
+    Raises OSError otherwise, so a planted symlink can never send a private-derived rule outside the checkout."""
+    cur = root
+    for part in path.parent.relative_to(root).parts:
+        cur = cur / part
+        if cur.is_symlink():
+            raise OSError(40, f"{cur.relative_to(root).as_posix()} is a symlink")   # 40 = ELOOP
+        cur.mkdir(exist_ok=True)
+        if cur.is_symlink() or not cur.is_dir():
+            raise OSError(20, f"{cur.relative_to(root).as_posix()} is not a folder")  # 20 = ENOTDIR
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+    except BaseException:
+        path.unlink(missing_ok=True)   # this call created it: never leave a partial file behind
+        raise
+
+
+def target_ids(target: Path) -> set[str]:
+    """Rule ids already in a private rules repo's .sast-check/rules/, read with sast-check's guarded reader (size,
+    nesting and alias limits). target_problem has already refused a folder that reader cannot read."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import sast
+    try:
+        return {r["id"] for r in sast.parse_local_rules(sast.local_rule_files(target, None))}
+    except (RuntimeError, OSError, subprocess.TimeoutExpired):
+        return set()
+
+
+def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int = 2, target: Path | None = None) -> dict:
+    """Process every pattern. Writes accepted rules and fixtures under repo/rules/custom and nothing else, or,
+    with TARGET (a checkout of a private rules repo), under TARGET/.sast-check/rules as `local.` rules.
     Returns {"accepted": [...], "rejected": [...], "skipped": [...]}."""
     report = {"accepted": [], "rejected": [], "skipped": []}
     lock = repo / "dist" / "rule-ids.lock"
     retired = repo / "rules" / "RETIRED.txt"
     taken = set(lock.read_text().split() if lock.exists() else []) | set(retired.read_text().split() if retired.exists() else [])
+    if target is not None:
+        taken = target_ids(target)
     seen = set()
     with tempfile.TemporaryDirectory() as td:
         for n, p in enumerate(patterns):
@@ -364,9 +408,12 @@ def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int =
                 report["rejected"].append({"id": pid, "reason": bad})
                 continue
             area, _, ext, exts = STACKS[p["stack"]]
-            rule_id = f"sast.{area}.{p['id']}"
-            dest = repo / "rules" / "custom" / area
-            if rule_id in taken or rule_id in seen or (dest / f"{p['id']}.yaml").exists():
+            rule_id = f"{'local' if target is not None else 'sast'}.{area}.{p['id']}"
+            dest = repo / "rules" / "custom" / area if target is None else target / LOCAL_DIR
+            fx_dest = dest if target is None else dest / "tests"
+            if rule_id in taken or rule_id in seen or (dest / f"{p['id']}.yaml").exists() \
+                    or (dest / f"{p['id']}.yaml").is_symlink() \
+                    or (fx_dest / f"{p['id']}{ext}").exists() or (fx_dest / f"{p['id']}{ext}").is_symlink():
                 report["skipped"].append({"id": pid, "reason": f"{rule_id} already exists, was shipped or retired"})
                 continue
             seen.add(rule_id)
@@ -392,16 +439,23 @@ def run(patterns: list, repo: Path, engines: list[str], drafter, attempts: int =
                 except Reject as e:
                     reason = feedback = f"attempt {attempt}: {e}"
                     continue
-                dest.mkdir(parents=True, exist_ok=True)
-                (dest / f"{p['id']}.yaml").write_text(rule_text)
-                (dest / f"{p['id']}{ext}").write_text(fixture)
+                try:
+                    write_new(target or repo, dest / f"{p['id']}.yaml", rule_text)
+                    try:
+                        write_new(target or repo, fx_dest / f"{p['id']}{ext}", fixture)
+                    except OSError:
+                        (dest / f"{p['id']}.yaml").unlink()   # this run created it: never leave half a rule
+                        raise
+                except OSError as e:
+                    reason = f"cannot write the rule safely ({e.strerror or type(e).__name__})"
+                    break
                 report["accepted"].append({"id": pid, "rule_id": rule_id, "hits": p["hits"],
                                            "cwe": yaml.safe_load(rule_text)["rules"][0]["metadata"]["cwe"],
                                            "cwe_source": "pattern" if p["cwe"] else "drafted", "orgs": source_orgs(p),
                                            "severity": p["impact_band"], "blocking": SEVERITY[p["impact_band"]] == "ERROR",
                                            "held_out": len(held), "attempts": attempt,
-                                           "files": [f"rules/custom/{area}/{p['id']}.yaml",
-                                                     f"rules/custom/{area}/{p['id']}{ext}"]})
+                                           "files": [(dest / f"{p['id']}.yaml").relative_to(target or repo).as_posix(),
+                                                     (fx_dest / f"{p['id']}{ext}").relative_to(target or repo).as_posix()]})
                 reason = ""
                 break
             if reason:
@@ -419,6 +473,107 @@ def build_dist(repo: Path, report: dict) -> str:
             (repo / f).unlink(missing_ok=True)
     report["accepted"] = []
     return (r.stderr or r.stdout).strip()[-400:]
+
+
+def target_problem(target: Path) -> str:
+    """Why TARGET cannot take rules ("" if it can): every folder on the way must be a real folder (a link
+    would send writes outside the checkout), and its settings must keep the fixtures out of its own scans
+    (they hold findings on purpose)."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import sast  # the scanner's own settings and rules readers
+    folders = (".sast-check", LOCAL_DIR, LOCAL_DIR + "/tests")
+    try:   # a submodule (gitlink) looks like a plain folder on disk, but writes into it never reach this repo
+        gitlinks = {e.split("\t", 1)[1] for e in sast.git_z(target, ["ls-files", "-z", "-s", "--", *folders])
+                    if e.startswith("160000 ")}
+    except RuntimeError as e:
+        return f"cannot read the target's git index: {e}"
+    for rel in folders:
+        p = target / rel
+        if p.is_symlink() or (p.exists() and not p.is_dir()) or rel in gitlinks:
+            return f"{rel} in the target must be a folder, not a symlink, file or submodule"
+    try:   # the rules already there must be readable now, or the run's final check would discard its work
+        sast.parse_local_rules(sast.local_rule_files(target, None))
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
+        return f"the target's existing rules are invalid: {e}"
+    try:
+        cfg = sast.load_config(sast.settings_file(target, None, ".sast-check.toml"))
+    except (RuntimeError, ValueError) as e:
+        return f"the target's .sast-check.toml is invalid: {e}"
+    unscanned = [f"{LOCAL_DIR}/tests/{sub}x{ext}" for ext in FIXTURE_EXTS for sub in ("", "a/")]
+    if not all(sast.glob_any(f, cfg["paths"]["exclude"]) for f in unscanned):
+        return (f"the target's .sast-check.toml must exclude every fixture: add \"{LOCAL_DIR}/tests/**\" to "
+                "[paths] exclude")
+    if cfg["tools"].get("opengrep") is not True:   # repository rules run only through Opengrep
+        return "the target's .sast-check.toml turns Opengrep off, so its rules would never run"
+    return ""
+
+
+def redact(url: str) -> str:
+    """URL without any user:password@ part (a token can be embedded there), for messages and logs."""
+    try:
+        u = urllib.parse.urlsplit(url)
+    except ValueError:
+        return "<unparsable URL>"
+    if u.scheme and "@" in u.netloc:
+        return urllib.parse.urlunsplit(u._replace(netloc="***@" + u.netloc.rsplit("@", 1)[1]))
+    return url
+
+
+def url_host(url: str) -> str:
+    """Host of a git remote URL: https://host/..., ssh://user@host/... or scp-like user@host:path."""
+    u = urllib.parse.urlsplit(url)
+    if u.scheme:
+        return (u.hostname or "").lower()
+    m = re.fullmatch(r"(?:[^@/]+@)?([^:/]+):.*", url)
+    return m.group(1).lower() if m else ""
+
+
+def private_repo(target: Path) -> str:
+    """owner/name of TARGET's origin, checked to be a private repo on github.com; raises ValueError otherwise.
+    The rules come from private code, so nothing may be pushed or proposed to a public (or internal) repo.
+    Every URL git would use for origin (the fetch URL and each push URL) must name that same private repo.
+    GitHub Enterprise hosts are not supported. Messages never show credentials embedded in a URL."""
+    def git_urls(*args):
+        r = subprocess.run(["git", "remote", "get-url", *args, "origin"], cwd=target, capture_output=True,
+                           text=True, check=False)
+        return r.stdout.split() if r.returncode == 0 else []
+
+    urls = git_urls() + git_urls("--push", "--all")
+    if not urls:
+        raise ValueError("the target has no origin remote")
+    names = set()
+    for url in dict.fromkeys(urls):
+        if url_host(url) != "github.com":
+            raise ValueError(f"the target's origin URL {redact(url)} is not on github.com (only github.com is supported)")
+        r = subprocess.run(["gh", "repo", "view", url, "--json", "nameWithOwner,visibility"], cwd=target,
+                           capture_output=True, text=True, check=False, timeout=60)
+        try:
+            info = json.loads(r.stdout) if r.returncode == 0 else {}
+        except ValueError:
+            info = {}
+        if info.get("visibility") != "PRIVATE" or not info.get("nameWithOwner"):
+            raise ValueError(f"the target's origin URL {redact(url)} must be a private GitHub repo "
+                             f"(got {info.get('visibility', 'unknown')})")
+        names.add(info["nameWithOwner"])
+    if len(names) != 1:
+        raise ValueError(f"the target's origin fetch and push URLs name different repos: {', '.join(sorted(names))}")
+    return names.pop()
+
+
+def check_target(target: Path, report: dict, engine: str | None = None) -> str:
+    """Check TARGET's rules exactly as sast-check will read them (ids, metadata, keys, Opengrep). On failure,
+    remove this run's files again and return the error."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import sast  # the scanner's own reader, so a rule it would refuse never reaches a PR
+    try:
+        sast.validate_local_rules(sast.parse_local_rules(sast.local_rule_files(target, None)), engine)
+        return ""
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
+        for a in report["accepted"]:
+            for f in a["files"]:
+                (target / f).unlink(missing_ok=True)
+        report["accepted"] = []
+        return str(e)[-400:]
 
 
 def pr_body(report: dict, model: str) -> str:
@@ -450,10 +605,11 @@ def sh(cmd: list[str], repo: Path) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=repo, capture_output=True, text=True, check=True, timeout=300)
 
 
-def open_pr(repo: Path, report: dict, base: str, model: str, runner=sh) -> str:
-    """Commit this run's rules on learner/rules-<date> and open one PR against base. Never merges."""
+def open_pr(repo: Path, report: dict, base: str, model: str, runner=sh, dist: bool = True, gh_repo: str = "") -> str:
+    """Commit this run's rules on learner/rules-<date> and open one PR against base (in REPO: sast-check, or a
+    private rules repo with dist=False). Never merges."""
     branch = f"learner/rules-{date.today().isoformat()}"
-    files = [f for a in report["accepted"] for f in a["files"]] + ["dist/rules.yaml", "dist/rule-ids.lock"]
+    files = [f for a in report["accepted"] for f in a["files"]] + (["dist/rules.yaml", "dist/rule-ids.lock"] if dist else [])
     runner(["git", "checkout", "-b", branch], repo)
     runner(["git", "add", "--"] + files, repo)
     runner(["git", "commit", "-m", f"feat(rules): {len(report['accepted'])} learner rule(s) from review patterns"], repo)
@@ -461,7 +617,7 @@ def open_pr(repo: Path, report: dict, base: str, model: str, runner=sh) -> str:
     body = Path(tempfile.mkstemp(suffix=".md")[1])
     try:
         body.write_text(pr_body(report, model))
-        r = runner(["gh", "pr", "create", "--base", base, "--head", branch,
+        r = runner(["gh", "pr", "create", *(["-R", gh_repo] if gh_repo else []), "--base", base, "--head", branch,
                     "--title", f"Learner rules {date.today().isoformat()}", "--body-file", str(body)], repo)
     finally:
         body.unlink(missing_ok=True)
@@ -478,10 +634,27 @@ def main() -> int:
     ap.add_argument("--report", help="write the accept/reject report (JSON) here")
     ap.add_argument("--open-pr", action="store_true", help="commit on a new branch and open one PR (needs git + gh)")
     ap.add_argument("--base", default="main", help="base branch of the PR (default main)")
+    ap.add_argument("--target", help="checkout of a private rules repo: write `local.` rules to its .sast-check/rules/ "
+                                     "(and open the PR there) instead of this repo's rules/custom/")
     a = ap.parse_args()
+    target = Path(a.target).resolve() if a.target else None
+    if target is not None and (not (target / ".git").exists() or target == ROOT or target.is_relative_to(ROOT)):
+        print("--target must be a separate git checkout (the private rules repo)", file=sys.stderr)
+        return 2
+    out_repo = target or ROOT
+    gh_repo = ""
+    if target is not None and (why := target_problem(target)):
+        print(f"--target: {why}", file=sys.stderr)
+        return 2
     if not a.engine or Path(a.engine).name != "opengrep":
         print("opengrep is required (the only supported engine)", file=sys.stderr)
         return 2
+    if a.engine and "/" not in a.engine:
+        a.engine = shutil.which(a.engine) or a.engine   # a bare name is looked up on PATH, as subprocess would
+    if not Path(a.engine).is_file():
+        print(f"--engine {a.engine} does not exist", file=sys.stderr)
+        return 2
+    a.engine = os.path.abspath(a.engine)   # later steps run from other folders; keep the name (no symlink resolve)
     if not os.environ.get("OPENROUTER_API_KEY"):
         print("OPENROUTER_API_KEY is not set", file=sys.stderr)
         return 2
@@ -492,17 +665,31 @@ def main() -> int:
     if a.report and any(Path(a.report).resolve().is_relative_to(ROOT / d) for d in ("dist", "rules")):
         print("--report must be outside dist/ and rules/", file=sys.stderr)
         return 2
+    if a.report and target is not None and any(Path(a.report).resolve().is_relative_to(d) for d in (target, ROOT)):
+        # inside the target it would be committed with the rules; inside this public checkout it could be pushed
+        print("--report must be outside the --target checkout and this repo", file=sys.stderr)
+        return 2
     try:
         patterns = load_patterns(Path(a.patterns))
     except (OSError, ValueError) as e:
         print(f"cannot read patterns: {e}", file=sys.stderr)
         return 2
     if a.open_pr:
-        if subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout.strip():
+        if subprocess.run(["git", "status", "--porcelain"], cwd=out_repo, capture_output=True, text=True).stdout.strip():
             print("--open-pr needs a clean working tree", file=sys.stderr)
             return 2
         branch = f"learner/rules-{date.today().isoformat()}"
-        if subprocess.run(["git", "ls-remote", "--exit-code", "--heads", "origin", branch], cwd=ROOT,
+        if subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"], cwd=out_repo,
+                          capture_output=True).returncode == 0:
+            print(f"branch {branch} already exists in the checkout: remove it or review that work first", file=sys.stderr)
+            return 2
+        if target is not None:
+            try:
+                gh_repo = private_repo(target)
+            except ValueError as e:
+                print(f"--target: {e}", file=sys.stderr)
+                return 2
+        if subprocess.run(["git", "ls-remote", "--exit-code", "--heads", "origin", branch], cwd=out_repo,
                           capture_output=True).returncode != 2:   # 2 = no such branch; anything else stops the run
             print(f"branch {branch} already exists on origin (or origin is unreachable): review that PR first", file=sys.stderr)
             return 2
@@ -510,8 +697,9 @@ def main() -> int:
     def drafter(p, train, rule_id, ext, feedback):
         return draft_with_llm(p, train, rule_id, ext, feedback, a.model)
 
-    report = run(patterns, ROOT, [a.engine], drafter, a.attempts)
-    err = build_dist(ROOT, report) if report["accepted"] else ""
+    report = run(patterns, ROOT, [a.engine], drafter, a.attempts, target)
+    err = ((check_target(target, report, a.engine) if target is not None else build_dist(ROOT, report))
+           if report["accepted"] else "")
     for x in report["accepted"]:
         print(f"ACCEPTED {x['rule_id']} ({x['cwe']}, {x['severity']}{', blocking' if x['blocking'] else ''})")
     for x in report["rejected"]:
@@ -521,11 +709,12 @@ def main() -> int:
     if a.report:
         Path(a.report).write_text(json.dumps(report, indent=1) + "\n")
     if err:
-        print(f"scripts/build_rules.py failed, nothing kept: {err}", file=sys.stderr)
+        print(f"{'the rules check' if target is not None else 'scripts/build_rules.py'} failed, nothing kept: {err}",
+              file=sys.stderr)
         return 2
     if a.open_pr and report["accepted"]:
         try:
-            print(open_pr(ROOT, report, a.base, a.model))
+            print(open_pr(out_repo, report, a.base, a.model, dist=target is None, gh_repo=gh_repo))
         except subprocess.CalledProcessError as e:
             print(f"opening the PR failed at `{' '.join(e.cmd[:3])}`: {(e.stderr or '').strip()[-300:]}", file=sys.stderr)
             return 2
