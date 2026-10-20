@@ -206,6 +206,9 @@ def parse_reply(content) -> dict:
 # ---------------------------------------------------------------- building and checking a draft
 def build_rule(p: dict, d: dict, rule_id: str) -> tuple[str, str]:
     """(rule file text, fixture text) from a draft; raises Reject when the draft breaks the contract."""
+    if isinstance(d.get("rule"), dict) and d["rule"]:
+        # models often send the rule as a JSON object instead of YAML text; same content, so accept it
+        d = {**d, "rule": yaml.safe_dump(d["rule"], sort_keys=False)}
     for k in ("rule", "message", "fix", "fixture"):
         if not isinstance(d.get(k), str) or not d[k].strip():
             raise Reject(f"draft field {k!r} missing or empty")
@@ -282,7 +285,8 @@ def scan(engine: str, rule_file: Path, files: list[Path]) -> dict[Path, list[int
     errs = [e for e in out.get("errors", []) if "Syntax error" not in str(e.get("type"))
             and "PartialParsing" not in str(e.get("type"))]
     if errs:
-        raise Reject(f"{Path(engine).name} rejects the rule: {' '.join(str(errs[0].get('message')).split())[:200]}")
+        why = errs[0].get("message") or errs[0].get("type") or errs[0]   # some errors carry only a type
+        raise Reject(f"{Path(engine).name} rejects the rule: {' '.join(str(why).split())[:200]}")
     if r.returncode != 0:
         raise Reject(f"{Path(engine).name} failed (exit {r.returncode})")
     hits: dict[Path, list[int]] = {}
