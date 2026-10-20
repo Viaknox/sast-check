@@ -157,6 +157,24 @@ class BuildRule(unittest.TestCase):
                 lr.parse_reply(reply)
         self.assertEqual(lr.parse_reply('```json\n{"a": 1}\n```'), {"a": 1})
 
+    def test_a_rule_sent_as_a_json_object_is_the_same_rule(self):
+        """Models often reply with "rule" as an object rather than YAML text; it builds the identical rule."""
+        p = pattern("lp-py-yaml-unsafe-load")
+        as_text = lr.build_rule(p, self.D, YAML_ID)
+        as_object = lr.build_rule(p, {**self.D, "rule": yaml.safe_load(self.D["rule"])}, YAML_ID)
+        self.assertEqual(as_object, as_text)
+        for empty in ({}, []):
+            with self.assertRaises(lr.Reject):
+                lr.build_rule(p, {**self.D, "rule": empty}, YAML_ID)
+
+    def test_an_engine_error_without_a_message_names_its_type(self):
+        out = json.dumps({"results": [], "errors": [{"type": ["InvalidRuleSchemaError", []]}]})
+        with mock.patch.object(lr.subprocess, "run", return_value=mock.Mock(stdout=out, returncode=2)), \
+                self.assertRaises(lr.Reject) as e:
+            lr.scan("opengrep", Path("r.yaml"), [Path("a.py")])
+        self.assertIn("InvalidRuleSchemaError", str(e.exception))
+        self.assertNotIn("None", str(e.exception))
+
     def test_a_fixture_line_copied_from_an_example_is_found(self):
         p = pattern("lp-py-yaml-unsafe-load")
         self.assertEqual(lr.copied_line(self.D["fixture"], p["examples"]), "")
