@@ -23,6 +23,9 @@ inputs:
   github-token:
     description: Token for the PR comment and zizmor online audits.
     default: ${{ github.token }}
+  sarif-retention-days:
+    description: Days to keep the SARIF artifact.
+    default: "90"
 
 outputs:
   verdict:
@@ -45,7 +48,7 @@ runs:
 
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: stable
+        go-version: 1.27.3   # exact: osv-scanner v2.7.0 needs Go >= 1.27
         cache: false
 
     - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -58,7 +61,7 @@ runs:
         set -euo pipefail
         # a transient registry error must not fail every PR: three tries, then fail (closed)
         retry() { for i in 1 2 3; do "$@" && return 0; echo "retry $i: $*" >&2; sleep $((i * 10)); done; return 1; }
-        retry python -I -m pip install --quiet --disable-pip-version-check --timeout 60 "ruff==0.16.8" "zizmor==1.30.1" "pyyaml==6.0.3"
+        retry python -I -m pip install --quiet --disable-pip-version-check --timeout 60 --require-hashes -r "$GITHUB_ACTION_PATH/scripts/requirements.txt"
         # go install verifies module content against the public Go checksum database
         retry go install github.com/zricethezav/gitleaks/v8@v8.30.1
         retry go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0
@@ -101,7 +104,7 @@ runs:
         name: sast-check-sarif
         path: ${{ runner.temp }}/sast-results/results.sarif
         if-no-files-found: warn
-        retention-days: 90
+        retention-days: ${{ inputs.sarif-retention-days }}
 
     - name: PR comment
       if: ${{ inputs.comment == 'true' && github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository }}
