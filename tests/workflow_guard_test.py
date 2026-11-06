@@ -74,7 +74,7 @@ class Protected(unittest.TestCase):
     def test_paths(self):
         for p in (".github/workflows/test.yml", ".github/workflows/sub/x.yaml", "action.yml", ".sast-check.toml",
                   ".gitleaks.toml", ".github/zizmor.yml", "osv-scanner.toml", "trivy.yaml", ".trivyignore",
-                  ".github/CODEOWNERS", "scripts/workflow_guard.py", ".sast-check", ".sast-check/rules/a.yaml",
+                  ".github/CODEOWNERS", "scripts/workflow_guard.py", "scripts/requirements.txt", ".sast-check", ".sast-check/rules/a.yaml",
                   ".sast-check/rules/tests/a.py"):
             self.assertTrue(wg.is_protected(p), p)
         for p in ("README.md", "scripts/sast.py", "src/.github/workflows/x.yml", "docs/action.yml", "src/.sast-check/rules/a.yaml"):
