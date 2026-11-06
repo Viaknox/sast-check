@@ -69,9 +69,9 @@ runs:
         # Opengrep: download and verify the Sigstore signature before use
         d="$RUNNER_TEMP/opengrep"; mkdir -p "$d"
         base="https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/opengrep_manylinux_x86"
-        curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 -o "$d/opengrep" "$base"
-        curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 -o "$d/opengrep.sig" "$base.sig"
-        curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 -o "$d/opengrep.cert" "$base.cert"
+        retry curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 -o "$d/opengrep" "$base"
+        retry curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 -o "$d/opengrep.sig" "$base.sig"
+        retry curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 -o "$d/opengrep.cert" "$base.cert"
         cosign verify-blob --cert "$d/opengrep.cert" --signature "$d/opengrep.sig" \
           --certificate-identity-regexp "^https://github.com/opengrep/opengrep/" \
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com" "$d/opengrep"
