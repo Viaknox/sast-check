@@ -39,5 +39,14 @@ class ActionPins(unittest.TestCase):
         self.assertEqual(up["with"]["retention-days"], "${{ inputs.sarif-retention-days }}")
 
 
+    def test_opengrep_downloads_use_retry_helper(self):
+        run = next(s["run"] for s in STEPS if "opengrep" in s.get("run", "").lower() and "curl" in s.get("run", ""))
+        curls = [l.strip() for l in run.splitlines() if "curl -fsSL" in l]
+        self.assertEqual(len(curls), 3, "expected binary, .sig and .cert downloads")
+        for l in curls:
+            self.assertTrue(l.startswith("retry curl "), f"download must go through retry(): {l}")
+        self.assertLess(run.index("curl -fsSL"), run.index("cosign verify-blob"), "cosign check must stay after the downloads")
+
+
 if __name__ == "__main__":
     unittest.main()
